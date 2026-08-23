@@ -376,22 +376,32 @@
     </div>
 
     <div id="fightPlay" class="fight-screen hidden">
-      <div class="fight-hud">
-        <div class="fight-hud-side" id="fightHudLeft">
-          <span class="fight-hud-name" id="fightLeftName">-</span>
-          <div class="fight-bar fight-bar-health"><div class="fight-bar-fill" id="fightLeftHealthFill"></div></div>
-          <div class="fight-bar fight-bar-energy"><div class="fight-bar-fill" id="fightLeftEnergyFill"></div></div>
-        </div>
-        <div class="fight-hud-center">
-          <span class="fight-round" id="fightRoundLabel">Round 1</span>
-          <span class="fight-timer" id="fightTimerLabel">60</span>
-        </div>
-        <div class="fight-hud-side fight-hud-side-right" id="fightHudRight">
-          <span class="fight-hud-name" id="fightRightName">-</span>
-          <div class="fight-bar fight-bar-health"><div class="fight-bar-fill" id="fightRightHealthFill"></div></div>
-          <div class="fight-bar fight-bar-energy"><div class="fight-bar-fill" id="fightRightEnergyFill"></div></div>
-        </div>
-      </div>
+<div class="fight-hud">
+  <div class="fight-hud-side" id="fightHudLeft">
+    <span class="fight-hud-name" id="fightLeftName">-</span>
+    <div class="fight-bar fight-bar-health">
+      <div class="fight-bar-fill fight-bar-ghost" id="fightLeftHealthGhost"></div>
+      <div class="fight-bar-fill fight-bar-main" id="fightLeftHealthFill"></div>
+    </div>
+    <div class="fight-bar fight-bar-energy" id="fightLeftEnergyBar">
+      <div class="fight-bar-fill fight-bar-main" id="fightLeftEnergyFill"></div>
+    </div>
+  </div>
+  <div class="fight-hud-center">
+    <span class="fight-round" id="fightRoundLabel">Round 1</span>
+    <span class="fight-timer" id="fightTimerLabel">60</span>
+  </div>
+  <div class="fight-hud-side fight-hud-side-right" id="fightHudRight">
+    <span class="fight-hud-name" id="fightRightName">-</span>
+    <div class="fight-bar fight-bar-health">
+      <div class="fight-bar-fill fight-bar-ghost" id="fightRightHealthGhost"></div>
+      <div class="fight-bar-fill fight-bar-main" id="fightRightHealthFill"></div>
+    </div>
+    <div class="fight-bar fight-bar-energy" id="fightRightEnergyBar">
+      <div class="fight-bar-fill fight-bar-main" id="fightRightEnergyFill"></div>
+    </div>
+  </div>
+</div>
 
       <div class="fight-arena">
         <div class="fight-fighter fight-fighter-left" id="fightFighterLeft">
@@ -402,6 +412,19 @@
           <img id="fightRightImg" src="" alt="">
         </div>
       </div>
+
+      <div class="fight-clash hidden" id="fightClashOverlay">
+  <div class="fight-clash-spark">💥</div>
+  <div class="fight-clash-bar-wrap">
+    <div class="fight-clash-fist fight-clash-fist-left">🥊</div>
+    <div class="fight-clash-track">
+      <div class="fight-clash-fill" id="fightClashFill"></div>
+      <div class="fight-clash-mid"></div>
+    </div>
+    <div class="fight-clash-fist fight-clash-fist-right">🥊</div>
+  </div>
+  <p class="fight-clash-label">¡CHOQUE! Metele tecla ⚡</p>
+</div>
 
       <p class="fight-status" id="fightStatus"></p>
 
