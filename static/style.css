@@ -429,44 +429,71 @@ body::before {
 .add-form { display: flex; flex-direction: column; gap: 10px; }
 
 /* ---------- Player picker ---------- */
-.player-select { display: flex; flex-wrap: wrap; gap: 8px; }
+.player-select { display: flex; flex-wrap: wrap; gap: 10px; }
 .player-pill {
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 6px;
   background: var(--bg-alt);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 4px 12px 4px 4px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px 7px;
   cursor: pointer;
   color: var(--text);
   font-family: var(--font-body);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 700;
-  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
-.player-pill:hover { border-color: var(--gold); transform: translateY(-1px); }
+.player-pill:hover {
+  border-color: var(--gold);
+  transform: translateY(-3px) scale(1.06);
+  box-shadow: 0 10px 22px rgba(0,0,0,0.4);
+}
 .player-pill.active {
   border-color: var(--pink);
   background: rgba(255, 62, 127, 0.14);
-  box-shadow: 0 0 0 2px rgba(255, 62, 127, 0.22);
+  box-shadow: 0 0 0 3px rgba(255, 62, 127, 0.25), 0 10px 22px rgba(0,0,0,0.4);
+  transform: translateY(-2px);
 }
 .player-avatar-wrap {
   position: relative;
-  width: 26px; height: 26px;
-  border-radius: 50%;
+  width: 60px; height: 60px;
+  border-radius: 12px;
   overflow: hidden;
   flex-shrink: 0;
   background: var(--surface-2);
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px;
+  font-size: 28px;
+  isolation: isolate;
 }
 .player-avatar-img {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
   object-fit: cover;
+  transition: transform 0.35s ease;
 }
-.player-pill-other .player-avatar-wrap { background: transparent; border: 1px dashed var(--border-bright); }
+.player-pill:hover .player-avatar-img { transform: scale(1.12); }
+
+/* brillo tipo vidrio que cruza la imagen al pasar el mouse o al elegirlo */
+.player-avatar-wrap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.55) 48%, transparent 60%);
+  background-size: 220% 220%;
+  background-position: -140% -140%;
+  pointer-events: none;
+  transition: background-position 0.7s ease;
+}
+.player-pill:hover .player-avatar-wrap::after,
+.player-pill.active .player-avatar-wrap::after {
+  background-position: 140% 140%;
+}
+
+.player-pill-other .player-avatar-wrap { background: transparent; border: 2px dashed var(--border-bright); font-size: 22px; }
 
 .tiny-avatar {
   width: 20px; height: 20px;
