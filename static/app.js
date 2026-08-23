@@ -712,22 +712,28 @@ function resetRpsUI() {
 function startRpsCountdown() {
   rpsState = "countdown";
   const cd = document.getElementById("rpsCountdown");
-  const steps = ["3", "2", "1", "¡YA!"];
+  
+  // Agregamos las instrucciones como el primer "paso"
+  const steps = ["P1: A S D  |  P2: J K L", "3", "2", "1", "¡YA!"];
   let i = 0;
+  
   const tick = () => {
     cd.textContent = steps[i];
     cd.classList.remove("pulse");
-    void cd.offsetWidth;
+    void cd.offsetWidth; 
     cd.classList.add("pulse");
-    playTick();
+    
+    if (i > 0) playTick(); 
+    
     i += 1;
     if (i >= steps.length) {
       clearInterval(rpsCountdownTimer);
       beginRpsCapture();
     }
   };
+  
   tick();
-  rpsCountdownTimer = setInterval(tick, 550);
+  rpsCountdownTimer = setInterval(tick, 800); 
 }
 
 function beginRpsCapture() {
