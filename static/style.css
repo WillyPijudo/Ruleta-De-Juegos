@@ -428,72 +428,114 @@ body::before {
 
 .add-form { display: flex; flex-direction: column; gap: 10px; }
 
-/* ---------- Player picker ---------- */
-.player-select { display: flex; flex-wrap: wrap; gap: 10px; }
+/* ---------- Player picker (estilo "elegí tu personaje") ---------- */
+.player-select { display: flex; flex-wrap: wrap; gap: 12px; }
+
+.player-pill[data-player="Mateo"]      { --accent: var(--gold-bright); }
+.player-pill[data-player="Lauty"]      { --accent: var(--teal-bright); }
+.player-pill[data-player="Roman"]      { --accent: #8ecbe8; }
+.player-pill[data-player="__other__"]  { --accent: var(--pink); }
+
 .player-pill {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   background: var(--bg-alt);
   border: 2px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 8px 10px 7px;
+  border-radius: 16px;
+  padding: 9px 10px 8px;
   cursor: pointer;
   color: var(--text);
   font-family: var(--font-body);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 700;
-  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  transition: border-color 0.2s ease, transform 0.25s cubic-bezier(0.2,1.2,0.4,1), box-shadow 0.25s ease, background 0.2s ease;
 }
 .player-pill:hover {
-  border-color: var(--gold);
-  transform: translateY(-3px) scale(1.06);
-  box-shadow: 0 10px 22px rgba(0,0,0,0.4);
+  border-color: var(--accent, var(--gold));
+  transform: translateY(-5px) scale(1.08);
+  box-shadow: 0 16px 30px rgba(0,0,0,0.45), 0 0 0 3px color-mix(in srgb, var(--accent, var(--gold)) 35%, transparent);
+  z-index: 2;
 }
 .player-pill.active {
-  border-color: var(--pink);
-  background: rgba(255, 62, 127, 0.14);
-  box-shadow: 0 0 0 3px rgba(255, 62, 127, 0.25), 0 10px 22px rgba(0,0,0,0.4);
-  transform: translateY(-2px);
+  border-color: var(--accent, var(--pink));
+  background: color-mix(in srgb, var(--accent, var(--pink)) 16%, var(--bg-alt));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--pink)) 45%, transparent), 0 16px 30px rgba(0,0,0,0.45);
+  transform: translateY(-3px) scale(1.05);
 }
+.player-pill.active .player-avatar-wrap { animation: smash-pick 0.45s cubic-bezier(0.2,1.5,0.4,1); }
+.player-pill.active .player-pill-name { animation: name-pop 0.4s ease; }
+
 .player-avatar-wrap {
   position: relative;
-  width: 60px; height: 60px;
+  width: 92px; height: 112px;
   border-radius: 12px;
   overflow: hidden;
   flex-shrink: 0;
-  background: var(--surface-2);
+  background: radial-gradient(120% 120% at 50% 15%, color-mix(in srgb, var(--accent, var(--gold)) 30%, var(--surface-2)), var(--surface-2) 75%);
   display: flex; align-items: center; justify-content: center;
-  font-size: 28px;
+  font-size: 40px;
   isolation: isolate;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
 }
 .player-avatar-img {
-  position: absolute; inset: 0;
+  position: relative;
+  z-index: 1;
   width: 100%; height: 100%;
-  object-fit: cover;
-  transition: transform 0.35s ease;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 6px 10px rgba(0,0,0,0.5));
+  transition: transform 0.4s cubic-bezier(0.2,1.2,0.4,1);
 }
-.player-pill:hover .player-avatar-img { transform: scale(1.12); }
+.player-pill:hover .player-avatar-img,
+.player-pill.active .player-avatar-img { transform: scale(1.08) translateY(-2px); }
 
-/* brillo tipo vidrio que cruza la imagen al pasar el mouse o al elegirlo */
+/* brillo tipo vidrio que cruza la imagen */
 .player-avatar-wrap::after {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 2;
-  background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.55) 48%, transparent 60%);
-  background-size: 220% 220%;
-  background-position: -140% -140%;
+  background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.5) 48%, transparent 66%);
+  background-size: 240% 240%;
+  background-position: -150% -150%;
   pointer-events: none;
-  transition: background-position 0.7s ease;
+  transition: background-position 0.8s ease;
 }
 .player-pill:hover .player-avatar-wrap::after,
 .player-pill.active .player-avatar-wrap::after {
-  background-position: 140% 140%;
+  background-position: 150% 150%;
 }
 
-.player-pill-other .player-avatar-wrap { background: transparent; border: 2px dashed var(--border-bright); font-size: 22px; }
+.player-pill-name {
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  transition: color 0.2s ease, text-shadow 0.2s ease;
+}
+.player-pill:hover .player-pill-name,
+.player-pill.active .player-pill-name {
+  color: var(--accent, var(--gold-bright));
+  text-shadow: 0 0 10px color-mix(in srgb, var(--accent, var(--gold-bright)) 60%, transparent);
+}
+
+.player-pill-other .player-avatar-wrap {
+  background: transparent;
+  border: 2px dashed var(--border-bright);
+  font-size: 30px;
+}
+
+@keyframes smash-pick {
+  0%   { transform: scale(0.85) rotate(-4deg); filter: brightness(1); }
+  40%  { transform: scale(1.14) rotate(3deg); filter: brightness(1.35); }
+  70%  { transform: scale(0.97) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0deg); filter: brightness(1); }
+}
+@keyframes name-pop {
+  0%   { transform: scale(0.8); opacity: 0.4; }
+  60%  { transform: scale(1.18); }
+  100% { transform: scale(1); opacity: 1; }
+}
 
 .tiny-avatar {
   width: 20px; height: 20px;
