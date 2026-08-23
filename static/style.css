@@ -428,8 +428,13 @@ body::before {
 
 .add-form { display: flex; flex-direction: column; gap: 10px; }
 
-/* ---------- Player picker (estilo "elegí tu personaje") ---------- */
-.player-select { display: flex; flex-wrap: wrap; gap: 12px; }
+/* ---------- Player picker (estilo "elegí tu personaje" / Smash select) ---------- */
+.player-select {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding: 4px 2px 10px;
+}
 
 .player-pill[data-player="Mateo"]      { --accent: var(--gold-bright); }
 .player-pill[data-player="Lauty"]      { --accent: var(--teal-bright); }
@@ -437,59 +442,116 @@ body::before {
 .player-pill[data-player="__other__"]  { --accent: var(--pink); }
 
 .player-pill {
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 8px;
+  width: 148px;
   background: var(--bg-alt);
   border: 2px solid var(--border);
-  border-radius: 16px;
-  padding: 9px 10px 8px;
+  border-radius: 18px;
+  padding: 0;
   cursor: pointer;
   color: var(--text);
   font-family: var(--font-body);
-  font-size: 12.5px;
-  font-weight: 700;
-  transition: border-color 0.2s ease, transform 0.25s cubic-bezier(0.2,1.2,0.4,1), box-shadow 0.25s ease, background 0.2s ease;
+  font-size: 13.5px;
+  font-weight: 800;
+  transition: border-color 0.2s ease, transform 0.28s cubic-bezier(0.2, 1.2, 0.4, 1), box-shadow 0.28s ease, background 0.2s ease;
 }
+
 .player-pill:hover {
   border-color: var(--accent, var(--gold));
-  transform: translateY(-5px) scale(1.08);
-  box-shadow: 0 16px 30px rgba(0,0,0,0.45), 0 0 0 3px color-mix(in srgb, var(--accent, var(--gold)) 35%, transparent);
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.5), 0 0 0 3px color-mix(in srgb, var(--accent, var(--gold)) 40%, transparent);
   z-index: 2;
 }
+.player-pill:nth-child(odd):hover  { transform: translateY(-10px) scale(1.07) rotate(-1.5deg); }
+.player-pill:nth-child(even):hover { transform: translateY(-10px) scale(1.07) rotate(1.5deg); }
+
 .player-pill.active {
   border-color: var(--accent, var(--pink));
   background: color-mix(in srgb, var(--accent, var(--pink)) 16%, var(--bg-alt));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--pink)) 45%, transparent), 0 16px 30px rgba(0,0,0,0.45);
-  transform: translateY(-3px) scale(1.05);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, var(--pink)) 50%, transparent), 0 18px 34px rgba(0, 0, 0, 0.5);
+  transform: translateY(-6px) scale(1.05);
+  z-index: 3;
 }
-.player-pill.active .player-avatar-wrap { animation: smash-pick 0.45s cubic-bezier(0.2,1.5,0.4,1); }
-.player-pill.active .player-pill-name { animation: name-pop 0.4s ease; }
+.player-pill.active .player-avatar-wrap { animation: smash-pick 0.45s cubic-bezier(0.2, 1.5, 0.4, 1); }
+.player-pill.active .player-pill-name  { animation: name-pop 0.4s ease; }
+
+/* anillo de energía girando alrededor de la tarjeta elegida */
+.player-pill.active::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 20px;
+  padding: 3px;
+  background: conic-gradient(from 0deg, var(--accent, var(--gold)), transparent 25%, var(--accent, var(--gold)) 55%, transparent 85%, var(--accent, var(--gold)));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: ring-spin 2.6s linear infinite;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* medallita de "elegido" */
+.player-pill.active::after {
+  content: "✓";
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: var(--accent, var(--pink));
+  color: #1a0f10;
+  font-size: 14px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45), 0 0 0 3px var(--bg-alt);
+  z-index: 4;
+  animation: badge-pop 0.35s cubic-bezier(0.3, 1.6, 0.4, 1);
+}
 
 .player-avatar-wrap {
   position: relative;
-  width: 92px; height: 112px;
-  border-radius: 12px;
+  width: 100%;
+  height: 190px;
+  border-radius: 16px 16px 0 0;
   overflow: hidden;
   flex-shrink: 0;
-  background: radial-gradient(120% 120% at 50% 15%, color-mix(in srgb, var(--accent, var(--gold)) 30%, var(--surface-2)), var(--surface-2) 75%);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 40px;
+  background: radial-gradient(120% 120% at 50% 15%, color-mix(in srgb, var(--accent, var(--gold)) 32%, var(--surface-2)), var(--surface-2) 75%);
   isolation: isolate;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
+
+/* el emoji ahora vive a pantalla completa DETRÁS de la imagen (z-index 0),
+   por eso ya no se asoma: si la foto carga, la tapa entera; si falla
+   (onerror="this.remove()"), el emoji queda ocupando toda la tarjeta. */
+.player-avatar-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 56px;
+  line-height: 1;
+}
+
 .player-avatar-img {
-  position: relative;
+  position: absolute;
+  inset: 0;
   z-index: 1;
-  width: 100%; height: 100%;
-  object-fit: contain;
-  object-position: center bottom;
-  filter: drop-shadow(0 6px 10px rgba(0,0,0,0.5));
-  transition: transform 0.4s cubic-bezier(0.2,1.2,0.4,1);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 20%;
+  filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.5));
+  transition: transform 0.4s cubic-bezier(0.2, 1.2, 0.4, 1);
 }
 .player-pill:hover .player-avatar-img,
-.player-pill.active .player-avatar-img { transform: scale(1.08) translateY(-2px); }
+.player-pill.active .player-avatar-img { transform: scale(1.1) translateY(-3px); }
 
 /* brillo tipo vidrio que cruza la imagen */
 .player-avatar-wrap::after {
@@ -497,20 +559,27 @@ body::before {
   position: absolute;
   inset: 0;
   z-index: 2;
-  background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.5) 48%, transparent 66%);
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.5) 48%, transparent 66%);
   background-size: 240% 240%;
   background-position: -150% -150%;
   pointer-events: none;
   transition: background-position 0.8s ease;
 }
 .player-pill:hover .player-avatar-wrap::after,
-.player-pill.active .player-avatar-wrap::after {
-  background-position: 150% 150%;
-}
+.player-pill.active .player-avatar-wrap::after { background-position: 150% 150%; }
 
+/* cartel con el nombre, superpuesto sobre la parte de abajo de la foto */
 .player-pill-name {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  margin-top: -46px;
+  padding: 26px 8px 10px;
+  border-radius: 0 0 16px 16px;
+  background: linear-gradient(to top, rgba(8, 5, 10, 0.94) 40%, rgba(8, 5, 10, 0.6) 75%, transparent 100%);
+  text-align: center;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.6px;
   transition: color 0.2s ease, text-shadow 0.2s ease;
 }
 .player-pill:hover .player-pill-name,
@@ -522,12 +591,12 @@ body::before {
 .player-pill-other .player-avatar-wrap {
   background: transparent;
   border: 2px dashed var(--border-bright);
-  font-size: 30px;
 }
+.player-pill-other .player-avatar-fallback { font-size: 46px; opacity: 0.85; }
 
 @keyframes smash-pick {
   0%   { transform: scale(0.85) rotate(-4deg); filter: brightness(1); }
-  40%  { transform: scale(1.14) rotate(3deg); filter: brightness(1.35); }
+  40%  { transform: scale(1.16) rotate(3deg); filter: brightness(1.4); }
   70%  { transform: scale(0.97) rotate(-1deg); }
   100% { transform: scale(1) rotate(0deg); filter: brightness(1); }
 }
@@ -535,6 +604,12 @@ body::before {
   0%   { transform: scale(0.8); opacity: 0.4; }
   60%  { transform: scale(1.18); }
   100% { transform: scale(1); opacity: 1; }
+}
+@keyframes ring-spin { to { transform: rotate(360deg); } }
+@keyframes badge-pop {
+  0%   { transform: scale(0); }
+  70%  { transform: scale(1.25); }
+  100% { transform: scale(1); }
 }
 
 .tiny-avatar {
