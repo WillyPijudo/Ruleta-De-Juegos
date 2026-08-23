@@ -993,6 +993,15 @@ function penaltyShotTiming(power) {
   return { duration, cutoff: Math.round(duration * revealFrac), revealFrac };
 }
 
+function penaltyReactionWindow(power) {
+  const minWindow = 550;
+  const maxWindow = 900;
+  const t = Math.max(0, Math.min(1, power / 84)); // 0 (flojo) -> 1 (al borde del fierrazo)
+  let win = maxWindow - t * (maxWindow - minWindow);
+  if (prefersReducedMotion) win += 150;
+  return Math.round(win);
+}
+
 function spawnBallTrail(ball) {
   const pitch = document.querySelector(".penalty-pitch");
   if (!pitch) return;
@@ -1120,6 +1129,9 @@ function startPenaltyRound() {
     penaltyState = "flight";
     document.getElementById("penaltyKeeper").classList.remove("idle-shimmy");
 
+    const { duration } = penaltyShotTiming(capturedPower);
+    penaltyReactionCutoffMs = Math.min(penaltyReactionWindow(capturedPower), duration - 30);
+
     if (capturedPower > 95) {
         document.getElementById("penaltyStatus").textContent = "¡Se pasó de potencia!";
     } else if (capturedPower >= 85) {
@@ -1178,8 +1190,7 @@ function launchPenaltyBall(zone, power) {
   const dx = target.x - start.x;
   const dy = target.y - start.y;
 
-  const { duration, cutoff, revealFrac } = penaltyShotTiming(power);
-  penaltyReactionCutoffMs = cutoff;
+  const { duration, revealFrac } = penaltyShotTiming(power);
 
   ball.classList.add("spinning-ball");
   const startTime = performance.now();
@@ -1204,14 +1215,19 @@ function launchPenaltyBall(zone, power) {
     const lift = prefersReducedMotion ? 0 : Math.sin(t * Math.PI) * (power > 95 ? -60 : -22);
     const scale = 1 - 0.4 * prog;
 
+    if (!penaltyKeeperZone && power < 85) {
+      const remaining = Math.max(0, penaltyReactionCutoffMs - (now - penaltyFlightStartTime));
+      document.getElementById("penaltyStatus").textContent =
+        `¡ARQUERO, ELEGÍ UN LADO! ${(remaining / 1000).toFixed(1)}s`;
+      document.getElementById("penaltyKeeper").classList.toggle("keeper-urgent", remaining < 200);
+    }
+
     ball.style.transform =
       `translate(calc(-50% + ${(dx * prog).toFixed(1)}px), ${(dy * prog + lift).toFixed(1)}px) scale(${scale.toFixed(2)})`;
-
     trailTick++;
     if (!prefersReducedMotion && t < 1 && trailTick % 2 === 0) {
       spawnBallTrail(ball);
     }
-
     if (t < 1) {
       penaltyFlightRAF = requestAnimationFrame(frame);
     } else {
