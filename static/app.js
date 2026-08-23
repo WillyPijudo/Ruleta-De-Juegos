@@ -14,7 +14,7 @@ const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)
 
 let spinBtn, playerNameInput, gameSearchInput, manualNameInput, manualCoverInput,
     manualAddBtn, manualToggleBtn, shareBtn, soundToggleBtn, closeModalBtn, removeWinnerBtn,
-    wheelEl, wheelWrapEl, clearHistoryBtn, rpsChallengeBtn;
+    wheelEl, wheelWrapEl, clearHistoryBtn, clearGamesBtn, duelChallengeBtn;
 
 /* ---------------- helpers ---------------- */
 
@@ -661,7 +661,56 @@ function showWinnerModal(winner) {
   document.getElementById("winnerModal").classList.remove("hidden");
 }
 
-/* ---------------- RPS duel (for sore losers) ---------------- */
+/* ---------------- shared duel outcome messaging ----------------
+   Both minigames below (RPS and Penales) resolve to the Challenger
+   winning, the Champion winning, or - RPS only - a tie. Whichever
+   side wins, the "consequence" message is picked from these pools so
+   a rematch doesn't always show the exact same line. The Challenger
+   pool carries the joke: nothing *officially* changes if they win,
+   but everyone in the room knows what it really means. */
+
+const DUEL_MSG_CHAMPION = [
+  "El Campeón defiende su corona 👑. A partir de ahora el Retador le hace caso en todo, sin quejarse.",
+  "Gana el Campeón, como corresponde 👑. El Retador queda a sus órdenes por el resto de la noche.",
+  "El Campeón no afloja 👑. El Retador se banca lo que el Campeón diga — ese era el trato.",
+];
+const DUEL_MSG_CHALLENGER = [
+  "Ganó el Retador 😏. Tranquilos, la ruleta siempre se puede volver a girar cuando quieran... ya sabemos lo que eso significa entre nosotros.",
+  "Se lo llevó el Retador 😏. Oficialmente no cambia nada, pero la ruleta sigue ahí, lista para girar de nuevo 👀",
+  "Triunfo del Retador 😏. Como siempre decimos: la ruleta se puede volver a girar cuando quieran. Nosotros sabemos por qué.",
+];
+const DUEL_MSG_TIE = ["Empate. Quedate con las ganas, no hay revancha en el momento 🤝"];
+
+function duelOutcomeMessage(side) {
+  const pool = side === "champion" ? DUEL_MSG_CHAMPION : side === "challenger" ? DUEL_MSG_CHALLENGER : DUEL_MSG_TIE;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function resolveDuelResult(resultEl, side, flavorPrefix) {
+  const msg = duelOutcomeMessage(side);
+  resultEl.textContent = flavorPrefix ? `${flavorPrefix} ${msg}` : msg;
+  resultEl.classList.add("show");
+  if (side === "tie") {
+    playBuzz();
+  } else {
+    playFanfare();
+    launchConfetti();
+  }
+}
+
+/* ---------------- duel mode select ---------------- */
+
+function openDuelSelect() {
+  document.getElementById("duelSelectModal").classList.remove("hidden");
+}
+function closeDuelSelect() {
+  document.getElementById("duelSelectModal").classList.add("hidden");
+}
+
+/* ---------------- RPS duel ----------------
+   Now opens on an intro screen first (big key legend, no timer) so
+   nobody gets ambushed by a countdown before they've even read the
+   controls. The countdown only starts once someone hits "¡Arrancar!". */
 
 const RPS_CHOICES = { piedra: "✊", papel: "✋", tijera: "✌️" };
 const RPS_BEATS = { piedra: "tijera", papel: "piedra", tijera: "papel" };
@@ -674,8 +723,9 @@ let rpsCaptureTimeout = null;
 
 function openRpsModal() {
   document.getElementById("rpsModal").classList.remove("hidden");
+  document.getElementById("rpsIntro").classList.remove("hidden");
+  document.getElementById("rpsPlay").classList.add("hidden");
   resetRpsUI();
-  startRpsCountdown();
 }
 
 function closeRpsModal() {
@@ -707,33 +757,35 @@ function resetRpsUI() {
   const resultEl = document.getElementById("rpsResult");
   resultEl.textContent = "";
   resultEl.classList.remove("show");
+  document.getElementById("rpsRematchBtn").classList.add("hidden");
+}
+
+function beginRpsMatch() {
+  document.getElementById("rpsIntro").classList.add("hidden");
+  document.getElementById("rpsPlay").classList.remove("hidden");
+  resetRpsUI();
+  startRpsCountdown();
 }
 
 function startRpsCountdown() {
   rpsState = "countdown";
   const cd = document.getElementById("rpsCountdown");
-  
-  // Agregamos las instrucciones como el primer "paso"
-  const steps = ["P1: A S D  |  P2: J K L", "3", "2", "1", "¡YA!"];
+  const steps = ["3", "2", "1", "¡YA!"];
   let i = 0;
-  
   const tick = () => {
     cd.textContent = steps[i];
     cd.classList.remove("pulse");
-    void cd.offsetWidth; 
+    void cd.offsetWidth;
     cd.classList.add("pulse");
-    
-    if (i > 0) playTick(); 
-    
+    playTick();
     i += 1;
     if (i >= steps.length) {
       clearInterval(rpsCountdownTimer);
       beginRpsCapture();
     }
   };
-  
   tick();
-  rpsCountdownTimer = setInterval(tick, 800); 
+  rpsCountdownTimer = setInterval(tick, 550);
 }
 
 function beginRpsCapture() {
@@ -774,33 +826,206 @@ function finishRps() {
   clearTimeout(rpsCaptureTimeout);
   document.getElementById("rpsCountdown").textContent = "";
   const resultEl = document.getElementById("rpsResult");
-  let sound = "buzz";
 
+  let side = "tie";
+  let flavor = "";
   if (!rpsChallengerChoice && !rpsChampionChoice) {
-    resultEl.textContent = "Nadie apretó nada. Empate por cobardía absoluta 🐔";
+    flavor = "Nadie apretó nada. Empate por cobardía absoluta 🐔";
   } else if (!rpsChallengerChoice) {
-    resultEl.textContent = "El retador se quedó paralizado. Gana el Campeón por default 🏆";
-    sound = "fanfare";
+    flavor = "El Retador se quedó paralizado.";
+    side = "champion";
   } else if (!rpsChampionChoice) {
-    resultEl.textContent = "El Campeón se durmió. Gana el Retador por default 🏆";
-    sound = "fanfare";
+    flavor = "El Campeón se durmió.";
+    side = "challenger";
   } else if (rpsChallengerChoice === rpsChampionChoice) {
-    resultEl.textContent = "Empate. Quedate con las ganas, no hay revancha en el momento 🤝";
+    flavor = "Empate.";
   } else if (RPS_BEATS[rpsChallengerChoice] === rpsChampionChoice) {
-    resultEl.textContent = "¡El Retador gana el duelo! Aunque bueno, la ruleta ya habló, así que da lo mismo 😏";
-    sound = "fanfare";
+    side = "challenger";
   } else {
-    resultEl.textContent = "El Campeón defiende su corona 👑 (y la ruleta le da la razón)";
-    sound = "fanfare";
+    side = "champion";
   }
 
-  if (sound === "fanfare") {
-    playFanfare();
-    launchConfetti();
-  } else {
-    playBuzz();
+  resolveDuelResult(resultEl, side, flavor);
+  document.getElementById("rpsRematchBtn").classList.remove("hidden");
+}
+
+/* ---------------- Penalty kicks duel ----------------
+   Turn-based on the same shared keyboard: the Retador (kicker) picks
+   a corner first with A/S/D (low row) or ←/↑/→ (high row) - nothing
+   is shown on screen for that pick, it only shows up once the ball is
+   already flying. Only *then*, while the ball is mid-air, does the
+   Campeón (keeper) get a shot at diving to one of the same six
+   corners with the same keys. Flight time is tuned so a save is
+   possible but not trivial. */
+
+const PENALTY_ZONES = {
+  a: "bl", s: "bc", d: "br",
+  arrowleft: "tl", arrowup: "tc", arrowright: "tr",
+};
+const PENALTY_ZONE_POS = {
+  bl: { x: 0.15, y: 0.86 }, bc: { x: 0.5, y: 0.90 }, br: { x: 0.85, y: 0.86 },
+  tl: { x: 0.15, y: 0.28 }, tc: { x: 0.5, y: 0.20 }, tr: { x: 0.85, y: 0.28 },
+};
+const PENALTY_GOAL_FLAVORS = [
+  "¡GOLAZO! El arquero se quedó mirando el pasto.",
+  "¡La clavó en el ángulo! Ni con escalera la llegaba.",
+  "¡Adentro! El arquero voló para el lado que no era.",
+];
+const PENALTY_SAVE_FLAVORS = [
+  "¡QUÉ ATAJADA! Guante de oro para el arquero.",
+  "¡La sacó con la punta de los guantes! Increíble.",
+  "¡Leyó el tiro perfecto! Atajada de figura.",
+];
+
+let penaltyState = "idle";
+let penaltyKeyHandler = null;
+let penaltyAimTimeout = null;
+let penaltyFlightRAF = null;
+let penaltyKickZone = null;
+let penaltyKeeperZone = null;
+
+function openPenaltyModal() {
+  document.getElementById("penaltyModal").classList.remove("hidden");
+  document.getElementById("penaltyIntro").classList.remove("hidden");
+  document.getElementById("penaltyPlay").classList.add("hidden");
+  resetPenaltyUI();
+}
+
+function closePenaltyModal() {
+  document.getElementById("penaltyModal").classList.add("hidden");
+  teardownPenaltyRound();
+}
+
+function teardownPenaltyRound() {
+  if (penaltyKeyHandler) {
+    window.removeEventListener("keydown", penaltyKeyHandler);
+    penaltyKeyHandler = null;
   }
-  resultEl.classList.add("show");
+  clearTimeout(penaltyAimTimeout);
+  if (penaltyFlightRAF) {
+    cancelAnimationFrame(penaltyFlightRAF);
+    penaltyFlightRAF = null;
+  }
+}
+
+function resetPenaltyUI() {
+  teardownPenaltyRound();
+  penaltyState = "idle";
+  penaltyKickZone = null;
+  penaltyKeeperZone = null;
+  const ball = document.getElementById("penaltyBall");
+  ball.style.transform = "";
+  ball.classList.remove("spinning-ball");
+  document.getElementById("penaltyKeeper").className = "keeper";
+  document.getElementById("penaltyGoal").classList.remove("net-ripple");
+  const resultEl = document.getElementById("penaltyResult");
+  resultEl.textContent = "";
+  resultEl.classList.remove("show", "result-goal", "result-save");
+  document.getElementById("penaltyStatus").textContent = "Pateador (Retador), elegí tu rincón…";
+  document.getElementById("penaltyRematchBtn").classList.add("hidden");
+}
+
+function beginPenaltyMatch() {
+  document.getElementById("penaltyIntro").classList.add("hidden");
+  document.getElementById("penaltyPlay").classList.remove("hidden");
+  startPenaltyRound();
+}
+
+function startPenaltyRound() {
+  resetPenaltyUI();
+  penaltyState = "aiming";
+
+  const doKick = (zone) => {
+    penaltyKickZone = zone;
+    penaltyState = "flight";
+    document.getElementById("penaltyStatus").textContent = "¡Va la pelota! Arquero, reaccioná…";
+    launchPenaltyBall(zone);
+  };
+
+  penaltyKeyHandler = (e) => {
+    if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
+    const zone = PENALTY_ZONES[e.key.toLowerCase()];
+    if (!zone) return;
+    if (penaltyState === "aiming") {
+      clearTimeout(penaltyAimTimeout);
+      doKick(zone);
+    } else if (penaltyState === "flight" && !penaltyKeeperZone) {
+      penaltyKeeperZone = zone;
+      document.getElementById("penaltyKeeper").className = `keeper diving dive-${zone}`;
+    }
+  };
+  window.addEventListener("keydown", penaltyKeyHandler);
+
+  penaltyAimTimeout = setTimeout(() => {
+    if (penaltyState !== "aiming") return;
+    const zones = Object.values(PENALTY_ZONES);
+    document.getElementById("penaltyStatus").textContent = "¡Se quedó pensando y se le escapó el tiro!";
+    doKick(zones[Math.floor(Math.random() * zones.length)]);
+  }, 5000);
+}
+
+function penaltyCenterOf(el) {
+  const pitchRect = document.querySelector(".penalty-pitch").getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2 - pitchRect.left, y: r.top + r.height / 2 - pitchRect.top };
+}
+
+function launchPenaltyBall(zone) {
+  const ball = document.getElementById("penaltyBall");
+  const goal = document.getElementById("penaltyGoal");
+  const pitchRect = document.querySelector(".penalty-pitch").getBoundingClientRect();
+  const goalRect = goal.getBoundingClientRect();
+  const start = penaltyCenterOf(ball);
+  const pos = PENALTY_ZONE_POS[zone];
+  const target = {
+    x: goalRect.left - pitchRect.left + goalRect.width * pos.x,
+    y: goalRect.top - pitchRect.top + goalRect.height * pos.y,
+  };
+  const dx = target.x - start.x;
+  const dy = target.y - start.y;
+  const duration = prefersReducedMotion ? 250 : 950;
+  ball.classList.add("spinning-ball");
+  const startTime = performance.now();
+
+  function frame(now) {
+    const t = Math.min((now - startTime) / duration, 1);
+    const eased = 1 - Math.pow(1 - t, 2);
+    const lift = prefersReducedMotion ? 0 : Math.sin(t * Math.PI) * -22;
+    const scale = 1 - 0.4 * eased;
+    ball.style.transform =
+      `translate(calc(-50% + ${(dx * eased).toFixed(1)}px), ${(dy * eased + lift).toFixed(1)}px) scale(${scale.toFixed(2)})`;
+    if (t < 1) {
+      penaltyFlightRAF = requestAnimationFrame(frame);
+    } else {
+      penaltyFlightRAF = null;
+      resolvePenaltyShot(zone);
+    }
+  }
+  penaltyFlightRAF = requestAnimationFrame(frame);
+}
+
+function resolvePenaltyShot(kickZone) {
+  penaltyState = "done";
+  teardownPenaltyRound();
+  document.getElementById("penaltyBall").classList.remove("spinning-ball");
+  const resultEl = document.getElementById("penaltyResult");
+  const goal = document.getElementById("penaltyGoal");
+  const saved = penaltyKeeperZone === kickZone;
+
+  if (saved) {
+    document.getElementById("penaltyStatus").textContent = "¡Atajada!";
+    resultEl.classList.add("result-save");
+    const flavor = PENALTY_SAVE_FLAVORS[Math.floor(Math.random() * PENALTY_SAVE_FLAVORS.length)];
+    resolveDuelResult(resultEl, "champion", flavor);
+  } else {
+    document.getElementById("penaltyStatus").textContent = "¡GOL!";
+    resultEl.classList.add("result-goal");
+    goal.classList.add("net-ripple");
+    setTimeout(() => goal.classList.remove("net-ripple"), 450);
+    const flavor = PENALTY_GOAL_FLAVORS[Math.floor(Math.random() * PENALTY_GOAL_FLAVORS.length)];
+    resolveDuelResult(resultEl, "challenger", flavor);
+  }
+  document.getElementById("penaltyRematchBtn").classList.remove("hidden");
 }
 
 /* ---------------- init ---------------- */
@@ -820,7 +1045,8 @@ document.addEventListener("DOMContentLoaded", () => {
   wheelEl = document.getElementById("wheel");
   wheelWrapEl = document.getElementById("wheelWrap");
   clearHistoryBtn = document.getElementById("clearHistoryBtn");
-  rpsChallengeBtn = document.getElementById("rpsChallengeBtn");
+  clearGamesBtn = document.getElementById("clearGamesBtn");
+  duelChallengeBtn = document.getElementById("duelChallengeBtn");
 
   soundToggleBtn.textContent = soundEnabled ? "🔊 Sonido" : "🔇 Sonido";
   soundToggleBtn.addEventListener("click", () => {
@@ -870,19 +1096,53 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("winnerModal").classList.add("hidden");
   });
 
-  rpsChallengeBtn.addEventListener("click", openRpsModal);
+  duelChallengeBtn.addEventListener("click", openDuelSelect);
+  document.getElementById("closeDuelSelectModal").addEventListener("click", closeDuelSelect);
+  document.getElementById("pickRpsBtn").addEventListener("click", () => {
+    closeDuelSelect();
+    openRpsModal();
+  });
+  document.getElementById("pickPenaltyBtn").addEventListener("click", () => {
+    closeDuelSelect();
+    openPenaltyModal();
+  });
+
+  document.getElementById("rpsStartBtn").addEventListener("click", beginRpsMatch);
+  document.getElementById("backFromRpsIntro").addEventListener("click", () => {
+    document.getElementById("rpsModal").classList.add("hidden");
+    teardownRps();
+    openDuelSelect();
+  });
   document.getElementById("closeRpsModal").addEventListener("click", closeRpsModal);
-  document.getElementById("rpsRematchBtn").addEventListener("click", () => {
-    resetRpsUI();
-    startRpsCountdown();
+  document.getElementById("rpsRematchBtn").addEventListener("click", beginRpsMatch);
+
+  document.getElementById("penaltyStartBtn").addEventListener("click", beginPenaltyMatch);
+  document.getElementById("backFromPenaltyIntro").addEventListener("click", () => {
+    document.getElementById("penaltyModal").classList.add("hidden");
+    teardownPenaltyRound();
+    openDuelSelect();
+  });
+  document.getElementById("closePenaltyModal").addEventListener("click", closePenaltyModal);
+  document.getElementById("penaltyRematchBtn").addEventListener("click", startPenaltyRound);
+
+  clearGamesBtn.addEventListener("click", async () => {
+    if (games.length === 0) return;
+    if (!confirm("¿Seguro que querés vaciar todos los juegos de la ruleta? No se puede deshacer.")) return;
+    try {
+      await fetch("/api/games", { method: "DELETE" });
+      await fetchGames();
+      toast("Juegos vaciados. Ruleta en blanco. 🧹");
+    } catch (err) {
+      toast("No se pudo vaciar la lista de juegos.");
+    }
   });
 
   clearHistoryBtn.addEventListener("click", async () => {
-    if (!confirm("¿Seguro que querés borrar todo el historial? No se puede deshacer.")) return;
+    if (!confirm("¿Seguro que querés borrar todo el historial y el ranking? No se puede deshacer.")) return;
     try {
       await fetch("/api/history", { method: "DELETE" });
       await fetchHistory();
-      toast("Historial borrado. Tabula rasa. 🧹");
+      toast("Historial y ranking borrados. Tabula rasa. 🧹");
     } catch (err) {
       toast("No se pudo borrar el historial.");
     }
