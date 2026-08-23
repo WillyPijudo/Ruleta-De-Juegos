@@ -276,6 +276,20 @@ body::before {
 }
 .spin-btn:hover:not(:disabled) { transform: scale(1.05); }
 .spin-btn:disabled { filter: grayscale(0.5); opacity: 0.6; cursor: not-allowed; }
+.spin-btn:not(:disabled):not(.charging) { animation: spin-ready-pulse 2.6s ease-in-out infinite; }
+.spin-btn.charging { animation: spin-charge 0.5s ease; }
+@keyframes spin-ready-pulse {
+  0%, 100% { box-shadow: 0 8px 22px rgba(0,0,0,0.55), 0 0 0 6px rgba(217,169,78,0.18); }
+  50% { box-shadow: 0 8px 26px rgba(0,0,0,0.6), 0 0 0 11px rgba(217,169,78,0.34); }
+}
+@keyframes spin-charge {
+  0% { transform: scale(1) rotate(0deg); }
+  20% { transform: scale(0.86) rotate(-7deg); }
+  40% { transform: scale(1.14) rotate(5deg); }
+  60% { transform: scale(0.94) rotate(-4deg); }
+  80% { transform: scale(1.06) rotate(2deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
 
 .pointer {
   position: absolute;
@@ -413,6 +427,57 @@ body::before {
 .panel-header h2 { margin-bottom: 0; }
 
 .add-form { display: flex; flex-direction: column; gap: 10px; }
+
+/* ---------- Player picker ---------- */
+.player-select { display: flex; flex-wrap: wrap; gap: 8px; }
+.player-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px 4px 4px;
+  cursor: pointer;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 700;
+  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.player-pill:hover { border-color: var(--gold); transform: translateY(-1px); }
+.player-pill.active {
+  border-color: var(--pink);
+  background: rgba(255, 62, 127, 0.14);
+  box-shadow: 0 0 0 2px rgba(255, 62, 127, 0.22);
+}
+.player-avatar-wrap {
+  position: relative;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+.player-avatar-img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+.player-pill-other .player-avatar-wrap { background: transparent; border: 1px dashed var(--border-bright); }
+
+.tiny-avatar {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+}
+.tiny-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
 input[type="text"] {
   width: 100%;
@@ -794,6 +859,21 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 /* ---------- Penalty duel modal ---------- */
 .penalty-card { max-width: 420px; }
 
+.penalty-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.penalty-brand-logo { height: 32px; width: auto; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5)); }
+.penalty-brand-fallback {
+  font-family: var(--font-comic);
+  font-size: 12.5px;
+  color: var(--gold-bright);
+  letter-spacing: 0.6px;
+}
+
 .penalty-status {
   font-family: var(--font-marker);
   font-size: 15px;
@@ -900,6 +980,13 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 .keeper.diving .glove-left,
 .keeper.diving .glove-right { transform: scale(1.25); }
 
+/* leve balanceo mientras espera el remate - solo estética, no delata nada */
+.keeper.idle-shimmy { animation: keeper-shimmy 1.1s ease-in-out infinite; }
+@keyframes keeper-shimmy {
+  0%, 100% { transform: translate(-50%, 0) rotate(0deg); }
+  50% { transform: translate(calc(-50% + 5px), 0) rotate(2deg); }
+}
+
 .ball {
   position: absolute;
   left: 50%;
@@ -914,6 +1001,69 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 .ball.spinning-ball { animation: ball-spin 0.35s linear infinite; }
 @keyframes ball-spin {
   to { filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5)) hue-rotate(20deg); }
+}
+
+.ball-trail {
+  position: absolute;
+  font-size: 22px;
+  transform: translate(-50%, -50%);
+  opacity: 0.32;
+  filter: blur(1px) saturate(0.5);
+  pointer-events: none;
+  z-index: 3;
+  animation: trail-fade 0.28s ease forwards;
+}
+@keyframes trail-fade {
+  to { opacity: 0; transform: translate(-50%, -50%) scale(0.55); }
+}
+
+/* Sello de resultado, tipo videojuego de fútbol clásico */
+.penalty-stamp {
+  position: absolute;
+  top: 40%; left: 50%;
+  transform: translate(-50%, -50%) rotate(-8deg) scale(0.4);
+  font-family: var(--font-comic);
+  font-size: clamp(24px, 7vw, 34px);
+  letter-spacing: 0.5px;
+  color: var(--gold-bright);
+  text-shadow: 0 0 10px rgba(0,0,0,0.7);
+  border: 4px solid currentColor;
+  border-radius: 10px;
+  padding: 4px 14px;
+  background: rgba(10, 6, 10, 0.4);
+  opacity: 0;
+  z-index: 6;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.penalty-stamp.show { animation: stamp-hit 0.55s cubic-bezier(0.2, 1.5, 0.4, 1) forwards; }
+.penalty-stamp.stamp-save { color: var(--pink); }
+.penalty-stamp.stamp-out { color: var(--text-muted); }
+@keyframes stamp-hit {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(-8deg) scale(0.3); }
+  55% { opacity: 1; transform: translate(-50%, -50%) rotate(-8deg) scale(1.18); }
+  75% { transform: translate(-50%, -50%) rotate(-8deg) scale(0.94); }
+  100% { opacity: 1; transform: translate(-50%, -50%) rotate(-8deg) scale(1); }
+}
+
+/* Copa al ganar el duelo de penales */
+.trophy-burst {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  font-size: 62px;
+  z-index: 7;
+  pointer-events: none;
+  filter: drop-shadow(0 0 16px var(--gold-bright));
+}
+.trophy-burst.hidden { display: none; }
+.trophy-burst.burst { animation: trophy-pop 1.3s cubic-bezier(0.2, 1.6, 0.3, 1) forwards; }
+@keyframes trophy-pop {
+  0% { transform: translate(-50%, -50%) scale(0) rotate(-25deg); opacity: 0; }
+  30% { transform: translate(-50%, -50%) scale(1.3) rotate(8deg); opacity: 1; }
+  50% { transform: translate(-50%, -50%) scale(1) rotate(-4deg); }
+  85% { transform: translate(-50%, -50%) scale(1.05) rotate(0deg); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(0.9) rotate(0deg); opacity: 0; }
 }
 
 .penalty-result {
@@ -931,6 +1081,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 
 @media (prefers-reduced-motion: reduce) {
   .keeper, .glove, .goal .net { transition: none; }
+  .keeper.idle-shimmy, .ball-trail, .trophy-burst.burst { animation: none; }
 }
 
 /* ---------- Toast ---------- */
