@@ -1594,6 +1594,8 @@ function makeFighterState(side, fighterId, name) {
     incomingAttack: null,
     dodgeHeight: null,
     dodgeResetTimeout: null,
+    lastPunchAt: 0,
+    pendingResolveId: null,
   };
 }
 
@@ -1604,10 +1606,23 @@ function otherFighter(fighter) {
 function fighterElId(fighter) { return fighter.side === "left" ? "fightFighterLeft" : "fightFighterRight"; }
 function fighterImgId(fighter) { return fighter.side === "left" ? "fightLeftImg" : "fightRightImg"; }
 
+// De qué lado mira "de fábrica" cada PNG. Si algún día algún personaje
+// aparece mirando para el lado que no es, tocás esto, no el CSS.
+const FIGHTER_NATIVE_FACING = { momo: "right", viruzz: "left" };
+
+function requiredFacing(side) {
+  return side === "left" ? "right" : "left"; // siempre mirando al centro
+}
+
 function setFighterPose(fighter, pose) {
   const img = document.getElementById(fighterImgId(fighter));
   img.src = `/static/img/fighters/${fighter.fighterId}_${pose}.png`;
   img.alt = fighter.fighterId;
+  img.dataset.fighterId = fighter.fighterId;
+
+  const native = FIGHTER_NATIVE_FACING[fighter.fighterId] || "right";
+  const needed = requiredFacing(fighter.side);
+  img.style.setProperty("--facing", native === needed ? "1" : "-1");
 }
 
 function playPunchAnim(fighter, height) {
@@ -1644,10 +1659,18 @@ function resetFighterPose(fighter) {
 }
 
 function renderFightBars() {
-  document.getElementById("fightLeftHealthFill").style.width = fight.left.health + "%";
+  setBarWidths("fightLeftHealthFill", "fightLeftHealthGhost", fight.left.health);
+  setBarWidths("fightRightHealthFill", "fightRightHealthGhost", fight.right.health);
+
   document.getElementById("fightLeftEnergyFill").style.width = fight.left.energy + "%";
-  document.getElementById("fightRightHealthFill").style.width = fight.right.health + "%";
   document.getElementById("fightRightEnergyFill").style.width = fight.right.energy + "%";
+  document.getElementById("fightLeftEnergyBar").classList.toggle("energy-low", fight.left.energy < 25);
+  document.getElementById("fightRightEnergyBar").classList.toggle("energy-low", fight.right.energy < 25);
+}
+
+function setBarWidths(mainId, ghostId, value) {
+  document.getElementById(mainId).style.width = value + "%";
+  document.getElementById(ghostId).style.width = value + "%";
 }
 
 function updateFightRoundLabel() {
@@ -1701,12 +1724,91 @@ function endRound() {
   }, 2500);
 }
 
+const FIGHT_CLASH_WINDOW_MS = 220;   // qué tan "al mismo tiempo" cuenta como choque
+const FIGHT_CLASH_DURATION_MS = 1600;
+const FIGHT_CLASH_BONUS_DAMAGE = 22;
+const FIGHT_CLASH_STAGGER_ENERGY = 20;
+
+let clash = null;
+
 function tryPunch(fighter, height) {
-  if (!fight || fight.over || fighter.isAttacking) return;
+  if (!fight || fight.over || fighter.isAttacking || clash) return;
   if (fighter.energy < FIGHT_PUNCH_COST) {
     flashFightStatus(`${fighter.name} no tiene energía para pegar ⚡`);
     return;
   }
+
+  fighter.energy -= FIGHT_PUNCH_COST;
+  fighter.isAttacking = true;
+  fighter.lastPunchAt = performance.now();
+  renderFightBars();
+
+  const opponent = otherFighter(fighter);
+
+  // ¿El rival tiró un golpe hace un instante y todavía está "en el aire"?
+  // Ahí es choque, no dos golpes resueltos por separado.
+  if (opponent.isAttacking && performance.now() - opponent.lastPunchAt < FIGHT_CLASH_WINDOW_MS) {
+    if (opponent.pendingResolveId) clearTimeout(opponent.pendingResolveId);
+    startClash(fighter, opponent);
+    return;
+  }
+
+  playPunchAnim(fighter, height);
+  opponent.incomingAttack = { height };
+  fighter.pendingResolveId = fightSetTimeout(() => resolvePunch(fighter, opponent, height), FIGHT_RESOLVE_WINDOW_MS);
+}
+
+function startClash(fighterA, fighterB) {
+  clash = { left: 0, right: 0, timeoutId: null };
+  flashFightStatus("¡CHOQUE DE PUÑOS! 💥");
+  document.getElementById("fightClashOverlay").classList.remove("hidden");
+  const fill = document.getElementById("fightClashFill");
+  fill.style.left = "50%";
+  fill.style.width = "0%";
+  document.querySelector(".fight-arena").classList.add("fight-shake");
+  clash.timeoutId = fightSetTimeout(resolveClash, FIGHT_CLASH_DURATION_MS);
+}
+
+function registerClashMash(side) {
+  if (!clash) return;
+  clash[side] += 1;
+  const diff = clash.left - clash.right; // >0 va ganando la izquierda
+  const pct = Math.max(-50, Math.min(50, diff * 4));
+  const fill = document.getElementById("fightClashFill");
+  if (pct >= 0) { fill.style.left = "50%"; fill.style.width = pct + "%"; }
+  else { fill.style.left = (50 + pct) + "%"; fill.style.width = Math.abs(pct) + "%"; }
+}
+
+function resolveClash() {
+  const { left, right } = clash;
+  document.getElementById("fightClashOverlay").classList.add("hidden");
+  clash = null;
+
+  fight.left.isAttacking = false;
+  fight.right.isAttacking = false;
+  resetFighterPose(fight.left);
+  resetFighterPose(fight.right);
+
+  if (left === right) {
+    flashFightStatus("¡Empate en el choque! Los dos retroceden.");
+    return;
+  }
+
+  const winnerSide = left > right ? "left" : "right";
+  const winner = fight[winnerSide];
+  const loser = winnerSide === "left" ? fight.right : fight.left;
+
+  loser.health = Math.max(0, loser.health - FIGHT_CLASH_BONUS_DAMAGE);
+  loser.energy = Math.max(0, loser.energy - FIGHT_CLASH_STAGGER_ENERGY);
+  renderFightBars();
+  playHitAnim(loser);
+  document.getElementById(fighterElId(loser)).classList.add("fight-anim-knockback");
+  fightSetTimeout(() => document.getElementById(fighterElId(loser)).classList.remove("fight-anim-knockback"), 500);
+  flashFightStatus(`¡${winner.name} ganó el choque y la sacudió a ${loser.name}! 💥`);
+
+  if (loser.health <= 0) fightSetTimeout(() => endFight(winnerSide, "ko"), 450);
+  else fightSetTimeout(() => resetFighterPose(loser), 450);
+}
   // FASE 2: acá se va a chequear si el oponente pegó casi al mismo tiempo
   // (otherFighter(fighter).isAttacking reciente) para disparar el choque
   // en vez de resolver el golpe normal.
@@ -1829,6 +1931,13 @@ function attachFightKeyHandler() {
     if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
     if (!fight || fight.over) return;
     const key = e.key.toLowerCase();
+
+    if (clash) {
+      if (Object.values(fightControls.left).includes(key)) registerClashMash("left");
+      else if (Object.values(fightControls.right).includes(key)) registerClashMash("right");
+      return;
+    }
+
     ["left", "right"].forEach((side) => {
       const map = fightControls[side];
       const fighter = fight[side];
@@ -1856,6 +1965,11 @@ function teardownFight() {
   if (fight) {
     clearInterval(fight.roundTimerInterval);
     clearInterval(fight.energyRegenInterval);
+  }
+  if (clash) {
+    clearTimeout(clash.timeoutId);
+    clash = null;
+    document.getElementById("fightClashOverlay").classList.add("hidden");
   }
   removeFightKeyHandler();
 }
