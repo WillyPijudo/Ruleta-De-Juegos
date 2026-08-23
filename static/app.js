@@ -883,6 +883,9 @@ let penaltyAimTimeout = null;
 let penaltyFlightRAF = null;
 let penaltyKickZone = null;
 let penaltyKeeperZone = null;
+let penaltyKeeperTooSlow = false;
+let penaltyFlightStartTime = 0;
+const PENALTY_REACTION_CUTOFF = 420; // ms — si el arquero se tira después de esto, no vale
 
 function openPenaltyModal() {
   document.getElementById("penaltyModal").classList.remove("hidden");
@@ -913,6 +916,7 @@ function resetPenaltyUI() {
   penaltyState = "idle";
   penaltyKickZone = null;
   penaltyKeeperZone = null;
+  penaltyKeeperTooSlow = false;  
   const ball = document.getElementById("penaltyBall");
   ball.style.transform = "";
   ball.classList.remove("spinning-ball");
@@ -951,6 +955,7 @@ function startPenaltyRound() {
       doKick(zone);
     } else if (penaltyState === "flight" && !penaltyKeeperZone) {
       penaltyKeeperZone = zone;
+      penaltyKeeperTooSlow = performance.now() - penaltyFlightStartTime > PENALTY_REACTION_CUTOFF;
       document.getElementById("penaltyKeeper").className = `keeper diving dive-${zone}`;
     }
   };
@@ -983,13 +988,14 @@ function launchPenaltyBall(zone) {
   };
   const dx = target.x - start.x;
   const dy = target.y - start.y;
-  const duration = prefersReducedMotion ? 250 : 950;
+  const duration = prefersReducedMotion ? 250 : 620;
   ball.classList.add("spinning-ball");
   const startTime = performance.now();
+  penaltyFlightStartTime = startTime;
 
   function frame(now) {
     const t = Math.min((now - startTime) / duration, 1);
-    const eased = 1 - Math.pow(1 - t, 2);
+    const eased = t * t; // ease-in: no delata el rincón hasta el final
     const lift = prefersReducedMotion ? 0 : Math.sin(t * Math.PI) * -22;
     const scale = 1 - 0.4 * eased;
     ball.style.transform =
@@ -1010,7 +1016,7 @@ function resolvePenaltyShot(kickZone) {
   document.getElementById("penaltyBall").classList.remove("spinning-ball");
   const resultEl = document.getElementById("penaltyResult");
   const goal = document.getElementById("penaltyGoal");
-  const saved = penaltyKeeperZone === kickZone;
+  const saved = !penaltyKeeperTooSlow && penaltyKeeperZone === kickZone;
 
   if (saved) {
     document.getElementById("penaltyStatus").textContent = "¡Atajada!";
