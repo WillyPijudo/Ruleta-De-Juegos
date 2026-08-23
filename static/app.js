@@ -1809,20 +1809,6 @@ function resolveClash() {
   if (loser.health <= 0) fightSetTimeout(() => endFight(winnerSide, "ko"), 450);
   else fightSetTimeout(() => resetFighterPose(loser), 450);
 }
-  // FASE 2: acá se va a chequear si el oponente pegó casi al mismo tiempo
-  // (otherFighter(fighter).isAttacking reciente) para disparar el choque
-  // en vez de resolver el golpe normal.
-
-  fighter.energy -= FIGHT_PUNCH_COST;
-  fighter.isAttacking = true;
-  renderFightBars();
-  playPunchAnim(fighter, height);
-
-  const opponent = otherFighter(fighter);
-  opponent.incomingAttack = { height };
-
-  fightSetTimeout(() => resolvePunch(fighter, opponent, height), FIGHT_RESOLVE_WINDOW_MS);
-}
 
 function resolvePunch(attacker, defender, height) {
   if (!fight || fight.over) return;
