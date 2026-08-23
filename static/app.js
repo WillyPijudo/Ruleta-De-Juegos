@@ -1145,61 +1145,6 @@ function beginPenaltyMatch() {
   startPenaltyRound();
 }
 
-function startPenaltyRound() {
-  resetPenaltyUI();
-  penaltyState = "aiming";
-  document.getElementById("penaltyKeeper").classList.add("idle-shimmy");
-
-  // Motor de la barra de potencia
-  let lastTime = performance.now();
-  function animatePower(now) {
-    if (penaltyState !== "aiming") return;
-    const dt = now - lastTime;
-    lastTime = now;
-    
-    // Sube y baja como loco
-    currentPower += (powerDirection * 0.15) * dt; 
-    if (currentPower >= 105) { currentPower = 105; powerDirection = -1; }
-    if (currentPower <= 0) { currentPower = 0; powerDirection = 1; }
-    
-    document.getElementById("penaltyPowerBar").style.width = Math.min(currentPower, 100) + "%";
-    penaltyPowerRAF = requestAnimationFrame(animatePower);
-  }
-  penaltyPowerRAF = requestAnimationFrame(performance.now);
-
-  const doKick = (zone) => {
-    capturedPower = currentPower;
-    penaltyKickZone = zone;
-    penaltyState = "flight";
-    document.getElementById("penaltyKeeper").classList.remove("idle-shimmy");
-    
-    if (capturedPower > 95) {
-        document.getElementById("penaltyStatus").textContent = "¡Se pasó de potencia!";
-    } else if (capturedPower >= 85) {
-        document.getElementById("penaltyStatus").textContent = "¡Fierrazo inatajable! Arquero rezá...";
-    } else {
-        document.getElementById("penaltyStatus").textContent = "¡Va la pelota! Arquero, reaccioná…";
-    }
-    
-    launchPenaltyBall(zone, capturedPower);
-  };
-
-  penaltyKeyHandler = (e) => {
-    if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
-    const zone = PENALTY_ZONES[e.key.toLowerCase()];
-    if (!zone) return;
-    
-    if (penaltyState === "aiming") {
-      doKick(zone);
-    } else if (penaltyState === "flight" && !penaltyKeeperZone) {
-      penaltyKeeperZone = zone;
-      penaltyKeeperTooSlow = performance.now() - penaltyFlightStartTime > penaltyReactionCutoffMs;
-      document.getElementById("penaltyKeeper").className = `keeper diving dive-${zone}`;
-    }
-  };
-  window.addEventListener("keydown", penaltyKeyHandler);
-}
-
 function penaltyCenterOf(el) {
   const pitchRect = document.querySelector(".penalty-pitch").getBoundingClientRect();
   const r = el.getBoundingClientRect();
