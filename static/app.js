@@ -1059,14 +1059,15 @@ function resetPenaltyUI() {
   penaltyState = "idle";
   penaltyKickZone = null;
   penaltyKeeperZone = null;
-  penaltyKeeperTooSlow = false;  
+  penaltyKeeperTooSlow = false;
   currentPower = 0;
   capturedPower = 0;
-  
+  powerDirection = 1; // <- evita que arranque yendo "para atrás" si el round anterior quedó bajando
+
   const ball = document.getElementById("penaltyBall");
   ball.style.transform = "";
   ball.classList.remove("spinning-ball");
-  
+
   document.getElementById("penaltyPowerBar").style.width = "0%";
   document.getElementById("penaltyKeeper").className = "keeper";
   document.getElementById("penaltyGoal").classList.remove("net-ripple");
@@ -1081,6 +1082,61 @@ function resetPenaltyUI() {
   resultEl.classList.remove("show", "result-goal", "result-save");
   document.getElementById("penaltyStatus").textContent = "Pateador: clavá la barra y elegí rincón…";
   document.getElementById("penaltyRematchBtn").classList.add("hidden");
+}
+
+function startPenaltyRound() {
+  resetPenaltyUI();
+  penaltyState = "aiming";
+  document.getElementById("penaltyKeeper").classList.add("idle-shimmy");
+
+  // Motor de la barra de potencia
+  let lastTime = performance.now();
+  function animatePower(now) {
+    if (penaltyState !== "aiming") return;
+    const dt = now - lastTime;
+    lastTime = now;
+
+    // Sube y baja como loco
+    currentPower += (powerDirection * 0.15) * dt;
+    if (currentPower >= 105) { currentPower = 105; powerDirection = -1; }
+    if (currentPower <= 0) { currentPower = 0; powerDirection = 1; }
+
+    document.getElementById("penaltyPowerBar").style.width = Math.min(currentPower, 100) + "%";
+    penaltyPowerRAF = requestAnimationFrame(animatePower);
+  }
+  penaltyPowerRAF = requestAnimationFrame(animatePower); // <- EL FIX: antes decía "performance.now"
+
+  const doKick = (zone) => {
+    capturedPower = currentPower;
+    penaltyKickZone = zone;
+    penaltyState = "flight";
+    document.getElementById("penaltyKeeper").classList.remove("idle-shimmy");
+
+    if (capturedPower > 95) {
+        document.getElementById("penaltyStatus").textContent = "¡Se pasó de potencia!";
+    } else if (capturedPower >= 85) {
+        document.getElementById("penaltyStatus").textContent = "¡Fierrazo inatajable! Arquero rezá...";
+    } else {
+        document.getElementById("penaltyStatus").textContent = "¡Va la pelota! Arquero, reaccioná…";
+    }
+
+    launchPenaltyBall(zone, capturedPower);
+  };
+
+  penaltyKeyHandler = (e) => {
+    if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
+    const zone = PENALTY_ZONES[e.key.toLowerCase()];
+    if (!zone) return;
+
+    if (penaltyState === "aiming") {
+      doKick(zone);
+    } else if (penaltyState === "flight" && !penaltyKeeperZone) {
+      penaltyKeeperZone = zone;
+      penaltyKeeperTooSlow = performance.now() - penaltyFlightStartTime > penaltyReactionCutoffMs;
+      document.getElementById("penaltyKeeper").className = `keeper diving dive-${zone}`;
+    }
+  };
+  window.addEventListener("keydown", penaltyKeyHandler);
 }
 
 function beginPenaltyMatch() {
