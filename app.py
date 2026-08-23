@@ -210,6 +210,14 @@ def delete_game(game_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/games", methods=["DELETE"])
+def clear_games():
+    """Wipe every game from the wheel in one go (the 'vaciar juegos' button).
+    Doesn't touch history/ranking - that's a separate reset."""
+    _save(GAMES_FILE, [])
+    return jsonify({"ok": True})
+
+
 @app.route("/api/history", methods=["GET"])
 def get_history():
     return jsonify(_load(HISTORY_FILE, []))
