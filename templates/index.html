@@ -221,11 +221,12 @@
 <div id="penaltyModal" class="modal hidden">
   <div class="modal-card penalty-card">
 
+    <div class="penalty-brand">
+      <img src="{{ url_for('static', filename='img/pes6-logo.png') }}" alt="" class="penalty-brand-logo" onerror="this.remove()">
+      <span class="penalty-brand-fallback">⚽ ESTILO PRO</span>
+    </div>
+
     <div id="penaltyIntro" class="duel-intro">
-      <div class="penalty-brand">
-        <img src="{{ url_for('static', filename='img/pes6-logo.png') }}" alt="" class="penalty-brand-logo" onerror="this.remove()">
-        <span class="penalty-brand-fallback">⚽ ESTILO PRO</span>
-      </div>
       <p class="modal-eyebrow">Penales</p>
       <h3 class="rps-title">Controles</h3>
       <p class="modal-body-text" id="penaltyRoleHint">El Retador patea, el Campeón ataja. Los dos usan las mismas teclas, cada uno en su turno.</p>
