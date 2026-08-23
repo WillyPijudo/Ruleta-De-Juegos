@@ -983,13 +983,13 @@ let penaltyRoundTimeout = null;
  */
 function penaltyShotTiming(power) {
   let duration;
-  if (power > 95) duration = 420; // a la tribuna, se toma su tiempo
-  else if (power >= 85) duration = 190; // fierrazo, ni se alcanza a pensar
-  else duration = 460 - power * 2.1; // ~460ms flojo -> ~285ms al borde del fierrazo
+  if (power > 95) duration = 550; // se pasó de rosca, se toma su tiempo en salir (da igual, ya es afuera)
+  else if (power >= 85) duration = 320; // fierrazo: rápido y duro a propósito, pero no imposible
+  else duration = 800 - power * 5.2; // ~800ms flojo -> ~360ms al borde del fierrazo
 
-  if (prefersReducedMotion) duration = 220;
+  if (prefersReducedMotion) duration = 260;
 
-  const revealFrac = 0.58;
+  const revealFrac = 0.65;
   return { duration, cutoff: Math.round(duration * revealFrac), revealFrac };
 }
 
