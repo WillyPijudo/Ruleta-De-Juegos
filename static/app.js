@@ -964,6 +964,8 @@ let currentPower = 0;
 let powerDirection = 1;
 let capturedPower = 0;
 let penaltyReactionCutoffMs = 300;
+let shootout = null;
+let penaltyRoundTimeout = null;
 
 /**
  * REWORK "estilo PES 6": antes el arquero podía mirar el dibujo de la
@@ -1031,6 +1033,7 @@ function openPenaltyModal() {
   document.getElementById("penaltyModal").classList.remove("hidden");
   document.getElementById("penaltyIntro").classList.remove("hidden");
   document.getElementById("penaltyPlay").classList.add("hidden");
+  initShootout();
   resetPenaltyUI();
 }
 
@@ -1051,6 +1054,10 @@ function teardownPenaltyRound() {
   if (penaltyPowerRAF) {
     cancelAnimationFrame(penaltyPowerRAF);
     penaltyPowerRAF = null;
+  }
+  if (penaltyRoundTimeout) {
+    clearTimeout(penaltyRoundTimeout);
+    penaltyRoundTimeout = null;
   }
 }
 
@@ -1088,6 +1095,7 @@ function startPenaltyRound() {
   resetPenaltyUI();
   penaltyState = "aiming";
   document.getElementById("penaltyKeeper").classList.add("idle-shimmy");
+  updateTurnBanner();  
 
   // Motor de la barra de potencia
   let lastTime = performance.now();
@@ -1218,39 +1226,140 @@ function resolvePenaltyShot(kickZone, power) {
   penaltyState = "done";
   teardownPenaltyRound();
   document.getElementById("penaltyBall").classList.remove("spinning-ball");
-  const resultEl = document.getElementById("penaltyResult");
   const goal = document.getElementById("penaltyGoal");
-  
+  let scored, flavor;
+
   if (power > 95) {
-      document.getElementById("penaltyStatus").textContent = "¡Afuera!";
-      showPenaltyStamp("¡A LA TRIBUNA!", "stamp-out");
-      resolveDuelResult(resultEl, "champion", "¡Se llenó de pelota y la mandó a la calle! Gana el Campeón.");
+    document.getElementById("penaltyStatus").textContent = "¡Afuera!";
+    showPenaltyStamp("¡A LA TRIBUNA!", "stamp-out");
+    scored = false;
+    flavor = "¡Se llenó de pelota y la mandó a la calle!";
   } else if (power >= 85) {
-      document.getElementById("penaltyStatus").textContent = "¡GOLAZO!";
-      resultEl.classList.add("result-goal");
+    document.getElementById("penaltyStatus").textContent = "¡GOLAZO!";
+    goal.classList.add("net-ripple");
+    setTimeout(() => goal.classList.remove("net-ripple"), 450);
+    showPenaltyStamp("¡GOLAZO!", "stamp-goal");
+    scored = true;
+    flavor = "¡Le rompió el arco! Imposible para el arquero.";
+  } else {
+    const saved = !penaltyKeeperTooSlow && penaltyKeeperZone === kickZone;
+    if (saved) {
+      document.getElementById("penaltyStatus").textContent = "¡Atajada!";
+      showPenaltyStamp("¡ATAJADA!", "stamp-save");
+      scored = false;
+      flavor = PENALTY_SAVE_FLAVORS[Math.floor(Math.random() * PENALTY_SAVE_FLAVORS.length)];
+    } else {
+      document.getElementById("penaltyStatus").textContent = "¡GOL!";
       goal.classList.add("net-ripple");
       setTimeout(() => goal.classList.remove("net-ripple"), 450);
-      showPenaltyStamp("¡GOLAZO!", "stamp-goal");
-      resolveDuelResult(resultEl, "challenger", "¡Le rompió el arco! Imposible para el arquero.");
-  } else {
-      // Tiro normal, el arquero puede atajar si reacciona a tiempo
-      let saved = !penaltyKeeperTooSlow && penaltyKeeperZone === kickZone;
-      if (saved) {
-        document.getElementById("penaltyStatus").textContent = "¡Atajada!";
-        resultEl.classList.add("result-save");
-        showPenaltyStamp("¡ATAJADA!", "stamp-save");
-        const flavor = PENALTY_SAVE_FLAVORS[Math.floor(Math.random() * PENALTY_SAVE_FLAVORS.length)];
-        resolveDuelResult(resultEl, "champion", flavor);
-      } else {
-        document.getElementById("penaltyStatus").textContent = "¡GOL!";
-        resultEl.classList.add("result-goal");
-        goal.classList.add("net-ripple");
-        setTimeout(() => goal.classList.remove("net-ripple"), 450);
-        showPenaltyStamp("¡GOL!", "stamp-goal");
-        const flavor = PENALTY_GOAL_FLAVORS[Math.floor(Math.random() * PENALTY_GOAL_FLAVORS.length)];
-        resolveDuelResult(resultEl, "challenger", flavor);
-      }
+      showPenaltyStamp("¡GOL!", "stamp-goal");
+      scored = true;
+      flavor = PENALTY_GOAL_FLAVORS[Math.floor(Math.random() * PENALTY_GOAL_FLAVORS.length)];
+    }
   }
+
+  recordShootoutKick(scored, flavor);
+}
+
+function initShootout() {
+  const championName = (currentWinnerGame && currentWinnerGame.added_by) || "Campeón";
+  const challengerName = (playerNameInput && playerNameInput.value.trim()) || "Retador";
+  shootout = {
+    challengerName,
+    championName,
+    challengerResults: [],
+    championResults: [],
+    currentKicker: "challenger",
+  };
+  document.getElementById("pbChallengerName").textContent = challengerName;
+  document.getElementById("pbChampionName").textContent = championName;
+  document.getElementById("pbChallengerSide").classList.remove("pb-winner");
+  document.getElementById("pbChampionSide").classList.remove("pb-winner");
+  document.getElementById("penaltyScoreboard").classList.remove("sudden-death");
+  document.getElementById("penaltyRoleHint").textContent =
+    `${challengerName} patea primero y ${championName} ataja — después se turnan en cada tiro. Mejor de 5, y si siguen empatados, muerte súbita.`;
+  renderScoreboard();
+}
+
+function restartShootout() {
+  initShootout();
+  startPenaltyRound();
+}
+
+function renderDots(containerId, results) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = "";
+  const total = Math.max(5, results.length);
+  for (let i = 0; i < total; i++) {
+    if (i === 5) {
+      const sep = document.createElement("span");
+      sep.className = "pb-dot-sep";
+      el.appendChild(sep);
+    }
+    const dot = document.createElement("span");
+    dot.className = "pb-dot" + (i < results.length ? (results[i] ? " scored" : " missed") : "");
+    el.appendChild(dot);
+  }
+}
+
+function renderScoreboard() {
+  renderDots("pbChallengerDots", shootout.challengerResults);
+  renderDots("pbChampionDots", shootout.championResults);
+  const cScore = shootout.challengerResults.filter(Boolean).length;
+  const hScore = shootout.championResults.filter(Boolean).length;
+  document.getElementById("pbScore").innerHTML = `${cScore}<span class="pb-score-sep">-</span>${hScore}`;
+}
+
+function updateTurnBanner() {
+  const kickerName = shootout.currentKicker === "challenger" ? shootout.challengerName : shootout.championName;
+  const keeperName = shootout.currentKicker === "challenger" ? shootout.championName : shootout.challengerName;
+  const banner = document.getElementById("penaltyTurnBanner");
+  banner.textContent = `⚽ Patea ${kickerName} — ataja ${keeperName}`;
+  banner.classList.remove("pop");
+  void banner.offsetWidth;
+  banner.classList.add("pop");
+}
+
+function recordShootoutKick(scored, flavor) {
+  const kicker = shootout.currentKicker;
+  const arr = kicker === "challenger" ? shootout.challengerResults : shootout.championResults;
+  arr.push(scored);
+  renderScoreboard();
+
+  const cScore = shootout.challengerResults.filter(Boolean).length;
+  const hScore = shootout.championResults.filter(Boolean).length;
+  const cTaken = shootout.challengerResults.length;
+  const hTaken = shootout.championResults.length;
+
+  let decided = null;
+  if (cTaken <= 5 && hTaken <= 5) {
+    if (cScore > hScore + (5 - hTaken)) decided = "challenger";
+    else if (hScore > cScore + (5 - cTaken)) decided = "champion";
+  }
+  if (!decided && cTaken === hTaken && cTaken >= 5 && cScore !== hScore) {
+    decided = cScore > hScore ? "challenger" : "champion";
+  }
+
+  const inSuddenDeath = cTaken > 5 || hTaken > 5;
+  document.getElementById("penaltyScoreboard").classList.toggle("sudden-death", inSuddenDeath && !decided);
+
+  if (decided) {
+    penaltyRoundTimeout = setTimeout(() => finishShootout(decided, flavor), 1300);
+    return;
+  }
+
+  shootout.currentKicker = (cTaken + hTaken) % 2 === 0 ? "challenger" : "champion";
+  penaltyRoundTimeout = setTimeout(() => startPenaltyRound(), 1600);
+}
+
+function finishShootout(side, flavor) {
+  const resultEl = document.getElementById("penaltyResult");
+  resultEl.classList.add(side === "challenger" ? "result-goal" : "result-save");
+  document
+    .getElementById(side === "challenger" ? "pbChallengerSide" : "pbChampionSide")
+    .classList.add("pb-winner");
+  document.getElementById("penaltyTurnBanner").textContent = "🏆 ¡Se definió la tanda!";
+  resolveDuelResult(resultEl, side, flavor);
   launchTrophyBurst();
   document.getElementById("penaltyRematchBtn").classList.remove("hidden");
 }
@@ -1351,7 +1460,7 @@ document.addEventListener("DOMContentLoaded", () => {
     openDuelSelect();
   });
   document.getElementById("closePenaltyModal").addEventListener("click", closePenaltyModal);
-  document.getElementById("penaltyRematchBtn").addEventListener("click", startPenaltyRound);
+  document.getElementById("penaltyRematchBtn").addEventListener("click", restartShootout);
 
   clearGamesBtn.addEventListener("click", async () => {
     if (games.length === 0) return;
