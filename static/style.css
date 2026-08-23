@@ -1246,6 +1246,12 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   50% { transform: translate(calc(-50% + 5px), 0) rotate(2deg); }
 }
 
+.keeper-urgent { animation: keeper-panic 0.15s ease-in-out infinite; filter: drop-shadow(0 0 10px var(--danger)); }
+@keyframes keeper-panic {
+  0%, 100% { transform: translate(-50%, 0) scale(1); }
+  50% { transform: translate(-50%, 0) scale(1.06); }
+}
+
 .ball {
   position: absolute;
   left: 50%;
