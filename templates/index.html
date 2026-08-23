@@ -45,7 +45,34 @@
       <div class="panel">
         <h2>Agregar juego</h2>
         <div class="add-form">
-          <input type="text" id="playerName" placeholder="Ingresá tu nombre, pibe 😎" maxlength="40">
+          <div class="player-select" id="playerSelect">
+            <button type="button" class="player-pill" data-player="Mateo">
+              <span class="player-avatar-wrap">
+                <span class="player-avatar-fallback">⚽</span>
+                <img src="{{ url_for('static', filename='img/players/mateo.png') }}" alt="" class="player-avatar-img" onerror="this.remove()">
+              </span>
+              <span class="player-pill-name">Mateo</span>
+            </button>
+            <button type="button" class="player-pill" data-player="Lauty">
+              <span class="player-avatar-wrap">
+                <span class="player-avatar-fallback">🩺</span>
+                <img src="{{ url_for('static', filename='img/players/lauty.png') }}" alt="" class="player-avatar-img" onerror="this.remove()">
+              </span>
+              <span class="player-pill-name">Lauty</span>
+            </button>
+            <button type="button" class="player-pill" data-player="Roman">
+              <span class="player-avatar-wrap">
+                <span class="player-avatar-fallback">🛡️</span>
+                <img src="{{ url_for('static', filename='img/players/roman.png') }}" alt="" class="player-avatar-img" onerror="this.remove()">
+              </span>
+              <span class="player-pill-name">Roman</span>
+            </button>
+            <button type="button" class="player-pill player-pill-other" data-player="__other__">
+              <span class="player-avatar-wrap"><span class="player-avatar-fallback">➕</span></span>
+              <span class="player-pill-name">Otro</span>
+            </button>
+          </div>
+          <input type="text" id="playerName" class="hidden" placeholder="Escribí tu nombre…" maxlength="40">
 
           <div id="steamMode" class="field-mode">
             <input type="text" id="gameSearch" placeholder="Buscar juego en Steam…" maxlength="80" autocomplete="off">
@@ -195,6 +222,10 @@
   <div class="modal-card penalty-card">
 
     <div id="penaltyIntro" class="duel-intro">
+      <div class="penalty-brand">
+        <img src="{{ url_for('static', filename='img/pes6-logo.png') }}" alt="" class="penalty-brand-logo" onerror="this.remove()">
+        <span class="penalty-brand-fallback">⚽ ESTILO PRO</span>
+      </div>
       <p class="modal-eyebrow">Penales</p>
       <h3 class="rps-title">Controles</h3>
       <p class="modal-body-text" id="penaltyRoleHint">El Retador patea, el Campeón ataja. Los dos usan las mismas teclas, cada uno en su turno.</p>
@@ -234,6 +265,8 @@
           </div>
         </div>
         <div class="ball" id="penaltyBall">⚽</div>
+        <div class="penalty-stamp" id="penaltyStamp"></div>
+        <div class="trophy-burst hidden" id="trophyBurst">🏆</div>
       </div>
       <p class="penalty-result" id="penaltyResult"></p>
       <div class="modal-actions">
