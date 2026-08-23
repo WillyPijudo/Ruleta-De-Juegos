@@ -1,0 +1,20 @@
+[
+  {
+    "id": "82d4cd9d43",
+    "name": "Cuphead",
+    "added_by": "Mateo",
+    "cover": "/static/covers/dd18096b17ce5ddc.jpg",
+    "cover_fallback": "",
+    "steam_appid": 268910,
+    "created_at": "2026-08-23T04:28:55.204509Z"
+  },
+  {
+    "id": "da448a8909",
+    "name": "EA SPORTS FC™ 26",
+    "added_by": "Roman",
+    "cover": "/static/covers/d9f4e1e36232a747.jpg",
+    "cover_fallback": "",
+    "steam_appid": 3405690,
+    "created_at": "2026-08-23T04:29:21.587632Z"
+  }
+]

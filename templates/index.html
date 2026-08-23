@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ruleta de Juegos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Luckiest+Guy&family=Permanent+Marker&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <div class="brand-text">
+        <h1>Ruleta de Juegos</h1>
+        <p class="brand-tagline">Porque alguien tiene que decidir y no vamos a discutir toda la noche</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button id="soundToggle" class="btn btn-ghost btn-small" type="button">🔊 Sonido</button>
+      <button id="shareBtn" class="btn btn-ghost btn-small" type="button">🔗 Compartir</button>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <section class="wheel-stage">
+      <div class="wheel-wrap" id="wheelWrap">
+        <div class="lights" id="lights"></div>
+        <div class="wheel" id="wheel"></div>
+        <div class="pointer"></div>
+        <div class="wheel-hub">
+          <button id="spinBtn" class="spin-btn" type="button" disabled>GIRAR</button>
+        </div>
+      </div>
+      <p class="wheel-hint" id="wheelHint">Cargando…</p>
+    </section>
+
+    <aside class="sidebar">
+
+      <div class="panel">
+        <h2>Agregar juego</h2>
+        <div class="add-form">
+          <input type="text" id="playerName" placeholder="Ingresá tu nombre, pibe 😎" maxlength="40">
+
+          <div id="steamMode" class="field-mode">
+            <input type="text" id="gameSearch" placeholder="Buscar juego en Steam…" maxlength="80" autocomplete="off">
+            <div id="searchResults" class="search-results"></div>
+            <p class="field-hint">Elegí un resultado de la lista para sumarlo con su portada.</p>
+          </div>
+
+          <div id="manualMode" class="field-mode hidden">
+            <input type="text" id="manualName" placeholder="Nombre del juego" maxlength="120">
+            <input type="text" id="manualCover" placeholder="Link de la portada (opcional)" maxlength="500">
+            <button id="manualAddBtn" class="btn btn-primary btn-block" type="button">➕ Agregar a la ruleta</button>
+          </div>
+
+          <button id="manualToggle" class="btn btn-ghost btn-small" type="button">✍️ Cargar manual</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Juegos en la ruleta (<span id="gameCount">0</span>)</h2>
+        </div>
+        <div class="game-list" id="gameList">
+          <p class="empty-hint">Cargando…</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>🏆 Ranking de la casa</h2>
+        </div>
+        <div id="leaderboardList"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Historial</h2>
+          <button id="clearHistoryBtn" class="btn btn-danger-ghost btn-tiny" type="button">🧹 Limpiar</button>
+        </div>
+        <div class="history-list" id="historyList"></div>
+      </div>
+
+    </aside>
+  </div>
+
+  <p class="app-footer">Hecho con 🍕, mate y demasiada discusión sobre qué juego jugar</p>
+</div>
+
+<!-- Winner modal -->
+<div id="winnerModal" class="modal hidden">
+  <div class="modal-card">
+    <p class="modal-eyebrow">¡Tenemos ganador!</p>
+    <div class="modal-cover-wrap" id="winnerCoverWrap"></div>
+    <h3 id="winnerName"></h3>
+    <p class="winner-message" id="winnerMessage"></p>
+    <div class="modal-actions">
+      <button id="rpsChallengeBtn" class="btn btn-duel btn-small" type="button">⚔️ Desafiar al ganador</button>
+    </div>
+    <div class="modal-actions" style="margin-top:10px;">
+      <button id="removeWinnerBtn" class="btn btn-ghost btn-small" type="button">🗑️ Sacar de la ruleta</button>
+      <button id="closeModal" class="btn btn-primary btn-small" type="button">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- RPS duel modal -->
+<div id="rpsModal" class="modal hidden">
+  <div class="modal-card rps-card">
+    <p class="modal-eyebrow">Duelo de honor</p>
+    <h3 class="rps-title">Piedra, Papel o Tijera</h3>
+    <p class="modal-body-text">Una sola chance. Esto no cambia el resultado de la ruleta — es puramente por el ego 😏</p>
+    <div class="rps-arena">
+      <div class="rps-side">
+        <span class="rps-label">Retador</span>
+        <div class="rps-choice" id="rpsChallengerChoice">❔</div>
+        <span class="rps-keys">A=✊ S=✋ D=✌️</span>
+      </div>
+      <div class="rps-vs">VS</div>
+      <div class="rps-side">
+        <span class="rps-label">Campeón</span>
+        <div class="rps-choice" id="rpsChampionChoice">❔</div>
+        <span class="rps-keys">J=✊ K=✋ L=✌️</span>
+      </div>
+    </div>
+    <p class="rps-countdown" id="rpsCountdown"></p>
+    <p class="rps-result" id="rpsResult"></p>
+    <div class="modal-actions">
+      <button id="rpsRematchBtn" class="btn btn-primary btn-small" type="button">🔁 Otra vez</button>
+      <button id="closeRpsModal" class="btn btn-ghost btn-small" type="button">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Share modal -->
+<div id="shareModal" class="modal hidden">
+  <div class="modal-card">
+    <p class="modal-eyebrow">Compartir</p>
+    <p class="modal-body-text">Pasale este link a tus amigos (deben estar en la misma wifi/red) para que agreguen sus juegos:</p>
+    <div class="share-link-box" id="shareLinkBox">http://…</div>
+    <div class="modal-actions">
+      <button id="copyShareLinkBtn" class="btn btn-primary btn-small" type="button">📋 Copiar</button>
+      <button id="closeShareModal" class="btn btn-ghost btn-small" type="button">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<div id="confettiLayer" class="confetti-layer"></div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
