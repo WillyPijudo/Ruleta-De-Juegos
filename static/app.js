@@ -774,7 +774,7 @@ function resolveDuelResult(resultEl, side, flavorPrefix) {
 }
 
 /* ---------------- duel mode select ---------------- */
-
+let pendingChallengerName = "";
 function openDuelSelect() {
   document.getElementById("duelSelectModal").classList.remove("hidden");
 }
@@ -983,13 +983,13 @@ let penaltyRoundTimeout = null;
  */
 function penaltyShotTiming(power) {
   let duration;
-  if (power > 95) duration = 550; // se pasó de rosca, se toma su tiempo en salir (da igual, ya es afuera)
-  else if (power >= 85) duration = 320; // fierrazo: rápido y duro a propósito, pero no imposible
-  else duration = 800 - power * 5.2; // ~800ms flojo -> ~360ms al borde del fierrazo
+  if (power > 95) duration = 700; // a la tribuna, no hay apuro, total va afuera
+  else if (power >= 85) duration = 480; // fierrazo: duro, pero jugable
+  else duration = 1450 - power * 11.5; // ~1450ms flojo -> ~520ms al borde del fierrazo
 
-  if (prefersReducedMotion) duration = 260;
+  if (prefersReducedMotion) duration = 320;
 
-  const revealFrac = 0.65;
+  const revealFrac = 0.72;
   return { duration, cutoff: Math.round(duration * revealFrac), revealFrac };
 }
 
@@ -1263,14 +1263,10 @@ function resolvePenaltyShot(kickZone, power) {
 
 function initShootout() {
   const championName = (currentWinnerGame && currentWinnerGame.added_by) || "Campeón";
-  const challengerName = (playerNameInput && playerNameInput.value.trim()) || "Retador";
-  shootout = {
-    challengerName,
-    championName,
-    challengerResults: [],
-    championResults: [],
-    currentKicker: "challenger",
-  };
+  let challengerName = (pendingChallengerName || "").trim() || "Retador";
+  if (challengerName.toLowerCase() === championName.toLowerCase()) {
+    challengerName = `${challengerName} (Retador)`;
+  }
   document.getElementById("pbChallengerName").textContent = challengerName;
   document.getElementById("pbChampionName").textContent = championName;
   document.getElementById("pbChallengerSide").classList.remove("pb-winner");
@@ -1433,7 +1429,15 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("winnerModal").classList.add("hidden");
   });
 
-  duelChallengeBtn.addEventListener("click", openDuelSelect);
+  duelChallengeBtn.addEventListener("click", () => {
+    const championName = (currentWinnerGame && currentWinnerGame.added_by) || "Campeón";
+    let challenger = (playerNameInput.value || "").trim();
+    if (!challenger || challenger.toLowerCase() === championName.toLowerCase()) {
+      challenger = (prompt(`¿Quién desafía a ${championName}?`, "") || "").trim();
+    }
+    pendingChallengerName = challenger || "Retador";
+    openDuelSelect();
+  });
   document.getElementById("closeDuelSelectModal").addEventListener("click", closeDuelSelect);
   document.getElementById("pickRpsBtn").addEventListener("click", () => {
     closeDuelSelect();
