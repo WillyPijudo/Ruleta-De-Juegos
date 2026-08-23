@@ -179,8 +179,7 @@ function renderWheel() {
   }
   wheelEl.style.background = `conic-gradient(${stops.join(",")})`;
 
-  const rect = wheelEl.getBoundingClientRect();
-  const R = rect.width / 2;
+  const R = wheelEl.offsetWidth / 2;
   if (!R) {
     // Layout isn't settled yet (e.g. fonts still loading on first
     // paint) - retry next frame instead of dropping every poster at
