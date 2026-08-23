@@ -66,6 +66,7 @@
       <div class="panel">
         <div class="panel-header">
           <h2>Juegos en la ruleta (<span id="gameCount">0</span>)</h2>
+          <button id="clearGamesBtn" class="btn btn-danger-ghost btn-tiny" type="button">🧹 Vaciar</button>
         </div>
         <div class="game-list" id="gameList">
           <p class="empty-hint">Cargando…</p>
@@ -82,7 +83,7 @@
       <div class="panel">
         <div class="panel-header">
           <h2>Historial</h2>
-          <button id="clearHistoryBtn" class="btn btn-danger-ghost btn-tiny" type="button">🧹 Limpiar</button>
+          <button id="clearHistoryBtn" class="btn btn-danger-ghost btn-tiny" type="button" title="Borra el historial y reinicia el ranking">🧹 Limpiar todo</button>
         </div>
         <div class="history-list" id="historyList"></div>
       </div>
@@ -90,7 +91,7 @@
     </aside>
   </div>
 
-  <p class="app-footer">Hecho con 🍕, mate y demasiada discusión sobre qué juego jugar</p>
+  <p class="app-footer">La ruleta decide. Ustedes se aguantan. 🎯</p>
 </div>
 
 <!-- Winner modal -->
@@ -101,7 +102,7 @@
     <h3 id="winnerName"></h3>
     <p class="winner-message" id="winnerMessage"></p>
     <div class="modal-actions">
-      <button id="rpsChallengeBtn" class="btn btn-duel btn-small" type="button">⚔️ Desafiar al ganador</button>
+      <button id="duelChallengeBtn" class="btn btn-duel btn-small" type="button">⚔️ Desafiar al ganador</button>
     </div>
     <div class="modal-actions" style="margin-top:10px;">
       <button id="removeWinnerBtn" class="btn btn-ghost btn-small" type="button">🗑️ Sacar de la ruleta</button>
@@ -110,31 +111,130 @@
   </div>
 </div>
 
+<!-- Duel mode select modal -->
+<div id="duelSelectModal" class="modal hidden">
+  <div class="modal-card duel-select-card">
+    <p class="modal-eyebrow">Duelo de honor</p>
+    <h3 class="rps-title">¿Cómo lo desafiás?</h3>
+    <p class="modal-body-text">Una sola chance. Esto no cambia el resultado de la ruleta — es puramente por el ego 😏</p>
+    <div class="duel-mode-grid">
+      <button id="pickRpsBtn" class="duel-mode-card" type="button">
+        <span class="duel-mode-icon">✊✋✌️</span>
+        <span class="duel-mode-title">Piedra, papel o tijera</span>
+        <span class="duel-mode-sub">Reflejos + 1 tecla</span>
+      </button>
+      <button id="pickPenaltyBtn" class="duel-mode-card" type="button">
+        <span class="duel-mode-icon">🥅⚽</span>
+        <span class="duel-mode-title">Penales</span>
+        <span class="duel-mode-sub">Puntería vs. reflejos</span>
+      </button>
+    </div>
+    <div class="modal-actions">
+      <button id="closeDuelSelectModal" class="btn btn-ghost btn-small" type="button">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <!-- RPS duel modal -->
 <div id="rpsModal" class="modal hidden">
   <div class="modal-card rps-card">
-    <p class="modal-eyebrow">Duelo de honor</p>
-    <h3 class="rps-title">Piedra, Papel o Tijera</h3>
-    <p class="modal-body-text">Una sola chance. Esto no cambia el resultado de la ruleta — es puramente por el ego 😏</p>
-    <div class="rps-arena">
-      <div class="rps-side">
-        <span class="rps-label">Retador</span>
-        <div class="rps-choice" id="rpsChallengerChoice">❔</div>
-        <span class="rps-keys">A=✊ S=✋ D=✌️</span>
+
+    <div id="rpsIntro" class="duel-intro">
+      <p class="modal-eyebrow">Piedra, papel o tijera</p>
+      <h3 class="rps-title">Controles</h3>
+      <div class="controls-legend">
+        <div class="controls-col">
+          <span class="controls-who">Retador</span>
+          <div class="key-row"><span class="key-badge">A</span><span class="key-mean">✊ Piedra</span></div>
+          <div class="key-row"><span class="key-badge">S</span><span class="key-mean">✋ Papel</span></div>
+          <div class="key-row"><span class="key-badge">D</span><span class="key-mean">✌️ Tijera</span></div>
+        </div>
+        <div class="controls-col">
+          <span class="controls-who">Campeón</span>
+          <div class="key-row"><span class="key-badge">J</span><span class="key-mean">✊ Piedra</span></div>
+          <div class="key-row"><span class="key-badge">K</span><span class="key-mean">✋ Papel</span></div>
+          <div class="key-row"><span class="key-badge">L</span><span class="key-mean">✌️ Tijera</span></div>
+        </div>
       </div>
-      <div class="rps-vs">VS</div>
-      <div class="rps-side">
-        <span class="rps-label">Campeón</span>
-        <div class="rps-choice" id="rpsChampionChoice">❔</div>
-        <span class="rps-keys">J=✊ K=✋ L=✌️</span>
+      <p class="modal-body-text">Cuando arranque la cuenta, los dos aprietan su tecla al mismo tiempo. ¡Ojo con las manos ajenas! 👀</p>
+      <div class="modal-actions">
+        <button id="rpsStartBtn" class="btn btn-duel btn-small" type="button">¡Arrancar! 🔥</button>
+        <button id="backFromRpsIntro" class="btn btn-ghost btn-small" type="button">← Volver</button>
       </div>
     </div>
-    <p class="rps-countdown" id="rpsCountdown"></p>
-    <p class="rps-result" id="rpsResult"></p>
-    <div class="modal-actions">
-      <button id="rpsRematchBtn" class="btn btn-primary btn-small" type="button">🔁 Otra vez</button>
-      <button id="closeRpsModal" class="btn btn-ghost btn-small" type="button">Cerrar</button>
+
+    <div id="rpsPlay" class="duel-play hidden">
+      <p class="modal-eyebrow">Duelo de honor</p>
+      <h3 class="rps-title">Piedra, Papel o Tijera</h3>
+      <div class="rps-arena">
+        <div class="rps-side">
+          <span class="rps-label">Retador</span>
+          <div class="rps-choice" id="rpsChallengerChoice">❔</div>
+          <span class="rps-keys">A=✊ S=✋ D=✌️</span>
+        </div>
+        <div class="rps-vs">VS</div>
+        <div class="rps-side">
+          <span class="rps-label">Campeón</span>
+          <div class="rps-choice" id="rpsChampionChoice">❔</div>
+          <span class="rps-keys">J=✊ K=✋ L=✌️</span>
+        </div>
+      </div>
+      <p class="rps-countdown" id="rpsCountdown"></p>
+      <p class="rps-result" id="rpsResult"></p>
+      <div class="modal-actions">
+        <button id="rpsRematchBtn" class="btn btn-primary btn-small hidden" type="button">🔁 Otra vez</button>
+        <button id="closeRpsModal" class="btn btn-ghost btn-small" type="button">Cerrar</button>
+      </div>
     </div>
+
+  </div>
+</div>
+
+<!-- Penalty kicks duel modal -->
+<div id="penaltyModal" class="modal hidden">
+  <div class="modal-card penalty-card">
+
+    <div id="penaltyIntro" class="duel-intro">
+      <p class="modal-eyebrow">Penales</p>
+      <h3 class="rps-title">Controles</h3>
+      <p class="modal-body-text" id="penaltyRoleHint">El Retador patea, el Campeón ataja. Los dos usan las mismas teclas, cada uno en su turno.</p>
+      <div class="zone-legend">
+        <div class="zone-key zone-key-tl"><span class="key-badge">←</span></div>
+        <div class="zone-key zone-key-tc"><span class="key-badge">↑</span></div>
+        <div class="zone-key zone-key-tr"><span class="key-badge">→</span></div>
+        <div class="zone-key zone-key-bl"><span class="key-badge">A</span></div>
+        <div class="zone-key zone-key-bc"><span class="key-badge">S</span></div>
+        <div class="zone-key zone-key-br"><span class="key-badge">D</span></div>
+        <div class="zone-legend-goal"></div>
+      </div>
+      <p class="modal-body-text">Pateador: elegí un rincón y esperá tu turno. Arquero: te toca cuando la pelota ya está en el aire — ¡reaccioná rápido!</p>
+      <div class="modal-actions">
+        <button id="penaltyStartBtn" class="btn btn-duel btn-small" type="button">¡A los penales! ⚽</button>
+        <button id="backFromPenaltyIntro" class="btn btn-ghost btn-small" type="button">← Volver</button>
+      </div>
+    </div>
+
+    <div id="penaltyPlay" class="duel-play hidden">
+      <p class="modal-eyebrow">Penales</p>
+      <p class="penalty-status" id="penaltyStatus">Pateador, elegí tu rincón…</p>
+      <div class="penalty-pitch">
+        <div class="goal" id="penaltyGoal">
+          <div class="net"></div>
+          <div class="keeper" id="penaltyKeeper">
+            <div class="keeper-body"></div>
+            <div class="glove glove-left">🧤</div>
+            <div class="glove glove-right">🧤</div>
+          </div>
+        </div>
+        <div class="ball" id="penaltyBall">⚽</div>
+      </div>
+      <p class="penalty-result" id="penaltyResult"></p>
+      <div class="modal-actions">
+        <button id="penaltyRematchBtn" class="btn btn-primary btn-small hidden" type="button">🔁 Otra vez</button>
+        <button id="closePenaltyModal" class="btn btn-ghost btn-small" type="button">Cerrar</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
