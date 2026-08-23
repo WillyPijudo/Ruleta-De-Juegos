@@ -1267,6 +1267,15 @@ function initShootout() {
   if (challengerName.toLowerCase() === championName.toLowerCase()) {
     challengerName = `${challengerName} (Retador)`;
   }
+    
+    shootout = {
+    challengerName: challengerName,
+    championName: championName,
+    currentKicker: "challenger", // Empieza pateando el retador
+    challengerResults: [],
+    championResults: []
+  };
+    
   document.getElementById("pbChallengerName").textContent = challengerName;
   document.getElementById("pbChampionName").textContent = championName;
   document.getElementById("pbChallengerSide").classList.remove("pb-winner");
