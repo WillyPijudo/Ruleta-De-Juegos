@@ -819,11 +819,11 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 .modal-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 
 /* ---------- Duel mode select ---------- */
-.duel-select-card { max-width: 420px; }
+.duel-select-card { max-width: 480px; }
 .duel-mode-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
   margin: 18px 0 8px;
 }
 .duel-mode-card {
@@ -1414,4 +1414,256 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   background: #fff;
   box-shadow: 0 0 5px #fff;
   z-index: 2;
+}
+
+
+/* ===================== La Velada (boxeo) ===================== */
+.fight-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(5, 2, 6, 0.92);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.fight-modal.hidden { display: none; }
+
+.fight-shell {
+  width: 100%;
+  max-width: 1100px;
+  height: 100%;
+  max-height: 900px;
+  background: linear-gradient(165deg, var(--surface), var(--surface-2));
+  border: 1px solid rgba(217, 169, 78, 0.35);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 0 90px rgba(255, 62, 127, 0.25), 0 30px 90px rgba(0,0,0,0.65);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modal-pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+.fight-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.fight-brand { display: flex; align-items: center; gap: 10px; }
+.fight-brand-logo { height: 34px; max-width: 220px; object-fit: contain; }
+.fight-brand-fallback {
+  font-family: var(--font-comic);
+  font-size: 16px;
+  color: var(--gold-bright);
+  text-shadow: 0 0 12px rgba(245, 205, 118, 0.4);
+}
+
+.fight-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  position: relative;
+}
+.fight-screen.hidden { display: none; }
+
+.fight-screen-inner {
+  max-width: 640px;
+  margin: auto;
+  padding: 26px 20px;
+  text-align: center;
+}
+
+.fight-controls-legend {
+  display: flex;
+  justify-content: center;
+  gap: 36px;
+  margin: 16px 0 18px;
+  flex-wrap: wrap;
+}
+.fight-controls-col { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+
+.fight-pick-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin: 20px 0;
+}
+.fight-pick-card {
+  background: var(--bg-alt);
+  border: 2px solid var(--border-bright);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.fight-pick-card:hover {
+  transform: translateY(-4px) scale(1.02);
+  border-color: var(--pink);
+  box-shadow: 0 10px 30px rgba(255, 62, 127, 0.3);
+}
+.fight-pick-card img { width: 100%; max-width: 200px; aspect-ratio: 3/4; object-fit: cover; border-radius: 10px; }
+.fight-pick-card span { font-family: var(--font-comic); font-size: 18px; color: var(--gold-bright); }
+
+/* --- El combate --- */
+.fight-hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px 6px;
+  flex-shrink: 0;
+}
+.fight-hud-side { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.fight-hud-side-right { align-items: flex-end; }
+.fight-hud-name {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.fight-bar {
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.fight-hud-side-right .fight-bar { direction: rtl; }
+.fight-bar-fill { height: 100%; width: 100%; transition: width 0.25s ease; }
+.fight-bar-health .fight-bar-fill { background: linear-gradient(90deg, var(--danger), var(--pink)); }
+.fight-bar-energy .fight-bar-fill { background: linear-gradient(90deg, var(--teal), var(--teal-bright)); }
+.fight-bar-energy { height: 8px; }
+
+.fight-hud-center { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; }
+.fight-round { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.fight-timer {
+  font-family: var(--font-comic);
+  font-size: 26px;
+  color: var(--gold-bright);
+  text-shadow: 0 0 10px rgba(245, 205, 118, 0.4);
+}
+
+.fight-arena {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 4%;
+  padding: 10px 24px 4px;
+  position: relative;
+}
+.fight-fighter { flex: 1; max-width: 340px; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.fight-fighter img {
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 14px 20px rgba(0,0,0,0.5));
+}
+.fight-fighter-right img { transform: scaleX(-1); }
+.fight-vs { font-family: var(--font-comic); font-size: 22px; color: var(--text-muted); flex-shrink: 0; }
+
+.fight-fighter-left.fight-anim-punch img { animation: fight-punch-left 0.32s ease; }
+.fight-fighter-right.fight-anim-punch img { animation: fight-punch-right 0.32s ease; }
+@keyframes fight-punch-left {
+  0% { transform: translateX(0) scale(1); }
+  45% { transform: translateX(26px) scale(1.05); }
+  100% { transform: translateX(0) scale(1); }
+}
+@keyframes fight-punch-right {
+  0% { transform: scaleX(-1) translateX(0) scale(1); }
+  45% { transform: scaleX(-1) translateX(26px) scale(1.05); }
+  100% { transform: scaleX(-1) translateX(0) scale(1); }
+}
+
+.fight-fighter-left.fight-anim-dodge img { animation: fight-dodge-left 0.4s ease; }
+.fight-fighter-right.fight-anim-dodge img { animation: fight-dodge-right 0.4s ease; }
+@keyframes fight-dodge-left {
+  0% { transform: translateX(0) rotate(0deg); }
+  40% { transform: translateX(-14px) rotate(-6deg); }
+  100% { transform: translateX(0) rotate(0deg); }
+}
+@keyframes fight-dodge-right {
+  0% { transform: scaleX(-1) translateX(0) rotate(0deg); }
+  40% { transform: scaleX(-1) translateX(-14px) rotate(6deg); }
+  100% { transform: scaleX(-1) translateX(0) rotate(0deg); }
+}
+
+.fight-fighter-left.fight-anim-hit img { animation: fight-hit-left 0.35s ease; filter: drop-shadow(0 14px 20px rgba(0,0,0,0.5)) brightness(1.6) saturate(0.3) drop-shadow(0 0 14px rgba(224,90,90,0.8)); }
+.fight-fighter-right.fight-anim-hit img { animation: fight-hit-right 0.35s ease; filter: drop-shadow(0 14px 20px rgba(0,0,0,0.5)) brightness(1.6) saturate(0.3) drop-shadow(0 0 14px rgba(224,90,90,0.8)); }
+@keyframes fight-hit-left {
+  0% { transform: translateX(0); }
+  30% { transform: translateX(10px) rotate(3deg); }
+  60% { transform: translateX(-6px) rotate(-2deg); }
+  100% { transform: translateX(0) rotate(0deg); }
+}
+@keyframes fight-hit-right {
+  0% { transform: scaleX(-1) translateX(0); }
+  30% { transform: scaleX(-1) translateX(10px) rotate(-3deg); }
+  60% { transform: scaleX(-1) translateX(-6px) rotate(2deg); }
+  100% { transform: scaleX(-1) translateX(0) rotate(0deg); }
+}
+
+.fight-arena.fight-shake { animation: fight-arena-shake 0.35s ease; }
+@keyframes fight-arena-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(3px); }
+}
+
+.fight-status {
+  text-align: center;
+  font-family: var(--font-marker);
+  font-size: 14px;
+  color: var(--pink);
+  min-height: 20px;
+  margin: 4px 0 14px;
+  flex-shrink: 0;
+}
+.fight-status.pop { animation: penalty-turn-pop 0.4s cubic-bezier(0.2, 1.5, 0.4, 1); }
+
+.fight-result {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 2, 6, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 20px;
+}
+.fight-result.hidden { display: none; }
+.fight-result-title {
+  font-family: var(--font-comic);
+  font-size: 32px;
+  color: var(--gold-bright);
+  text-shadow: 0 0 18px rgba(245, 205, 118, 0.5);
+  margin: 0;
+}
+.fight-result-sub { color: var(--text-muted); margin: 0 0 8px; max-width: 420px; }
+
+@media (max-width: 720px) {
+  .fight-arena { padding: 6px 10px; }
+  .fight-fighter { max-width: 45%; }
+  .fight-hud { padding: 10px 12px 4px; }
+  .fight-timer { font-size: 20px; }
+  .fight-controls-legend { gap: 18px; }
 }
