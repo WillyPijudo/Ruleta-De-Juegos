@@ -718,3 +718,20 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 @keyframes confetti-fall {
   to { transform: translateY(110vh) rotate(540deg); opacity: 0.9; }
 }
+
+
+/* Mejora de legibilidad para los nombres de los juegos */
+.search-result-item span,
+.game-row .meta .name,
+.history-row .h-name {
+  color: #ffffff !important; 
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.8);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+/* Si el problema también pasa cuando no encuentra portada (en el fallback) */
+.fallback-label {
+  color: #ffffff;
+  text-shadow: 1px 1px 4px rgba(0,0,0,0.9);
+}
