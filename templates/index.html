@@ -503,19 +503,46 @@
       </div>
     </div>
 
-    <div id="busComingSoon" class="fight-screen hidden">
-      <div class="fight-screen-inner">
-        <p class="modal-eyebrow">🚧 Fase 2 en camino</p>
-        <h3 class="rps-title">Acá va el juego de cartas</h3>
-        <p class="modal-body-text"><b id="busP1Recap">-</b> arrancó con <b id="busP1Amount">-</b> y <b id="busP2Recap">-</b> con <b id="busP2Amount">-</b>, a jugar <b id="busRoundsRecap">-</b> partida(s). Cuando sumemos la Fase 2 esto va a ser el juego de las 4 rondas con el mazo compartido.</p>
-        <div class="modal-actions">
-          <button id="busBackToBankrollBtn" class="btn btn-ghost btn-small" type="button">← Volver a girar</button>
+    <div id="busGameTable" class="fight-screen hidden">
+      <div class="bus-hud">
+        <div class="bus-hud-side" id="busHudLeft">
+          <span class="bus-hud-name" id="busHudLeftName">-</span>
+          <span class="bus-hud-tag" id="busHudLeftTag">En juego</span>
+        </div>
+        <div class="bus-hud-center">
+          <span class="bus-hud-game-label">Partida <b id="busGameNumLabel">1</b>/<b id="busGameTotalLabel">1</b></span>
+          <div class="bus-round-pips" id="busRoundPips">
+            <span class="bus-round-pip" data-round="1">1</span>
+            <span class="bus-round-pip" data-round="2">2</span>
+            <span class="bus-round-pip" data-round="3">3</span>
+            <span class="bus-round-pip" data-round="4">4</span>
+          </div>
+        </div>
+        <div class="bus-hud-side" id="busHudRight">
+          <span class="bus-hud-name" id="busHudRightName">-</span>
+          <span class="bus-hud-tag" id="busHudRightTag">En juego</span>
         </div>
       </div>
-    </div>
 
-  </div>
-</div>
+      <div class="bus-felt">
+        <div class="bus-deck-pile" id="busDeckPile"></div>
+        <div class="bus-card-row" id="busCardRow">
+          <div class="bus-card-slot"><div class="bus-card" id="busCard1"><div class="bus-card-inner"><div class="bus-card-back"></div><div class="bus-card-face" id="busCard1Face"></div></div></div></div>
+          <div class="bus-card-slot"><div class="bus-card" id="busCard2"><div class="bus-card-inner"><div class="bus-card-back"></div><div class="bus-card-face" id="busCard2Face"></div></div></div></div>
+          <div class="bus-card-slot"><div class="bus-card" id="busCard3"><div class="bus-card-inner"><div class="bus-card-back"></div><div class="bus-card-face" id="busCard3Face"></div></div></div></div>
+          <div class="bus-card-slot"><div class="bus-card" id="busCard4"><div class="bus-card-inner"><div class="bus-card-back"></div><div class="bus-card-face" id="busCard4Face"></div></div></div></div>
+        </div>
+      </div>
+
+      <p class="bus-round-question" id="busRoundQuestion">¿La carta es roja o negra?</p>
+      <p class="fight-status" id="busGameStatus">Elige <b id="busTurnName">-</b>…</p>
+      <div class="bus-guess-options" id="busGuessOptions"></div>
+      <div class="bus-restart-banner hidden" id="busRestartBanner">🔄 ¡Los dos le erraron a esta ronda! Mazo nuevo, arrancamos de cero…</div>
+
+      <div class="modal-actions">
+        <button id="busGameExitBtn" class="btn btn-ghost btn-small" type="button">✕ Salir del juego</button>
+      </div>
+    </div>
 
 <!-- Share modal -->
 <div id="shareModal" class="modal hidden">
