@@ -160,6 +160,11 @@
         <span class="duel-mode-title">La Velada</span>
         <span class="duel-mode-sub">Golpes y esquivas</span>
       </button>
+      <button id="pickBusBtn" class="duel-mode-card" type="button">
+        <span class="duel-mode-icon">🎰🃏</span>
+        <span class="duel-mode-title">Ride the Bus</span>
+        <span class="duel-mode-sub">Cartas + apuestas</span>
+      </button>
     </div>
     <div class="modal-actions">
       <button id="closeDuelSelectModal" class="btn btn-ghost btn-small" type="button">Cancelar</button>
@@ -434,6 +439,77 @@
         <div class="modal-actions">
           <button id="fightRematchBtn" class="btn btn-primary btn-small" type="button">🔁 Revancha</button>
           <button id="fightBackToPickBtn" class="btn btn-ghost btn-small" type="button">🔁 Elegir de nuevo</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Ride the Bus duel modal -->
+<div id="busModal" class="fight-modal hidden">
+  <div class="fight-shell bus-shell">
+
+    <div class="fight-topbar">
+      <div class="fight-brand">
+        <span class="fight-brand-fallback">🎰 RIDE THE BUS</span>
+      </div>
+      <button id="closeBusModal" class="btn btn-ghost btn-small" type="button">✕ Cerrar</button>
+    </div>
+
+    <div id="busRoundsPick" class="fight-screen">
+      <div class="fight-screen-inner">
+        <p class="modal-eyebrow">Antes de arrancar</p>
+        <h3 class="rps-title">¿Cuántas partidas jugamos?</h3>
+        <p class="modal-body-text">Se juegan esa cantidad de partidas completas de Ride the Bus, una tras otra. Gana quien junte más plata en total al final de todas.</p>
+        <div class="bus-rounds-grid" id="busRoundsGrid">
+          <button type="button" class="bus-rounds-pill" data-rounds="1">1</button>
+          <button type="button" class="bus-rounds-pill" data-rounds="2">2</button>
+          <button type="button" class="bus-rounds-pill" data-rounds="3">3</button>
+          <button type="button" class="bus-rounds-pill" data-rounds="4">4</button>
+          <button type="button" class="bus-rounds-pill" data-rounds="5">5</button>
+        </div>
+        <div class="modal-actions">
+          <button id="busRoundsNextBtn" class="btn btn-duel btn-small" type="button" disabled>Siguiente →</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="busBankroll" class="fight-screen hidden">
+      <div class="bus-table">
+        <div class="bus-wallet-side" id="busWalletLeft">
+          <span class="bus-wallet-name" id="busWalletLeftName">-</span>
+          <div class="bus-chip-stack" id="busChipStackLeft"><div class="bus-chip-img" id="busChipImgLeft"></div></div>
+          <div class="bus-wallet-amount" id="busWalletAmountLeft">$?</div>
+          <button class="bus-roll-btn" id="busRollBtnLeft" type="button">🎰 Girar billetera</button>
+        </div>
+
+        <div class="bus-table-center">
+          <span class="bus-table-title">🃏</span>
+          <span>Partidas: <b id="busRoundsLabel">1</b></span>
+        </div>
+
+        <div class="bus-wallet-side" id="busWalletRight">
+          <span class="bus-wallet-name" id="busWalletRightName">-</span>
+          <div class="bus-chip-stack" id="busChipStackRight"><div class="bus-chip-img" id="busChipImgRight"></div></div>
+          <div class="bus-wallet-amount" id="busWalletAmountRight">$?</div>
+          <button class="bus-roll-btn" id="busRollBtnRight" type="button">🎰 Girar billetera</button>
+        </div>
+      </div>
+      <p class="fight-status" id="busBankrollStatus">Los dos tienen que girar antes de seguir.</p>
+      <div class="modal-actions">
+        <button id="busBankrollBackBtn" class="btn btn-ghost btn-small" type="button">← Volver</button>
+        <button id="busBankrollNextBtn" class="btn btn-duel btn-small" type="button" disabled>Siguiente →</button>
+      </div>
+    </div>
+
+    <div id="busComingSoon" class="fight-screen hidden">
+      <div class="fight-screen-inner">
+        <p class="modal-eyebrow">🚧 Fase 2 en camino</p>
+        <h3 class="rps-title">Acá va el juego de cartas</h3>
+        <p class="modal-body-text"><b id="busP1Recap">-</b> arrancó con <b id="busP1Amount">-</b> y <b id="busP2Recap">-</b> con <b id="busP2Amount">-</b>, a jugar <b id="busRoundsRecap">-</b> partida(s). Cuando sumemos la Fase 2 esto va a ser el juego de las 4 rondas con el mazo compartido.</p>
+        <div class="modal-actions">
+          <button id="busBackToBankrollBtn" class="btn btn-ghost btn-small" type="button">← Volver a girar</button>
         </div>
       </div>
     </div>
