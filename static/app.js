@@ -2074,6 +2074,77 @@ function setChipVisual(side, amount) {
   el.style.backgroundPosition = `-${col * BUS_CHIP_CELL.w * BUS_CHIP_CELL.scale}px -${row * BUS_CHIP_CELL.h * BUS_CHIP_CELL.scale}px`;
 }
 
+// ===== Pilas de fichas apiladas (para mesa, apuestas y billetera) =====
+// Usa el mismo sheet fichas.png, pero a la mitad de tamaño para poder amontonar varias.
+const BUS_PILE_CELL = { w: 23, h: 24 };
+const BUS_CHIP_DENOMS = [
+  { value: 500, rc: 3 },
+  { value: 100, rc: 2 },
+  { value: 50, rc: 1 },
+  { value: 10, rc: 0 },
+];
+const BUS_PILE_STACK_MAX = 8;        // fichas apiladas antes de abrir una pila nueva
+const BUS_PILE_STACKS_PER_DENOM = 2; // como mucho 2 pilas por denominación (después solo sube el contador ×N)
+
+function busChipBreakdown(amount) {
+  let remaining = Math.max(0, Math.round(amount / 10) * 10);
+  return BUS_CHIP_DENOMS.map((d) => {
+    const n = Math.floor(remaining / d.value);
+    remaining -= n * d.value;
+    return n;
+  });
+}
+
+function buildChipStackEl(row, col, count, badgeExtra) {
+  const stack = document.createElement("div");
+  stack.className = "bus-chip-pile-stack";
+  stack.style.height = `${BUS_PILE_CELL.h + (count - 1) * 6}px`;
+  for (let i = 0; i < count; i++) {
+    const chip = document.createElement("div");
+    chip.className = "bus-chip-pile-piece";
+    chip.style.bottom = `${i * 6}px`;
+    chip.style.zIndex = String(i);
+    chip.style.backgroundPosition = `-${col * BUS_PILE_CELL.w}px -${row * BUS_PILE_CELL.h}px`;
+    stack.appendChild(chip);
+  }
+  if (badgeExtra) {
+    const badge = document.createElement("span");
+    badge.className = "bus-chip-pile-badge";
+    badge.textContent = badgeExtra;
+    stack.appendChild(badge);
+  }
+  return stack;
+}
+
+// side: "left" | "right" -> usa el mismo color que ya tenías definido en BUS_CHIP_COLOR
+function renderChipPile(containerId, side, amount) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = "";
+  const { row, colOffset } = BUS_CHIP_COLOR[side];
+  const counts = busChipBreakdown(amount);
+  let anyChip = false;
+
+  BUS_CHIP_DENOMS.forEach((denom, i) => {
+    const n = counts[i];
+    if (n <= 0) return;
+    anyChip = true;
+    const maxVisible = BUS_PILE_STACK_MAX * BUS_PILE_STACKS_PER_DENOM;
+    const overflow = n > maxVisible;
+    let remaining = overflow ? maxVisible : n;
+    while (remaining > 0) {
+      const stackCount = Math.min(remaining, BUS_PILE_STACK_MAX);
+      remaining -= stackCount;
+      const isLastStack = remaining <= 0;
+      container.appendChild(
+        buildChipStackEl(row, colOffset + denom.rc, stackCount, overflow && isLastStack ? `×${n}` : null)
+      );
+    }
+  });
+
+  container.classList.toggle("bus-chip-pile-empty", !anyChip);
+}
+
 function randomBankroll() {
   return Math.round((100 + Math.random() * 900) / 10) * 10;
 }
@@ -2120,6 +2191,7 @@ function spinBankroll(side) {
       amountEl.classList.remove("spinning");
       stackEl.classList.remove("bus-chip-not-rolled");
       setChipVisual(side, finalAmount);
+      renderChipPile(side === "left" ? "busPileLeft" : "busPileRight", side, finalAmount);  
       playCashRegister();
       if (side === "left") {
         busState.leftAmount = finalAmount;
@@ -2175,6 +2247,7 @@ function initBusBankroll() {
     amountEl.classList.remove("spinning");
     btn.disabled = false;
     setChipVisual(side, 100);
+    renderChipPile(side === "left" ? "busPileLeft" : "busPileRight", side, 0);  
     stackEl.classList.add("bus-chip-not-rolled");
   });
   checkBusBankrollReady();
@@ -2338,6 +2411,36 @@ function updateBusHudTags() {
     el.textContent = info.text;
     el.classList.remove("bus-hud-tag-out", "bus-hud-tag-won");
     if (info.cls) el.classList.add(info.cls);
+
+    // NUEVO: pila de fichas del banco de cada jugador
+    const amount = side === "left" ? busState.leftAmount : busState.rightAmount;
+    renderChipPile(side === "left" ? "busHudChipPileLeft" : "busHudChipPileRight", side, amount);
+
+    // NUEVO: contador de "cuánto sumás/multiplicás" en vivo
+    const potentialEl = document.getElementById(side === "left" ? "busHudPotentialLeft" : "busHudPotentialRight");
+    const playing = side === "left" ? busGame.leftPlaying : busGame.rightPlaying;
+    const done = side === "left" ? busGame.leftDone : busGame.rightDone;
+    const alive = side === "left" ? busGame.leftAlive : busGame.rightAlive;
+    const bet = side === "left" ? busGame.betLeft : busGame.betRight;
+
+    if (!playing) {
+      potentialEl.textContent = "";
+    } else if (done) {
+      const outcome = side === "left" ? busGame.leftOutcome : busGame.rightOutcome;
+      const payout = side === "left" ? busGame.leftPayout : busGame.rightPayout;
+      potentialEl.textContent = outcome === "lost" ? `-$${bet} 💸` : `+$${payout} 🎉`;
+    } else if (alive) {
+      const mult = busGame.round >= 2 ? BUS_CUMULATIVE_MULT[busGame.round - 1] : 1;
+      potentialEl.textContent =
+        busGame.round >= 2
+          ? `Si se planta: $${Math.round(bet * mult)} (x${mult})`
+          : `En juego: $${bet}`;
+    } else {
+      potentialEl.textContent = "";
+    }
+    potentialEl.classList.remove("bus-hud-potential-pop");
+    void potentialEl.offsetWidth;
+    potentialEl.classList.add("bus-hud-potential-pop");
   });
 }
 
@@ -2346,6 +2449,12 @@ function updateBusRoundPips() {
     const r = parseInt(pip.dataset.round, 10);
     pip.classList.toggle("done", r < busGame.round);
     pip.classList.toggle("active", r === busGame.round);
+  });
+  // NUEVO: escalera de multiplicadores acumulados
+  document.querySelectorAll(".bus-mult-step").forEach((step) => {
+    const r = parseInt(step.dataset.round, 10);
+    step.classList.toggle("done", r < busGame.round);
+    step.classList.toggle("active", r === busGame.round);
   });
 }
 
@@ -2571,6 +2680,7 @@ function settleBusPartida() {
 
   if (busGame.leftPlaying) busState.leftAmount = busState.leftAmount - busGame.betLeft + busGame.leftPayout;
   if (busGame.rightPlaying) busState.rightAmount = busState.rightAmount - busGame.betRight + busGame.rightPayout;
+  updateBusHudTags();  
 
   busState.history.push({
     game: busState.currentGameNum,
@@ -2647,7 +2757,9 @@ function showBusFinalScreen() {
       ? "Los dos terminaron con la misma plata en el bolsillo 💵."
       : `Se llevó $${topAmount} en total después de las ${busState.rounds} partida(s) 💰.`;
   resolveDuelResult(resultEl, side, flavor);
-
+    
+  renderChipPile("busFinalPileLeft", "left", Math.max(busState.leftAmount, 0));
+  renderChipPile("busFinalPileRight", "right", Math.max(busState.rightAmount, 0));
   renderBusFinalChart();
 }
 
@@ -2755,7 +2867,8 @@ function openBusBetScreen() {
     const label = document.getElementById(side === "left" ? "busBetLeftAmount" : "busBetRightAmount");
     const walletEl = document.getElementById(side === "left" ? "busBetLeftWallet" : "busBetRightWallet");
     walletEl.textContent = amount;
-    if (amount <= 0) {
+    renderChipPile(side === "left" ? "busBetPileLeft" : "busBetPileRight", side, amount); 
+    if (amount < 10) { // FIX: antes era amount <= 0, rompía el slider si quedaba plata < al mínimo de apuesta
       panel.classList.add("bus-bet-side-broke");
       slider.disabled = true;
       label.textContent = "Sin fondos 😢";
@@ -2827,7 +2940,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const side = btn.dataset.side;
       const pct = parseInt(btn.dataset.pct, 10);
       const amount = side === "left" ? busState.leftAmount : busState.rightAmount;
-      if (amount <= 0) return;
+      if (amount < 10) return;
       const slider = document.getElementById(side === "left" ? "busBetLeftSlider" : "busBetRightSlider");
       const label = document.getElementById(side === "left" ? "busBetLeftAmount" : "busBetRightAmount");
       const val = Math.max(10, Math.round((amount * pct) / 100 / 10) * 10);
@@ -2853,6 +2966,14 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("busHudRightName").textContent = busState.challengerName;
     document.getElementById("busGameNumLabel").textContent = busState.currentGameNum;
     document.getElementById("busGameTotalLabel").textContent = busState.rounds;
+
+          // NUEVO: pozo de fichas apostadas en el centro de la mesa
+    renderChipPile("busPotChipsLeft", "left", busGame.betLeft);
+    renderChipPile("busPotChipsRight", "right", busGame.betRight);
+    document.getElementById("busPotLeftLabel").textContent = busGame.leftPlaying ? "Apuesta" : "Sin apuesta";
+    document.getElementById("busPotRightLabel").textContent = busGame.rightPlaying ? "Apuesta" : "Sin apuesta";
+    document.getElementById("busPotTotal").textContent = "$" + (busGame.betLeft + busGame.betRight);
+
     showBusScreen("busGameTable");
     startBusAttempt();
   });
