@@ -1181,7 +1181,7 @@ function startPenaltyRound() {
 
     if (penaltyState === "aiming") {
       doKick(zone);
-    } else if (penaltyState === "reacting" && !penaltyKeeperZone) {
+    } else if ((penaltyState === "reacting" || penaltyState === "flight") && !penaltyKeeperZone) {
       penaltyKeeperZone = zone;
       document.getElementById("penaltyKeeper").className = `keeper diving dive-${zone}`;
     }
@@ -1267,33 +1267,39 @@ function resolvePenaltyShot(kickZone, power) {
   const goal = document.getElementById("penaltyGoal");
   let scored, flavor;
 
+  const saved = penaltyKeeperZone === kickZone;
+
   if (power > 95) {
+    // 1. Se pasó de rosca: siempre afuera
     document.getElementById("penaltyStatus").textContent = "¡Afuera!";
     showPenaltyStamp("¡A LA TRIBUNA!", "stamp-out");
     scored = false;
     flavor = "¡Se llenó de pelota y la mandó a la calle!";
-  } else if (power >= 85) {
-    document.getElementById("penaltyStatus").textContent = "¡GOLAZO!";
+  } else if (saved) {
+    // 2. El arquero adivinó el rincón: ATAJADA (incluso si era fierrazo)
+    document.getElementById("penaltyStatus").textContent = "¡Atajada!";
+    showPenaltyStamp("¡ATAJADA!", "stamp-save");
+    scored = false;
+    if (power >= 85) {
+      flavor = "¡MANO DE DIOS! Le sacó un fierrazo tremendo del ángulo.";
+    } else {
+      flavor = PENALTY_SAVE_FLAVORS[Math.floor(Math.random() * PENALTY_SAVE_FLAVORS.length)];
+    }
+  } else {
+    // 3. El arquero no llegó o fue al otro palo: GOL
     goal.classList.add("net-ripple");
     setTimeout(() => goal.classList.remove("net-ripple"), 450);
-    showPenaltyStamp("¡GOLAZO!", "stamp-goal");
-    scored = true;
-    flavor = "¡Le rompió el arco! Imposible para el arquero.";
-  } else {
-    const saved = !penaltyKeeperTooSlow && penaltyKeeperZone === kickZone;
-    if (saved) {
-      document.getElementById("penaltyStatus").textContent = "¡Atajada!";
-      showPenaltyStamp("¡ATAJADA!", "stamp-save");
-      scored = false;
-      flavor = PENALTY_SAVE_FLAVORS[Math.floor(Math.random() * PENALTY_SAVE_FLAVORS.length)];
+
+    if (power >= 85) {
+      document.getElementById("penaltyStatus").textContent = "¡GOLAZO!";
+      showPenaltyStamp("¡GOLAZO!", "stamp-goal");
+      flavor = "¡Le rompió el arco! Fierrazo inatajable.";
     } else {
       document.getElementById("penaltyStatus").textContent = "¡GOL!";
-      goal.classList.add("net-ripple");
-      setTimeout(() => goal.classList.remove("net-ripple"), 450);
       showPenaltyStamp("¡GOL!", "stamp-goal");
-      scored = true;
       flavor = PENALTY_GOAL_FLAVORS[Math.floor(Math.random() * PENALTY_GOAL_FLAVORS.length)];
     }
+    scored = true;
   }
 
   recordShootoutKick(scored, flavor);
