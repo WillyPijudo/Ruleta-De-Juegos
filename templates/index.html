@@ -481,6 +481,7 @@
           <span class="bus-wallet-name" id="busWalletLeftName">-</span>
           <div class="bus-chip-stack" id="busChipStackLeft"><div class="bus-chip-img" id="busChipImgLeft"></div></div>
           <div class="bus-wallet-amount" id="busWalletAmountLeft">$?</div>
+          <div class="bus-chip-pile" id="busPileLeft"></div>  
           <button class="bus-roll-btn" id="busRollBtnLeft" type="button">🎰 Girar billetera</button>
         </div>
 
@@ -493,6 +494,7 @@
           <span class="bus-wallet-name" id="busWalletRightName">-</span>
           <div class="bus-chip-stack" id="busChipStackRight"><div class="bus-chip-img" id="busChipImgRight"></div></div>
           <div class="bus-wallet-amount" id="busWalletAmountRight">$?</div>
+          <div class="bus-chip-pile" id="busPileRight"></div>  
           <button class="bus-roll-btn" id="busRollBtnRight" type="button">🎰 Girar billetera</button>
         </div>
       </div>
@@ -511,6 +513,7 @@
           <div class="bus-bet-side" id="busBetLeftPanel">
             <span class="bus-bet-name" id="busBetLeftName">-</span>
             <span class="bus-bet-wallet">Billetera: $<b id="busBetLeftWallet">0</b></span>
+            <div class="bus-chip-pile bus-chip-pile-sm" id="busBetPileLeft"></div>
             <input type="range" id="busBetLeftSlider" class="bus-bet-slider" min="10" step="10" value="10">
             <div class="bus-bet-amount" id="busBetLeftAmount">$10</div>
             <div class="bus-bet-presets">
@@ -522,6 +525,7 @@
           <div class="bus-bet-side" id="busBetRightPanel">
             <span class="bus-bet-name" id="busBetRightName">-</span>
             <span class="bus-bet-wallet">Billetera: $<b id="busBetRightWallet">0</b></span>
+            <div class="bus-chip-pile bus-chip-pile-sm" id="busBetPileRight"></div>
             <input type="range" id="busBetRightSlider" class="bus-bet-slider" min="10" step="10" value="10">
             <div class="bus-bet-amount" id="busBetRightAmount">$10</div>
             <div class="bus-bet-presets">
@@ -538,46 +542,71 @@
       </div>
     </div>
 
-    <div id="busGameTable" class="fight-screen hidden">
-      <div class="bus-hud">
-        <div class="bus-hud-side" id="busHudLeft">
-          <span class="bus-hud-name" id="busHudLeftName">-</span>
-          <span class="bus-hud-tag" id="busHudLeftTag">En juego</span>
-        </div>
-        <div class="bus-hud-center">
-          <span class="bus-hud-game-label">Partida <b id="busGameNumLabel">1</b>/<b id="busGameTotalLabel">1</b></span>
-          <div class="bus-round-pips" id="busRoundPips">
-            <span class="bus-round-pip" data-round="1">1</span>
-            <span class="bus-round-pip" data-round="2">2</span>
-            <span class="bus-round-pip" data-round="3">3</span>
-            <span class="bus-round-pip" data-round="4">4</span>
-          </div>
-        </div>
-        <div class="bus-hud-side" id="busHudRight">
-          <span class="bus-hud-name" id="busHudRightName">-</span>
-          <span class="bus-hud-tag" id="busHudRightTag">En juego</span>
-        </div>
+<div id="busGameTable" class="fight-screen hidden">
+  <div class="bus-hud">
+    <div class="bus-hud-side" id="busHudLeft">
+      <span class="bus-hud-name" id="busHudLeftName">-</span>
+      <span class="bus-hud-tag" id="busHudLeftTag">En juego</span>
+      <div class="bus-chip-pile" id="busHudChipPileLeft"></div>
+      <span class="bus-hud-potential" id="busHudPotentialLeft"></span>
+    </div>
+    <div class="bus-hud-center">
+      <span class="bus-hud-game-label">Partida <b id="busGameNumLabel">1</b>/<b id="busGameTotalLabel">1</b></span>
+      <div class="bus-round-pips" id="busRoundPips">
+        <span class="bus-round-pip" data-round="1">1</span>
+        <span class="bus-round-pip" data-round="2">2</span>
+        <span class="bus-round-pip" data-round="3">3</span>
+        <span class="bus-round-pip" data-round="4">4</span>
       </div>
-
-      <div class="bus-felt">
-        <div class="bus-deck-pile" id="busDeckPile"></div>
-        <div class="bus-card-row" id="busCardRow">
-          <div class="bus-card-slot"><div class="bus-card" id="busCard1"><div class="bus-card-inner"><div class="bus-card-back"></div><div class="bus-card-face" id="busCard1Face"></div></div></div></div>
-          <div class="bus-card-slot"><div class="bus-card" id="busCard2"><div class="bus-card-inner"><div class="bus-card-back"></div><div class="bus-card-face" id="busCard2Face"></div></div></div></div>
-          <div class="bus-card-slot"><div class="bus-card" id="busCard3"><div class="bus-card-inner"><div class="bus-card-back"></div><div class="bus-card-face" id="busCard3Face"></div></div></div></div>
-          <div class="bus-card-slot"><div class="bus-card" id="busCard4"><div class="bus-card-inner"><div class="bus-card-back"></div><div class="bus-card-face" id="busCard4Face"></div></div></div></div>
-        </div>
-      </div>
-
-      <p class="bus-round-question" id="busRoundQuestion">¿La carta es roja o negra?</p>
-      <p class="fight-status" id="busGameStatus">Elige <b id="busTurnName">-</b>…</p>
-      <div class="bus-guess-options" id="busGuessOptions"></div>
-      <div class="bus-restart-banner hidden" id="busRestartBanner">🔄 ¡Nadie sobrevivió esta ronda! Mazo nuevo, arrancamos de cero…</div>
-
-      <div class="modal-actions">
-        <button id="busGameExitBtn" class="btn btn-ghost btn-small" type="button">✕ Salir del juego</button>
+      <div class="bus-mult-ladder" id="busMultLadder">
+        <span class="bus-mult-step" data-round="1">🎨 x2</span>
+        <span class="bus-mult-step" data-round="2">⬆️⬇️ x6</span>
+        <span class="bus-mult-step" data-round="3">↔️ x24</span>
+        <span class="bus-mult-step" data-round="4">♠️ x240</span>
       </div>
     </div>
+    <div class="bus-hud-side" id="busHudRight">
+      <span class="bus-hud-name" id="busHudRightName">-</span>
+      <span class="bus-hud-tag" id="busHudRightTag">En juego</span>
+      <div class="bus-chip-pile" id="busHudChipPileRight"></div>
+      <span class="bus-hud-potential" id="busHudPotentialRight"></span>
+    </div>
+  </div>
+
+  <div class="bus-pot-row" id="busPotRow">
+    <div class="bus-pot-side">
+      <span class="bus-pot-label" id="busPotLeftLabel">Apuesta</span>
+      <div class="bus-chip-pile bus-chip-pile-sm" id="busPotChipsLeft"></div>
+    </div>
+    <div class="bus-pot-center">
+      <span class="bus-pot-emoji">💰</span>
+      <span class="bus-pot-total" id="busPotTotal">$0</span>
+    </div>
+    <div class="bus-pot-side">
+      <span class="bus-pot-label" id="busPotRightLabel">Apuesta</span>
+      <div class="bus-chip-pile bus-chip-pile-sm" id="busPotChipsRight"></div>
+    </div>
+  </div>
+
+  <div class="bus-felt">
+    <div class="bus-deck-pile" id="busDeckPile"></div>
+    <div class="bus-card-row" id="busCardRow">
+      <div class="bus-card-slot"><div class="bus-card" id="busCard1"><div class="bus-card-inner"><div class="bus-card-back"></div><div class="bus-card-face" id="busCard1Face"></div></div></div></div>
+      <div class="bus-card-slot"><div class="bus-card" id="busCard2"><div class="bus-card-inner"><div class="bus-card-back"></div><div class="bus-card-face" id="busCard2Face"></div></div></div></div>
+      <div class="bus-card-slot"><div class="bus-card" id="busCard3"><div class="bus-card-inner"><div class="bus-card-back"></div><div class="bus-card-face" id="busCard3Face"></div></div></div></div>
+      <div class="bus-card-slot"><div class="bus-card" id="busCard4"><div class="bus-card-inner"><div class="bus-card-back"></div><div class="bus-card-face" id="busCard4Face"></div></div></div></div>
+    </div>
+  </div>
+
+  <p class="bus-round-question" id="busRoundQuestion">¿La carta es roja o negra?</p>
+  <p class="fight-status" id="busGameStatus">Elige <b id="busTurnName">-</b>…</p>
+  <div class="bus-guess-options" id="busGuessOptions"></div>
+  <div class="bus-restart-banner hidden" id="busRestartBanner">🔄 ¡Nadie sobrevivió esta ronda! Mazo nuevo, arrancamos de cero…</div>
+
+  <div class="modal-actions">
+    <button id="busGameExitBtn" class="btn btn-ghost btn-small" type="button">✕ Salir del juego</button>
+  </div>
+</div>
 
     <div id="busFinalScreen" class="fight-screen hidden">
       <div class="fight-screen-inner bus-final-inner">
@@ -589,12 +618,14 @@
             <span class="bus-final-crown" id="busFinalLeftCrown"></span>
             <span class="bus-final-name" id="busFinalLeftName">-</span>
             <span class="bus-final-amount" id="busFinalLeftAmount">$0</span>
+            <div class="bus-chip-pile bus-chip-pile-sm" id="busFinalPileLeft"></div>
           </div>
           <div class="bus-final-vs">VS</div>
           <div class="bus-final-side bus-final-side-right" id="busFinalRightSide">
             <span class="bus-final-crown" id="busFinalRightCrown"></span>
             <span class="bus-final-name" id="busFinalRightName">-</span>
             <span class="bus-final-amount" id="busFinalRightAmount">$0</span>
+            <div class="bus-chip-pile bus-chip-pile-sm" id="busFinalPileRight"></div>
           </div>
         </div>
 
