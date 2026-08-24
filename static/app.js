@@ -2477,21 +2477,38 @@ function resolveBusRound(card) {
   const leftCorrect = leftGuessed ? busEvaluateGuess(busGame.round, busGame.leftGuess, card) : null;
   const rightCorrect = rightGuessed ? busEvaluateGuess(busGame.round, busGame.rightGuess, card) : null;
 
+  // "Empate real" (se reinicia el mazo, nadie pierde): SOLO cuenta si los DOS
+  // seguían en pie y jugaban esta ronda, y a los DOS les erró la MISMA carta.
+  // Si uno de los dos ya había perdido/se había plantado en una ronda anterior
+  // de este intento, esto NO es un empate: el que sigue solo debe resolverse
+  // normal (seguir jugando, plantarse o perder), sin revivir a nadie con un
+  // reinicio de mazo que no le corresponde.
+  const bothPlayedThisRound = leftGuessed && rightGuessed;
+  const bothMissedThisRound = bothPlayedThisRound && !leftCorrect && !rightCorrect;
+
   if (leftGuessed && !leftCorrect) busGame.leftAlive = false;
   if (rightGuessed && !rightCorrect) busGame.rightAlive = false;
   updateBusHudTags();
   document.getElementById("busGuessOptions").innerHTML = "";
 
-  const leftStillIn = busGame.leftPlaying && !busGame.leftDone && busGame.leftAlive;
-  const rightStillIn = busGame.rightPlaying && !busGame.rightDone && busGame.rightAlive;
-
-  if (!leftStillIn && !rightStillIn) {
+  if (bothMissedThisRound) {
     document.getElementById("busGameStatus").textContent = "¡Le erraron todos a esta ronda!";
     playBuzz();
     busSetTimeout(() => {
       document.getElementById("busRestartBanner").classList.remove("hidden");
       busSetTimeout(startBusAttempt, 1400);
     }, 400);
+    return;
+  }
+
+  const leftStillIn = busGame.leftPlaying && !busGame.leftDone && busGame.leftAlive;
+  const rightStillIn = busGame.rightPlaying && !busGame.rightDone && busGame.rightAlive;
+
+  if (!leftStillIn && !rightStillIn) {
+    // Ninguno de los dos sigue con vida en este intento (uno ya venía afuera
+    // y el otro se acaba de quedar afuera ahora): se cierra la partida acá,
+    // sin reiniciar el mazo ni forzar la salida del modal.
+    settleBusPartida();
     return;
   }
 
