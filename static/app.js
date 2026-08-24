@@ -964,8 +964,9 @@ let currentPower = 0;
 let powerDirection = 1;
 let capturedPower = 0;
 let penaltyReactionCutoffMs = 300;
+let penaltyReactTimer = null;
+let penaltyReactRAF = null;
 let shootout = null;
-let penaltyRoundTimeout = null;
 
 /**
  * REWORK "estilo PES 6": antes el arquero podía mirar el dibujo de la
@@ -1064,6 +1065,14 @@ function teardownPenaltyRound() {
     cancelAnimationFrame(penaltyPowerRAF);
     penaltyPowerRAF = null;
   }
+  if (penaltyReactRAF) {
+    cancelAnimationFrame(penaltyReactRAF);
+    penaltyReactRAF = null;
+  }
+  if (penaltyReactTimer) {
+    clearTimeout(penaltyReactTimer);
+    penaltyReactTimer = null;
+  }    
   if (penaltyRoundTimeout) {
     clearTimeout(penaltyRoundTimeout);
     penaltyRoundTimeout = null;
@@ -1126,38 +1135,57 @@ function startPenaltyRound() {
   const doKick = (zone) => {
     capturedPower = currentPower;
     penaltyKickZone = zone;
-    penaltyState = "flight";
+    penaltyState = "reacting";
     document.getElementById("penaltyKeeper").classList.remove("idle-shimmy");
+    document.getElementById("penaltyBall").classList.add("ball-waiting");
 
-    const { duration } = penaltyShotTiming(capturedPower);
-    penaltyReactionCutoffMs = Math.min(penaltyReactionWindow(capturedPower), duration - 30);
+    const reactStart = performance.now();
 
-    if (capturedPower > 95) {
-        document.getElementById("penaltyStatus").textContent = "¡Se pasó de potencia!";
-    } else if (capturedPower >= 85) {
-        document.getElementById("penaltyStatus").textContent = "¡Fierrazo inatajable! Arquero rezá...";
-    } else {
-        document.getElementById("penaltyStatus").textContent = "¡Va la pelota! Arquero, reaccioná…";
+    function reactFrame(now) {
+      if (penaltyState !== "reacting") return;
+      const remaining = Math.max(0, 3000 - (now - reactStart));
+      document.getElementById("penaltyStatus").textContent =
+        `¡ARQUERO, ELEGÍ UN LADO! ⏱️ ${(remaining / 1000).toFixed(1)}s`;
+      document.getElementById("penaltyKeeper").classList.toggle("keeper-urgent", remaining < 800);
+      if (remaining > 0) {
+        penaltyReactRAF = requestAnimationFrame(reactFrame);
+      }
     }
+    penaltyReactRAF = requestAnimationFrame(reactFrame);
 
-    launchPenaltyBall(zone, capturedPower);
+    // Recién acá, pasados los 3 segundos fijos, se hace la animación de patear
+    penaltyReactTimer = setTimeout(() => {
+      penaltyReactTimer = null;
+      penaltyState = "flight";
+      document.getElementById("penaltyBall").classList.remove("ball-waiting");
+      document.getElementById("penaltyKeeper").classList.remove("keeper-urgent");
+
+      if (capturedPower > 95) {
+        document.getElementById("penaltyStatus").textContent = "¡Se pasó de potencia!";
+      } else if (capturedPower >= 85) {
+        document.getElementById("penaltyStatus").textContent = "¡Fierrazo inatajable! Arquero rezá...";
+      } else {
+        document.getElementById("penaltyStatus").textContent = "¡Va la pelota!";
+      }
+
+      launchPenaltyBall(zone, capturedPower);
+    }, 3000);
   };
 
   penaltyKeyHandler = (e) => {
     if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
+    if (e.repeat) return;
     const zone = PENALTY_ZONES[e.key.toLowerCase()];
     if (!zone) return;
 
     if (penaltyState === "aiming") {
       doKick(zone);
-    } else if (penaltyState === "flight" && !penaltyKeeperZone) {
+    } else if (penaltyState === "reacting" && !penaltyKeeperZone) {
       penaltyKeeperZone = zone;
-      penaltyKeeperTooSlow = performance.now() - penaltyFlightStartTime > penaltyReactionCutoffMs;
       document.getElementById("penaltyKeeper").className = `keeper diving dive-${zone}`;
     }
   };
   window.addEventListener("keydown", penaltyKeyHandler);
-}
 
 function beginPenaltyMatch() {
   document.getElementById("penaltyIntro").classList.add("hidden");
@@ -1214,13 +1242,6 @@ function launchPenaltyBall(zone, power) {
     const prog = revealEase(t);
     const lift = prefersReducedMotion ? 0 : Math.sin(t * Math.PI) * (power > 95 ? -60 : -22);
     const scale = 1 - 0.4 * prog;
-
-    if (!penaltyKeeperZone && power < 85) {
-      const remaining = Math.max(0, penaltyReactionCutoffMs - (now - penaltyFlightStartTime));
-      document.getElementById("penaltyStatus").textContent =
-        `¡ARQUERO, ELEGÍ UN LADO! ${(remaining / 1000).toFixed(1)}s`;
-      document.getElementById("penaltyKeeper").classList.toggle("keeper-urgent", remaining < 200);
-    }
 
     ball.style.transform =
       `translate(calc(-50% + ${(dx * prog).toFixed(1)}px), ${(dy * prog + lift).toFixed(1)}px) scale(${scale.toFixed(2)})`;
