@@ -1186,7 +1186,7 @@ function startPenaltyRound() {
     }
   };
   window.addEventListener("keydown", penaltyKeyHandler);
-
+}
 function beginPenaltyMatch() {
   document.getElementById("penaltyIntro").classList.add("hidden");
   document.getElementById("penaltyPlay").classList.remove("hidden");
