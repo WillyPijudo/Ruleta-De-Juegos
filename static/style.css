@@ -2039,3 +2039,62 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 .bus-cashout-btn:hover:not(:disabled) { border-color: var(--gold); }
 
 .bus-hud-tag-won { background: rgba(245, 205, 118, 0.18); color: var(--gold-bright); border-color: rgba(245, 205, 118, 0.4); }
+
+/* ---------- Ride the Bus — pantalla final (Fase 2C) ---------- */
+.bus-final-inner { max-width: 620px; }
+
+.bus-final-podium {
+  display: flex; align-items: center; justify-content: center; gap: 20px;
+  margin: 18px 0 6px; flex-wrap: wrap;
+}
+.bus-final-side {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  min-width: 150px; padding: 14px 18px; border-radius: var(--radius-md);
+  border: 2px solid var(--border-bright); background: var(--bg-alt);
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.bus-final-side-left.bus-final-side-winner {
+  border-color: var(--gold-bright);
+  box-shadow: 0 0 22px rgba(245, 205, 118, 0.45);
+  transform: translateY(-4px) scale(1.04);
+}
+.bus-final-side-right.bus-final-side-winner {
+  border-color: var(--teal-bright);
+  box-shadow: 0 0 22px rgba(47, 143, 176, 0.45);
+  transform: translateY(-4px) scale(1.04);
+}
+.bus-final-crown { font-size: 20px; min-height: 24px; }
+.bus-final-name { font-family: var(--font-mono); font-weight: 700; font-size: 14px; color: var(--text); }
+.bus-final-side-left .bus-final-amount { color: var(--gold-bright); text-shadow: 0 0 10px rgba(245,205,118,0.4); }
+.bus-final-side-right .bus-final-amount { color: var(--teal-bright); text-shadow: 0 0 10px rgba(47,143,176,0.4); }
+.bus-final-amount { font-family: var(--font-comic); font-size: 24px; }
+.bus-final-vs { font-family: var(--font-comic); font-size: 18px; color: var(--text-muted); }
+
+.bus-final-chart-wrap {
+  margin: 10px auto 6px; max-width: 560px;
+  background: rgba(0, 0, 0, 0.18); border-radius: var(--radius-md); padding: 10px 8px 4px;
+}
+.bus-final-chart { width: 100%; height: auto; display: block; }
+.bus-chart-axis { stroke: rgba(255, 255, 255, 0.22); stroke-width: 1; }
+.bus-chart-axis-label {
+  font-family: var(--font-mono); font-size: 9px; fill: var(--text-muted);
+}
+.bus-chart-line { stroke-width: 2.5; }
+.bus-chart-line-left { stroke: var(--gold-bright); filter: drop-shadow(0 0 4px rgba(245, 205, 118, 0.5)); }
+.bus-chart-line-right { stroke: var(--teal-bright); filter: drop-shadow(0 0 4px rgba(47, 143, 176, 0.5)); }
+.bus-chart-dot-left { fill: var(--gold-bright); }
+.bus-chart-dot-right { fill: var(--teal-bright); }
+
+.bus-final-chart-legend {
+  display: flex; justify-content: center; gap: 18px; margin: 4px 0 8px;
+  font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+}
+.bus-final-legend-item { display: flex; align-items: center; gap: 6px; }
+.bus-final-legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.bus-final-legend-dot-left { background: var(--gold-bright); }
+.bus-final-legend-dot-right { background: var(--teal-bright); }
+
+@media (max-width: 720px) {
+  .bus-final-side { min-width: 120px; padding: 10px 14px; }
+  .bus-final-amount { font-size: 19px; }
+}
