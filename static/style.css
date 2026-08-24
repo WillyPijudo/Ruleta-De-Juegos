@@ -2098,3 +2098,130 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   .bus-final-side { min-width: 120px; padding: 10px 14px; }
   .bus-final-amount { font-size: 19px; }
 }
+
+
+/* ---------- Ride the Bus — pilas de fichas "timba" ---------- */
+.bus-chip-pile {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  min-height: 30px;
+  max-width: 200px;
+  margin: 2px auto;
+}
+.bus-chip-pile-sm { min-height: 22px; max-width: 140px; }
+.bus-chip-pile-empty::after {
+  content: "Sin fichas";
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.bus-chip-pile-stack {
+  position: relative;
+  width: 23px;
+  flex-shrink: 0;
+}
+.bus-chip-pile-piece {
+  position: absolute;
+  left: 0;
+  width: 23px;
+  height: 24px;
+  border-radius: 50%;
+  background-image: url('/static/img/cards/fichas.png');
+  background-size: 184px 96px; /* mitad del sheet nativo (368x192) */
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.35));
+}
+.bus-chip-pile-badge {
+  position: absolute;
+  top: -9px;
+  right: -6px;
+  background: var(--gold-bright);
+  color: #241407;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 999px;
+  box-shadow: 0 0 6px rgba(245, 205, 118, 0.6);
+  z-index: 20;
+  white-space: nowrap;
+}
+
+/* ---------- Ride the Bus — escalera de multiplicadores + cobro potencial ---------- */
+.bus-mult-ladder { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; justify-content: center; }
+.bus-mult-step {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-bright);
+  color: var(--text-muted);
+  background: var(--bg-alt);
+  transition: all 0.25s ease;
+}
+.bus-mult-step.active {
+  border-color: var(--gold-bright);
+  color: var(--gold-bright);
+  box-shadow: 0 0 8px rgba(245, 205, 118, 0.5);
+  transform: scale(1.12);
+}
+.bus-mult-step.done { background: var(--win-green); border-color: var(--win-green); color: #0a2418; }
+
+.bus-hud-potential {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold-bright);
+  min-height: 14px;
+  text-shadow: 0 0 6px rgba(245, 205, 118, 0.35);
+}
+.bus-hud-potential-pop { animation: bus-potential-pop 0.35s ease; }
+@keyframes bus-potential-pop {
+  0% { transform: scale(0.7); opacity: 0.3; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ---------- Ride the Bus — pozo (pot) sobre el paño ---------- */
+.bus-pot-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  margin: 2px 0 6px;
+  flex-wrap: wrap;
+}
+.bus-pot-side { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.bus-pot-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.bus-pot-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 20px;
+  opacity: 0.85;
+}
+.bus-pot-total {
+  font-family: var(--font-comic);
+  font-size: 14px;
+  color: var(--gold-bright);
+}
+
+/* ajustamos el ancho de los costados del HUD para que entre la pila */
+.bus-hud-side { min-width: 130px; }
+
+@media (max-width: 720px) {
+  .bus-chip-pile-piece { width: 18px; height: 19px; background-size: 144px 75px; }
+  .bus-chip-pile-stack { width: 18px; }
+  .bus-pot-row { gap: 14px; }
+}
