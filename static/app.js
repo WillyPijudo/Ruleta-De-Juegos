@@ -966,6 +966,7 @@ let capturedPower = 0;
 let penaltyReactionCutoffMs = 300;
 let penaltyReactTimer = null;
 let penaltyReactRAF = null;
+let penaltyRoundTimeout = null;
 let shootout = null;
 
 /**
