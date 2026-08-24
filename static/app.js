@@ -2049,7 +2049,7 @@ function busSetTimeout(fn, ms) {
 }
 
 function showBusScreen(id) {
-  ["busRoundsPick", "busBankroll", "busBetScreen", "busGameTable"].forEach((s) => {
+  ["busRoundsPick", "busBankroll", "busBetScreen", "busGameTable", "busFinalScreen"].forEach((s) => {
     document.getElementById(s).classList.toggle("hidden", s !== id);
   });
 }
@@ -2597,12 +2597,141 @@ function settleBusPartida() {
 
 function advanceBusFlow() {
   if (busState.currentGameNum >= busState.rounds) {
-    // 🔜 Fase 2C: pantalla final con marcador + gráfico de líneas.
-    document.getElementById("busGameStatus").textContent = "¡Se jugaron todas las partidas! (falta la Fase 2C: pantalla final)";
+    showBusFinalScreen();
     return;
   }
   busState.currentGameNum += 1;
   openBusBetScreen();
+}
+
+/* ===================== Ride the Bus — FASE 2C: pantalla final ===================== */
+
+function busFinalWinnerSide() {
+  if (busState.leftAmount > busState.rightAmount) return "champion";
+  if (busState.rightAmount > busState.leftAmount) return "challenger";
+  return "tie";
+}
+
+function showBusFinalScreen() {
+  showBusScreen("busFinalScreen");
+
+  document.getElementById("busFinalRoundsPlayed").textContent = busState.rounds;
+  document.getElementById("busFinalLeftName").textContent = busState.championName;
+  document.getElementById("busFinalRightName").textContent = busState.challengerName;
+  document.getElementById("busFinalLegendLeftName").textContent = busState.championName;
+  document.getElementById("busFinalLegendRightName").textContent = busState.challengerName;
+  document.getElementById("busFinalLeftAmount").textContent = "$" + Math.max(busState.leftAmount, 0);
+  document.getElementById("busFinalRightAmount").textContent = "$" + Math.max(busState.rightAmount, 0);
+
+  const side = busFinalWinnerSide();
+  const leftSideEl = document.getElementById("busFinalLeftSide");
+  const rightSideEl = document.getElementById("busFinalRightSide");
+  leftSideEl.classList.toggle("bus-final-side-winner", side === "champion");
+  rightSideEl.classList.toggle("bus-final-side-winner", side === "challenger");
+  document.getElementById("busFinalLeftCrown").textContent = side === "champion" ? "👑" : "";
+  document.getElementById("busFinalRightCrown").textContent = side === "challenger" ? "👑" : "";
+
+  const resultEl = document.getElementById("busFinalResult");
+  resultEl.classList.remove("show");
+  const topAmount = Math.max(busState.leftAmount, busState.rightAmount);
+  const flavor =
+    side === "tie"
+      ? "Los dos terminaron con la misma plata en el bolsillo 💵."
+      : `Se llevó $${topAmount} en total después de las ${busState.rounds} partida(s) 💰.`;
+  resolveDuelResult(resultEl, side, flavor);
+
+  renderBusFinalChart();
+}
+
+function renderBusFinalChart() {
+  const svg = document.getElementById("busFinalChart");
+  svg.innerHTML = "";
+  const history = busState.history || [];
+  if (!history.length) return;
+
+  const svgW = 560, svgH = 240;
+  const marginLeft = 52, marginRight = 14, marginTop = 16, marginBottom = 28;
+  const plotW = svgW - marginLeft - marginRight;
+  const plotH = svgH - marginTop - marginBottom;
+
+  const values = [];
+  history.forEach((h) => values.push(h.leftTotal, h.rightTotal));
+  const minV = Math.min(0, ...values);
+  let maxV = Math.max(10, ...values);
+  if (maxV === minV) maxV = minV + 10;
+  maxV += (maxV - minV) * 0.08;
+
+  const xAt = (i) =>
+    history.length > 1 ? marginLeft + (i / (history.length - 1)) * plotW : marginLeft + plotW / 2;
+  const yAt = (v) => marginTop + plotH - ((v - minV) / (maxV - minV)) * plotH;
+
+  const NS = "http://www.w3.org/2000/svg";
+  const svgEl = (tag, attrs) => {
+    const el = document.createElementNS(NS, tag);
+    Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+    return el;
+  };
+
+  // Ejes
+  svg.appendChild(svgEl("line", { x1: marginLeft, y1: marginTop, x2: marginLeft, y2: marginTop + plotH, class: "bus-chart-axis" }));
+  svg.appendChild(svgEl("line", { x1: marginLeft, y1: marginTop + plotH, x2: marginLeft + plotW, y2: marginTop + plotH, class: "bus-chart-axis" }));
+
+  // Etiquetas de valores mínimo/máximo en el eje Y
+  [minV, maxV].forEach((v) => {
+    const t = svgEl("text", {
+      x: marginLeft - 8,
+      y: yAt(v) + (v === minV ? -3 : 8),
+      class: "bus-chart-axis-label",
+      "text-anchor": "end",
+    });
+    t.textContent = "$" + Math.round(v);
+    svg.appendChild(t);
+  });
+
+  // Etiquetas de partida en el eje X (P0, P1, P2…)
+  history.forEach((h, i) => {
+    const t = svgEl("text", {
+      x: xAt(i),
+      y: svgH - 8,
+      class: "bus-chart-axis-label",
+      "text-anchor": "middle",
+    });
+    t.textContent = "P" + h.game;
+    svg.appendChild(t);
+  });
+
+  // Líneas (dorada = Campeón, celeste = Retador)
+  const buildLine = (key, cls) => {
+    const d = history
+      .map((h, i) => `${i === 0 ? "M" : "L"} ${xAt(i).toFixed(1)},${yAt(h[key]).toFixed(1)}`)
+      .join(" ");
+    const path = svgEl("path", { d, class: cls, fill: "none" });
+    svg.appendChild(path);
+    return path;
+  };
+  const leftPath = buildLine("leftTotal", "bus-chart-line bus-chart-line-left");
+  const rightPath = buildLine("rightTotal", "bus-chart-line bus-chart-line-right");
+
+  // Puntitos por partida
+  const addDots = (key, cls) => {
+    history.forEach((h, i) => {
+      svg.appendChild(svgEl("circle", { cx: xAt(i), cy: yAt(h[key]), r: 3.2, class: cls }));
+    });
+  };
+  addDots("leftTotal", "bus-chart-dot bus-chart-dot-left");
+  addDots("rightTotal", "bus-chart-dot bus-chart-dot-right");
+
+  // Animación de trazado con stroke-dashoffset
+  [leftPath, rightPath].forEach((path) => {
+    const len = path.getTotalLength();
+    path.style.strokeDasharray = String(len);
+    path.style.strokeDashoffset = String(len);
+    void path.getBoundingClientRect(); // fuerza reflow antes de animar
+    requestAnimationFrame(() => {
+      path.style.transition = "stroke-dashoffset 1.1s ease";
+      path.style.strokeDashoffset = "0";
+    });
+  });
 }
 
 function openBusBetScreen() {
@@ -2662,10 +2791,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("busBankrollNextBtn").addEventListener("click", () => {
     busState.currentGameNum = 1;
-    busState.history = [];
+    busState.history = [{ game: 0, leftTotal: busState.leftAmount, rightTotal: busState.rightAmount }];
     openBusBetScreen();
   });
   document.getElementById("busGameExitBtn").addEventListener("click", () => {
+    teardownBus();
+    document.getElementById("busModal").classList.add("hidden");
+  });
+  document.getElementById("busFinalReplayBtn").addEventListener("click", () => {
+    initBusBankroll();
+    showBusScreen("busBankroll");
+  });
+  document.getElementById("busFinalExitBtn").addEventListener("click", () => {
     teardownBus();
     document.getElementById("busModal").classList.add("hidden");
   });
