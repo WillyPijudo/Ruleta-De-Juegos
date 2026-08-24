@@ -2031,3 +2031,204 @@ document.addEventListener("DOMContentLoaded", () => {
     showFightScreen("fightPick");
   });
 });
+
+
+/* ===================== Ride the Bus — FASE 1 ===================== */
+
+let busSelectedRounds = null;
+let busState = null;
+let busPendingTimeouts = [];
+
+function busSetTimeout(fn, ms) {
+  const id = setTimeout(() => {
+    busPendingTimeouts = busPendingTimeouts.filter((t) => t !== id);
+    fn();
+  }, ms);
+  busPendingTimeouts.push(id);
+  return id;
+}
+
+function showBusScreen(id) {
+  ["busRoundsPick", "busBankroll", "busComingSoon"].forEach((s) => {
+    document.getElementById(s).classList.toggle("hidden", s !== id);
+  });
+}
+
+// Ficha sheet: 8 columnas x 4 filas, celda 46x48 (mostrada a 2x = 92x96).
+// Fila 3 (col 4-7) = naranja/dorado -> campeón. Fila 0 (col 4-7) = celeste -> retador.
+const BUS_CHIP_CELL = { w: 46, h: 48, scale: 2 };
+const BUS_CHIP_COLOR = { left: { row: 3, colOffset: 4 }, right: { row: 0, colOffset: 4 } };
+
+function chipTierForAmount(amount) {
+  if (amount < 325) return 0;
+  if (amount < 550) return 1;
+  if (amount < 775) return 2;
+  return 3;
+}
+
+function setChipVisual(side, amount) {
+  const tier = chipTierForAmount(amount);
+  const { row, colOffset } = BUS_CHIP_COLOR[side];
+  const col = colOffset + tier;
+  const el = document.getElementById(side === "left" ? "busChipImgLeft" : "busChipImgRight");
+  el.style.backgroundPosition = `-${col * BUS_CHIP_CELL.w * BUS_CHIP_CELL.scale}px -${row * BUS_CHIP_CELL.h * BUS_CHIP_CELL.scale}px`;
+}
+
+function randomBankroll() {
+  return Math.round((100 + Math.random() * 900) / 10) * 10;
+}
+
+function playCashRegister() {
+  if (!soundEnabled) return;
+  const ctx = getAudioCtx();
+  [880, 1318.5].forEach((freq, idx) => {
+    setTimeout(() => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.22, ctx.currentTime + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.3);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.32);
+    }, idx * 90);
+  });
+}
+
+function spinBankroll(side) {
+  if (!busState) return;
+  const rolledKey = side === "left" ? "leftRolled" : "rightRolled";
+  if (busState[rolledKey]) return;
+
+  const btn = document.getElementById(side === "left" ? "busRollBtnLeft" : "busRollBtnRight");
+  const amountEl = document.getElementById(side === "left" ? "busWalletAmountLeft" : "busWalletAmountRight");
+  const stackEl = document.getElementById(side === "left" ? "busChipStackLeft" : "busChipStackRight");
+  btn.disabled = true;
+  amountEl.classList.add("spinning");
+
+  const finalAmount = randomBankroll();
+  const totalTicks = 22;
+  let delay = 40;
+  let tick = 0;
+
+  function step() {
+    tick += 1;
+    if (tick >= totalTicks) {
+      amountEl.textContent = "$" + finalAmount;
+      amountEl.classList.remove("spinning");
+      stackEl.classList.remove("bus-chip-not-rolled");
+      setChipVisual(side, finalAmount);
+      playCashRegister();
+      if (side === "left") {
+        busState.leftAmount = finalAmount;
+        busState.leftRolled = true;
+      } else {
+        busState.rightAmount = finalAmount;
+        busState.rightRolled = true;
+      }
+      checkBusBankrollReady();
+      return;
+    }
+    amountEl.textContent = "$" + randomBankroll();
+    playTick();
+    delay = Math.min(delay * 1.16, 260);
+    busSetTimeout(step, delay);
+  }
+
+  busSetTimeout(step, delay);
+}
+
+function checkBusBankrollReady() {
+  const ready = busState.leftRolled && busState.rightRolled;
+  document.getElementById("busBankrollNextBtn").disabled = !ready;
+  document.getElementById("busBankrollStatus").textContent = ready
+    ? "¡Los dos tienen billetera! Podés seguir."
+    : "Los dos tienen que girar antes de seguir.";
+}
+
+function initBusBankroll() {
+  const championName = (currentWinnerGame && currentWinnerGame.added_by) || "Campeón";
+  let challengerName = (pendingChallengerName || "").trim() || "Retador";
+  if (challengerName.toLowerCase() === championName.toLowerCase()) {
+    challengerName = `${challengerName} (Retador)`;
+  }
+  busState = {
+    rounds: busSelectedRounds,
+    championName,
+    challengerName,
+    leftAmount: 0,
+    rightAmount: 0,
+    leftRolled: false,
+    rightRolled: false,
+  };
+  document.getElementById("busWalletLeftName").textContent = championName;
+  document.getElementById("busWalletRightName").textContent = challengerName;
+  document.getElementById("busRoundsLabel").textContent = busSelectedRounds;
+
+  ["left", "right"].forEach((side) => {
+    const amountEl = document.getElementById(side === "left" ? "busWalletAmountLeft" : "busWalletAmountRight");
+    const btn = document.getElementById(side === "left" ? "busRollBtnLeft" : "busRollBtnRight");
+    const stackEl = document.getElementById(side === "left" ? "busChipStackLeft" : "busChipStackRight");
+    amountEl.textContent = "$?";
+    amountEl.classList.remove("spinning");
+    btn.disabled = false;
+    setChipVisual(side, 100);
+    stackEl.classList.add("bus-chip-not-rolled");
+  });
+  checkBusBankrollReady();
+}
+
+function openBusModal() {
+  teardownBus();
+  document.getElementById("busModal").classList.remove("hidden");
+  busSelectedRounds = null;
+  document.querySelectorAll(".bus-rounds-pill").forEach((p) => p.classList.remove("active"));
+  document.getElementById("busRoundsNextBtn").disabled = true;
+  showBusScreen("busRoundsPick");
+}
+
+function teardownBus() {
+  busPendingTimeouts.forEach(clearTimeout);
+  busPendingTimeouts = [];
+  busState = null;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("pickBusBtn").addEventListener("click", () => {
+    closeDuelSelect();
+    openBusModal();
+  });
+  document.getElementById("closeBusModal").addEventListener("click", () => {
+    teardownBus();
+    document.getElementById("busModal").classList.add("hidden");
+  });
+
+  document.querySelectorAll(".bus-rounds-pill").forEach((pill) => {
+    pill.addEventListener("click", () => {
+      document.querySelectorAll(".bus-rounds-pill").forEach((p) => p.classList.remove("active"));
+      pill.classList.add("active");
+      busSelectedRounds = parseInt(pill.dataset.rounds, 10);
+      document.getElementById("busRoundsNextBtn").disabled = false;
+    });
+  });
+
+  document.getElementById("busRoundsNextBtn").addEventListener("click", () => {
+    initBusBankroll();
+    showBusScreen("busBankroll");
+  });
+  document.getElementById("busBankrollBackBtn").addEventListener("click", () => showBusScreen("busRoundsPick"));
+  document.getElementById("busRollBtnLeft").addEventListener("click", () => spinBankroll("left"));
+  document.getElementById("busRollBtnRight").addEventListener("click", () => spinBankroll("right"));
+
+  document.getElementById("busBankrollNextBtn").addEventListener("click", () => {
+    document.getElementById("busP1Recap").textContent = busState.championName;
+    document.getElementById("busP1Amount").textContent = "$" + busState.leftAmount;
+    document.getElementById("busP2Recap").textContent = busState.challengerName;
+    document.getElementById("busP2Amount").textContent = "$" + busState.rightAmount;
+    document.getElementById("busRoundsRecap").textContent = busState.rounds;
+    showBusScreen("busComingSoon");
+  });
+  document.getElementById("busBackToBankrollBtn").addEventListener("click", () => showBusScreen("busBankroll"));
+});
