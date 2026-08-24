@@ -2006,3 +2006,34 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   .bus-card-slot, .bus-card, .bus-deck-pile, .bus-card-face, .bus-card-back { width: 70px; height: 94px; }
   .bus-deck-pile, .bus-card-face, .bus-card-back { background-size: 1050px 466.6px; }
 }
+
+/* ---------- Ride the Bus — apuestas (Fase 2B) ---------- */
+.bus-bet-grid { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin: 18px 0; }
+.bus-bet-side {
+  flex: 1; min-width: 220px; max-width: 280px;
+  background: var(--bg-alt); border: 2px solid var(--border-bright); border-radius: var(--radius-md);
+  padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  transition: opacity 0.2s ease;
+}
+.bus-bet-side-broke { opacity: 0.5; }
+.bus-bet-name { font-family: var(--font-mono); font-weight: 700; font-size: 14px; }
+.bus-bet-wallet { font-size: 12px; color: var(--text-muted); }
+.bus-bet-slider { width: 100%; accent-color: var(--gold-bright); }
+.bus-bet-amount { font-family: var(--font-comic); font-size: 22px; color: var(--gold-bright); text-shadow: 0 0 8px rgba(245,205,118,0.4); }
+.bus-bet-presets { display: flex; gap: 6px; }
+.bus-bet-preset {
+  font-family: var(--font-body); font-size: 11px; font-weight: 700;
+  padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border-bright);
+  background: transparent; color: var(--text); cursor: pointer; transition: all 0.15s ease;
+}
+.bus-bet-preset:hover { border-color: var(--gold); background: rgba(217,169,78,0.12); }
+.bus-mult-hint { text-align: center; font-size: 12px; color: var(--text-muted); font-family: var(--font-mono); margin: 4px 0 6px; }
+
+.bus-cashout-btn {
+  border-color: var(--teal-bright);
+  background: linear-gradient(160deg, var(--teal-bright), var(--teal));
+  color: #06202b;
+}
+.bus-cashout-btn:hover:not(:disabled) { border-color: var(--gold); }
+
+.bus-hud-tag-won { background: rgba(245, 205, 118, 0.18); color: var(--gold-bright); border-color: rgba(245, 205, 118, 0.4); }
