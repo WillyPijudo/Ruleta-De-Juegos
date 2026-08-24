@@ -2049,7 +2049,7 @@ function busSetTimeout(fn, ms) {
 }
 
 function showBusScreen(id) {
-  ["busRoundsPick", "busBankroll", "busComingSoon"].forEach((s) => {
+  ["busRoundsPick", "busBankroll", "busGameTable"].forEach((s) => {
     document.getElementById(s).classList.toggle("hidden", s !== id);
   });
 }
@@ -2193,6 +2193,269 @@ function teardownBus() {
   busPendingTimeouts.forEach(clearTimeout);
   busPendingTimeouts = [];
   busState = null;
+  busGame = null;
+}
+
+/* ===================== Ride the Bus — FASE 2A: motor de rondas ===================== */
+
+let busGame = null;
+
+const BUS_SUITS = ["hearts", "diamonds", "spades", "clubs"];
+const BUS_RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+const BUS_DECK_CELL = { w: 48, h: 64, scale: 2 };
+
+function busRankValue(rank) {
+  if (rank === "A") return 14;
+  if (rank === "K") return 13;
+  if (rank === "Q") return 12;
+  if (rank === "J") return 11;
+  return parseInt(rank, 10);
+}
+function busRankLabel(value) {
+  if (value === 14) return "A";
+  if (value === 13) return "K";
+  if (value === 12) return "Q";
+  if (value === 11) return "J";
+  return String(value);
+}
+
+function busBuildShuffledDeck() {
+  const deck = [];
+  BUS_SUITS.forEach((suit, suitIdx) => {
+    BUS_RANKS.forEach((rank, rankIdx) => {
+      deck.push({
+        suit, suitIdx, rank, rankIdx,
+        value: busRankValue(rank),
+        color: (suit === "hearts" || suit === "diamonds") ? "red" : "black",
+      });
+    });
+  });
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+}
+
+function busCardBgPosition(card) {
+  return `-${card.rankIdx * BUS_DECK_CELL.w * BUS_DECK_CELL.scale}px -${card.suitIdx * BUS_DECK_CELL.h * BUS_DECK_CELL.scale}px`;
+}
+
+function busPlaySound(path, volume) {
+  try {
+    const a = new Audio(path);
+    a.volume = volume != null ? volume : 0.55;
+    a.play().catch(() => {});
+  } catch (e) {
+    /* no rompe el juego si el navegador bloquea el audio */
+  }
+}
+
+const BUS_ROUND_QUESTIONS = {
+  1: "¿La carta es roja o negra?",
+  2: "¿La próxima es mayor-o-igual o menor?",
+  4: "¿De qué palo exacto es?",
+};
+
+function busRoundQuestionText(round) {
+  if (round === 3) {
+    const a = busGame.revealed[0].value;
+    const b = busGame.revealed[1].value;
+    const lo = Math.min(a, b), hi = Math.max(a, b);
+    if (lo === hi) return `¡Empate en ${busRankLabel(lo)}! "Adentro" es imposible — solo sirve afuera.`;
+    return `¿La carta 3 cae ADENTRO o AFUERA de ${busRankLabel(lo)}–${busRankLabel(hi)}?`;
+  }
+  return BUS_ROUND_QUESTIONS[round];
+}
+
+function busGuessOptionsFor(round) {
+  if (round === 1) return [{ id: "red", label: "🔴 Roja" }, { id: "black", label: "⚫ Negra" }];
+  if (round === 2) return [{ id: "ge", label: "⬆️ Mayor o igual" }, { id: "lt", label: "⬇️ Menor" }];
+  if (round === 3) return [{ id: "in", label: "↔️ Adentro" }, { id: "out", label: "↕️ Afuera" }];
+  return [
+    { id: "hearts", label: "♥️ Corazones" },
+    { id: "diamonds", label: "♦️ Diamantes" },
+    { id: "spades", label: "♠️ Picas" },
+    { id: "clubs", label: "♣️ Tréboles" },
+  ];
+}
+
+function renderBusGuessOptions() {
+  const wrap = document.getElementById("busGuessOptions");
+  wrap.innerHTML = "";
+  busGuessOptionsFor(busGame.round).forEach((opt) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "bus-guess-btn";
+    btn.dataset.guess = opt.id;
+    btn.textContent = opt.label;
+    btn.addEventListener("click", () => onBusGuessClick(opt.id));
+    wrap.appendChild(btn);
+  });
+}
+
+function updateBusHudTags() {
+  const leftTag = document.getElementById("busHudLeftTag");
+  const rightTag = document.getElementById("busHudRightTag");
+  leftTag.textContent = busGame.leftAlive ? "En juego" : "Afuera";
+  leftTag.classList.toggle("bus-hud-tag-out", !busGame.leftAlive);
+  rightTag.textContent = busGame.rightAlive ? "En juego" : "Afuera";
+  rightTag.classList.toggle("bus-hud-tag-out", !busGame.rightAlive);
+}
+
+function updateBusRoundPips() {
+  document.querySelectorAll(".bus-round-pip").forEach((pip) => {
+    const r = parseInt(pip.dataset.round, 10);
+    pip.classList.toggle("done", r < busGame.round);
+    pip.classList.toggle("active", r === busGame.round);
+  });
+}
+
+function startBusAttempt() {
+  busGame.deck = busBuildShuffledDeck();
+  busGame.revealed = [];
+  busGame.round = 1;
+  busGame.leftAlive = true;
+  busGame.rightAlive = true;
+  busGame.leftGuess = null;
+  busGame.rightGuess = null;
+  busGame.resolving = false;
+
+  [1, 2, 3, 4].forEach((n) => {
+    document.getElementById("busCard" + n).classList.remove("flipped", "dealt");
+    document.getElementById("busCard" + n + "Face").style.backgroundPosition = "";
+  });
+  updateBusHudTags();
+  updateBusRoundPips();
+  startBusRoundTurn();
+}
+
+function startBusRoundTurn() {
+  document.getElementById("busRoundQuestion").textContent = busRoundQuestionText(busGame.round);
+  document.getElementById("busRestartBanner").classList.add("hidden");
+  updateBusRoundPips();
+
+  let turn;
+  if (busGame.leftAlive && busGame.leftGuess === null) turn = "left";
+  else if (busGame.rightAlive && busGame.rightGuess === null) turn = "right";
+  else {
+    revealBusCard();
+    return;
+  }
+  busGame.currentTurn = turn;
+
+  const name = turn === "left" ? busState.championName : busState.challengerName;
+  document.getElementById("busTurnName").textContent = name;
+  const statusEl = document.getElementById("busGameStatus");
+  statusEl.classList.remove("pop");
+  void statusEl.offsetWidth;
+  statusEl.classList.add("pop");
+
+  renderBusGuessOptions();
+}
+
+function onBusGuessClick(guessId) {
+  if (!busGame || busGame.resolving) return;
+  document.querySelectorAll(".bus-guess-btn").forEach((b) => (b.disabled = true));
+  playTick();
+  if (busGame.currentTurn === "left") busGame.leftGuess = guessId;
+  else busGame.rightGuess = guessId;
+  busSetTimeout(startBusRoundTurn, 260);
+}
+
+function revealBusCard() {
+  busGame.resolving = true;
+  document.getElementById("busGameStatus").textContent = "Dando vuelta la carta…";
+  const card = busGame.deck.pop();
+  busGame.revealed.push(card);
+
+  const cardEl = document.getElementById("busCard" + busGame.round);
+  const faceEl = document.getElementById("busCard" + busGame.round + "Face");
+  faceEl.style.backgroundPosition = busCardBgPosition(card);
+
+  busPlaySound("/static/audio/card-slide.wav", 0.5);
+  cardEl.classList.add("dealt");
+
+  busSetTimeout(() => {
+    busPlaySound("/static/audio/card-pickup.wav", 0.6);
+    cardEl.classList.add("flipped");
+    busSetTimeout(() => resolveBusRound(card), 500);
+  }, 320);
+}
+
+function busEvaluateGuess(round, guess, card) {
+  if (round === 1) return guess === card.color;
+  if (round === 2) {
+    const prev = busGame.revealed[0];
+    return guess === "ge" ? card.value >= prev.value : card.value < prev.value;
+  }
+  if (round === 3) {
+    const a = busGame.revealed[0].value, b = busGame.revealed[1].value;
+    const lo = Math.min(a, b), hi = Math.max(a, b);
+    if (card.value === lo || card.value === hi) return false; // cae justo en el borde: pierde sí o sí
+    if (lo === hi) return guess === "out"; // par: adentro es imposible
+    const inside = card.value > lo && card.value < hi;
+    return guess === (inside ? "in" : "out");
+  }
+  return guess === card.suit;
+}
+
+function resolveBusRound(card) {
+  const leftGuessed = busGame.leftAlive && busGame.leftGuess !== null;
+  const rightGuessed = busGame.rightAlive && busGame.rightGuess !== null;
+  const leftCorrect = leftGuessed ? busEvaluateGuess(busGame.round, busGame.leftGuess, card) : null;
+  const rightCorrect = rightGuessed ? busEvaluateGuess(busGame.round, busGame.rightGuess, card) : null;
+
+  if (leftGuessed && !leftCorrect) busGame.leftAlive = false;
+  if (rightGuessed && !rightCorrect) busGame.rightAlive = false;
+  updateBusHudTags();
+
+  document.getElementById("busGuessOptions").innerHTML = "";
+
+  if (!busGame.leftAlive && !busGame.rightAlive) {
+    document.getElementById("busGameStatus").textContent = "¡Los dos le erraron a esta ronda!";
+    playBuzz();
+    busSetTimeout(() => {
+      document.getElementById("busRestartBanner").classList.remove("hidden");
+      busSetTimeout(startBusAttempt, 1400);
+    }, 400);
+    return;
+  }
+
+  if (busGame.round >= 4) {
+    finishBusPartida();
+    return;
+  }
+
+  if (leftGuessed && !leftCorrect) {
+    document.getElementById("busGameStatus").textContent = `${busState.championName} se bajó del bondi 🚌`;
+  } else if (rightGuessed && !rightCorrect) {
+    document.getElementById("busGameStatus").textContent = `${busState.challengerName} se bajó del bondi 🚌`;
+  } else {
+    document.getElementById("busGameStatus").textContent = "¡Bien! Siguiente ronda…";
+  }
+
+  busGame.round += 1;
+  busGame.leftGuess = null;
+  busGame.rightGuess = null;
+  busGame.resolving = false;
+  busSetTimeout(startBusRoundTurn, 900);
+}
+
+function finishBusPartida() {
+  const leftWon = busGame.leftAlive;
+  const rightWon = busGame.rightAlive;
+  let msg;
+  if (leftWon && rightWon) msg = "¡Empate! Los dos llegaron vivos a la ronda 4 🎉";
+  else if (leftWon) msg = `¡${busState.championName} completó las 4 rondas y ganó la partida! 🏆`;
+  else msg = `¡${busState.challengerName} completó las 4 rondas y ganó la partida! 🏆`;
+
+  document.getElementById("busGameStatus").textContent = msg;
+  playFanfare();
+  launchConfetti();
+  // 🔜 Fase 2B engancha acá: liquidar la apuesta de esta partida,
+  // guardar el resultado en busState.history y arrancar la siguiente
+  // partida (o pasar a la pantalla final si era la última).
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -2223,12 +2486,21 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("busRollBtnRight").addEventListener("click", () => spinBankroll("right"));
 
   document.getElementById("busBankrollNextBtn").addEventListener("click", () => {
-    document.getElementById("busP1Recap").textContent = busState.championName;
-    document.getElementById("busP1Amount").textContent = "$" + busState.leftAmount;
-    document.getElementById("busP2Recap").textContent = busState.challengerName;
-    document.getElementById("busP2Amount").textContent = "$" + busState.rightAmount;
-    document.getElementById("busRoundsRecap").textContent = busState.rounds;
-    showBusScreen("busComingSoon");
+    busGame = {
+      deck: [], revealed: [], round: 1,
+      leftAlive: true, rightAlive: true,
+      leftGuess: null, rightGuess: null,
+      currentTurn: "left", resolving: false,
+    };
+    document.getElementById("busHudLeftName").textContent = busState.championName;
+    document.getElementById("busHudRightName").textContent = busState.challengerName;
+    document.getElementById("busGameNumLabel").textContent = "1";
+    document.getElementById("busGameTotalLabel").textContent = busState.rounds;
+    showBusScreen("busGameTable");
+    startBusAttempt();
   });
-  document.getElementById("busBackToBankrollBtn").addEventListener("click", () => showBusScreen("busBankroll"));
+  document.getElementById("busGameExitBtn").addEventListener("click", () => {
+    teardownBus();
+    document.getElementById("busModal").classList.add("hidden");
+  });
 });
