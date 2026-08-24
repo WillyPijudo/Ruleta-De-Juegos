@@ -1950,6 +1950,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   background-image: url('/static/img/cards/deck.png');
   background-position: 0px -512px;
   background-size: 1440px 640px;
+  background-repeat: no-repeat;   /* ← agregado */
   image-rendering: pixelated;
   box-shadow: 0 4px 0 #7a1b1b, 0 8px 0 #6b1717, 0 14px 24px rgba(0,0,0,0.5);
 }
@@ -1967,6 +1968,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   backface-visibility: hidden;
   background-image: url('/static/img/cards/deck.png');
   background-size: 1440px 640px;
+  background-repeat: no-repeat;   /* ← agregado */
   image-rendering: pixelated;
   box-shadow: 0 8px 18px rgba(0,0,0,0.5);
 }
