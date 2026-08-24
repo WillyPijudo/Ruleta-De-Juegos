@@ -2369,11 +2369,9 @@ function startBusAttempt() {
 }
 
 function startBusRoundTurn() {
-  // FIX: Solo se consideran pendientes los jugadores que sigan vivos en el intento
   const leftPending = busGame.leftPlaying && !busGame.leftDone && busGame.leftAlive;
   const rightPending = busGame.rightPlaying && !busGame.rightDone && busGame.rightAlive;
 
-  // Si no queda ningún jugador activo en la mesa, se cierra la partida
   if (!leftPending && !rightPending) {
     settleBusPartida();
     return;
@@ -2393,8 +2391,10 @@ function startBusRoundTurn() {
   busGame.currentTurn = turn;
 
   const name = turn === "left" ? busState.championName : busState.challengerName;
-  document.getElementById("busTurnName").textContent = name;
+  
+  // FIX CRÍTICO: Se inyecta el HTML directo en busGameStatus para que no tire error de null
   const statusEl = document.getElementById("busGameStatus");
+  statusEl.innerHTML = `Elige <b>${escapeHtml(name)}</b>…`;
   statusEl.classList.remove("pop");
   void statusEl.offsetWidth;
   statusEl.classList.add("pop");
@@ -2485,7 +2485,7 @@ function resolveBusRound(card) {
 
   document.getElementById("busGuessOptions").innerHTML = "";
 
-  // Si los DOS estaban en juego en esta misma ronda y ambos erraron -> Reinicio de mazo
+  // Si los dos jugaban esta ronda y los dos erraron -> Mazo nuevo y reinicio de intento
   if (bothMissedThisRound) {
     document.getElementById("busGameStatus").textContent = "¡Le erraron todos a esta ronda!";
     playBuzz();
@@ -2496,7 +2496,7 @@ function resolveBusRound(card) {
     return;
   }
 
-  // FIX: Si uno solo erra, queda marcado como finalizado/perdido para no trabar el flujo del otro
+  // Si erró solo uno -> Queda eliminado definitivamente y el otro continúa
   if (leftGuessed && !leftCorrect) {
     busGame.leftAlive = false;
     busGame.leftDone = true;
@@ -2536,9 +2536,9 @@ function resolveBusRound(card) {
   }
 
   if (leftGuessed && !leftCorrect) {
-    document.getElementById("busGameStatus").textContent = `${busState.championName} se bajó del bondi 🚌 — ¡${busState.challengerName} sigue jugando!`;
+    document.getElementById("busGameStatus").textContent = `${busState.championName} se bajó del bondi 🚌 — ¡${busState.challengerName} sigue solo!`;
   } else if (rightGuessed && !rightCorrect) {
-    document.getElementById("busGameStatus").textContent = `${busState.challengerName} se bajó del bondi 🚌 — ¡${busState.championName} sigue jugando!`;
+    document.getElementById("busGameStatus").textContent = `${busState.challengerName} se bajó del bondi 🚌 — ¡${busState.championName} sigue solo!`;
   } else {
     document.getElementById("busGameStatus").textContent = "¡Bien! Siguiente ronda…";
   }
