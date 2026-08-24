@@ -1907,3 +1907,102 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   .bus-table { gap: 14px; padding: 12px; }
   .bus-wallet-amount { font-size: 20px; min-width: 100px; }
 }
+
+/* ---------- Ride the Bus — mesa de juego (Fase 2A) ---------- */
+.bus-hud {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 22px 4px; flex-shrink: 0; gap: 12px; flex-wrap: wrap;
+}
+.bus-hud-side { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 110px; }
+.bus-hud-name { font-family: var(--font-mono); font-weight: 700; font-size: 14px; color: var(--text); }
+.bus-hud-tag {
+  font-family: var(--font-body); font-size: 11px; font-weight: 700;
+  padding: 2px 10px; border-radius: 999px;
+  background: rgba(72, 199, 142, 0.18); color: var(--win-green);
+  border: 1px solid rgba(72, 199, 142, 0.4);
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+.bus-hud-tag.bus-hud-tag-out { background: rgba(224, 90, 90, 0.16); color: var(--danger); border-color: rgba(224, 90, 90, 0.4); }
+.bus-hud-center { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.bus-hud-game-label { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+
+.bus-round-pips { display: flex; gap: 8px; }
+.bus-round-pip {
+  width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  background: var(--bg-alt); border: 2px solid var(--border-bright); color: var(--text-muted);
+  transition: all 0.25s ease;
+}
+.bus-round-pip.active { border-color: var(--gold-bright); color: var(--gold-bright); box-shadow: 0 0 10px rgba(245,205,118,0.5); transform: scale(1.15); }
+.bus-round-pip.done { background: var(--win-green); border-color: var(--win-green); color: #0a2418; }
+
+.bus-felt {
+  display: flex; align-items: center; justify-content: center; gap: 26px;
+  padding: 22px; margin: 4px 0 8px; flex-wrap: wrap;
+  background: radial-gradient(ellipse at 50% 30%, rgba(0,0,0,0.15), transparent 70%);
+  border-radius: var(--radius-md);
+}
+.bus-card-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+
+.bus-deck-pile {
+  width: 96px; height: 128px; flex-shrink: 0; border-radius: 8px;
+  background-image: url('/static/img/cards/deck.png');
+  background-position: 0px -512px;
+  background-size: 1440px 640px;
+  image-rendering: pixelated;
+  box-shadow: 0 4px 0 #7a1b1b, 0 8px 0 #6b1717, 0 14px 24px rgba(0,0,0,0.5);
+}
+
+.bus-card-slot { perspective: 900px; width: 96px; height: 128px; }
+.bus-card { width: 100%; height: 100%; position: relative; }
+.bus-card-inner {
+  position: relative; width: 100%; height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.5s cubic-bezier(0.4, 0.2, 0.2, 1);
+}
+.bus-card.flipped .bus-card-inner { transform: rotateY(180deg); }
+.bus-card-face, .bus-card-back {
+  position: absolute; inset: 0; border-radius: 8px;
+  backface-visibility: hidden;
+  background-image: url('/static/img/cards/deck.png');
+  background-size: 1440px 640px;
+  image-rendering: pixelated;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.5);
+}
+.bus-card-back { background-position: 0px -512px; }
+.bus-card-face { transform: rotateY(180deg); background-color: #f3ecec; }
+.bus-card.dealt { animation: bus-card-deal 0.32s ease-out; }
+@keyframes bus-card-deal {
+  from { transform: translateX(-160px) translateY(-10px) rotate(-12deg) scale(0.85); opacity: 0.3; }
+  to { transform: translateX(0) translateY(0) rotate(0deg) scale(1); opacity: 1; }
+}
+
+.bus-round-question {
+  text-align: center; font-family: var(--font-comic); font-size: 17px;
+  color: var(--gold-bright); margin: 2px 0; text-shadow: 0 0 10px rgba(245,205,118,0.35);
+}
+
+.bus-guess-options { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin: 10px 0 6px; }
+.bus-guess-btn {
+  font-family: var(--font-body); font-weight: 700; font-size: 13.5px;
+  padding: 12px 20px; border-radius: 999px;
+  border: 2px solid var(--border-bright); background: var(--bg-alt); color: var(--text);
+  cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+.bus-guess-btn:hover:not(:disabled) { transform: translateY(-3px); border-color: var(--gold); background: rgba(217,169,78,0.14); }
+.bus-guess-btn:disabled { opacity: 0.4; cursor: default; transform: none; }
+
+.bus-restart-banner {
+  text-align: center; font-family: var(--font-marker); font-size: 14px;
+  color: var(--danger); background: rgba(224, 90, 90, 0.12); border: 1px solid rgba(224, 90, 90, 0.4);
+  border-radius: var(--radius-sm); padding: 8px 14px; margin: 4px auto 8px; max-width: 420px;
+  animation: bus-restart-pulse 0.5s ease;
+}
+.bus-restart-banner.hidden { display: none; }
+@keyframes bus-restart-pulse { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+@media (max-width: 720px) {
+  .bus-card-slot, .bus-card, .bus-deck-pile, .bus-card-face, .bus-card-back { width: 70px; height: 94px; }
+  .bus-deck-pile, .bus-card-face, .bus-card-back { background-size: 1050px 466.6px; }
+}
