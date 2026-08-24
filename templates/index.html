@@ -128,7 +128,7 @@
     <div class="modal-cover-wrap" id="winnerCoverWrap"></div>
     <h3 id="winnerName"></h3>
     <p class="winner-message" id="winnerMessage"></p>
-    <div class="modal-actions">
+   
       <button id="duelChallengeBtn" class="btn btn-duel btn-small" type="button">⚔️ Desafiar al ganador</button>
     </div>
     <div class="modal-actions" style="margin-top:10px;">
@@ -578,6 +578,45 @@
         <button id="busGameExitBtn" class="btn btn-ghost btn-small" type="button">✕ Salir del juego</button>
       </div>
     </div>
+
+    <div id="busFinalScreen" class="fight-screen hidden">
+      <div class="fight-screen-inner bus-final-inner">
+        <p class="modal-eyebrow">Se jugaron <span id="busFinalRoundsPlayed">1</span> partida(s)</p>
+        <h3 class="rps-title">🏁 Resultado final</h3>
+
+        <div class="bus-final-podium">
+          <div class="bus-final-side bus-final-side-left" id="busFinalLeftSide">
+            <span class="bus-final-crown" id="busFinalLeftCrown"></span>
+            <span class="bus-final-name" id="busFinalLeftName">-</span>
+            <span class="bus-final-amount" id="busFinalLeftAmount">$0</span>
+          </div>
+          <div class="bus-final-vs">VS</div>
+          <div class="bus-final-side bus-final-side-right" id="busFinalRightSide">
+            <span class="bus-final-crown" id="busFinalRightCrown"></span>
+            <span class="bus-final-name" id="busFinalRightName">-</span>
+            <span class="bus-final-amount" id="busFinalRightAmount">$0</span>
+          </div>
+        </div>
+
+        <p class="rps-result" id="busFinalResult"></p>
+
+        <div class="bus-final-chart-wrap">
+          <svg id="busFinalChart" class="bus-final-chart" viewBox="0 0 560 240" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="bus-final-chart-legend">
+            <span class="bus-final-legend-item"><span class="bus-final-legend-dot bus-final-legend-dot-left"></span><span id="busFinalLegendLeftName">Campeón</span></span>
+            <span class="bus-final-legend-item"><span class="bus-final-legend-dot bus-final-legend-dot-right"></span><span id="busFinalLegendRightName">Retador</span></span>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button id="busFinalReplayBtn" class="btn btn-primary btn-small" type="button">🔁 Jugar de nuevo</button>
+          <button id="busFinalExitBtn" class="btn btn-ghost btn-small" type="button">✕ Salir del juego</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
 
 <!-- Share modal -->
 <div id="shareModal" class="modal hidden">
