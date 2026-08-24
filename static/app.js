@@ -2049,7 +2049,7 @@ function busSetTimeout(fn, ms) {
 }
 
 function showBusScreen(id) {
-  ["busRoundsPick", "busBankroll", "busGameTable"].forEach((s) => {
+  ["busRoundsPick", "busBankroll", "busBetScreen", "busGameTable"].forEach((s) => {
     document.getElementById(s).classList.toggle("hidden", s !== id);
   });
 }
@@ -2292,15 +2292,53 @@ function renderBusGuessOptions() {
     btn.addEventListener("click", () => onBusGuessClick(opt.id));
     wrap.appendChild(btn);
   });
+
+  if (busGame.round >= 2) {
+    const mult = BUS_CUMULATIVE_MULT[busGame.round - 1];
+    const bet = busGame.currentTurn === "left" ? busGame.betLeft : busGame.betRight;
+    const payout = Math.round(bet * mult);
+    const cashBtn = document.createElement("button");
+    cashBtn.type = "button";
+    cashBtn.className = "bus-guess-btn bus-cashout-btn";
+    cashBtn.textContent = `💰 Plantarse y cobrar $${payout} (x${mult})`;
+    cashBtn.addEventListener("click", onBusCashout);
+    wrap.appendChild(cashBtn);
+  }
+}
+
+const BUS_ROUND_MULT = { 1: 2, 2: 3, 3: 4, 4: 10 };
+const BUS_CUMULATIVE_MULT = (() => {
+  const out = {};
+  let running = 1;
+  [1, 2, 3, 4].forEach((r) => {
+    running *= BUS_ROUND_MULT[r];
+    out[r] = running;
+  });
+  return out;
+})();
+
+function busHudTagInfo(side) {
+  const playing = side === "left" ? busGame.leftPlaying : busGame.rightPlaying;
+  const done = side === "left" ? busGame.leftDone : busGame.rightDone;
+  const outcome = side === "left" ? busGame.leftOutcome : busGame.rightOutcome;
+  const alive = side === "left" ? busGame.leftAlive : busGame.rightAlive;
+  if (!playing) return { text: "Sin fondos", cls: "bus-hud-tag-out" };
+  if (done) {
+    if (outcome === "won") return { text: "¡Ganó! 🏆", cls: "bus-hud-tag-won" };
+    if (outcome === "cashout") return { text: "Se plantó 💰", cls: "bus-hud-tag-won" };
+    return { text: "Perdió 💸", cls: "bus-hud-tag-out" };
+  }
+  return alive ? { text: "En juego", cls: "" } : { text: "Afuera (este intento)", cls: "bus-hud-tag-out" };
 }
 
 function updateBusHudTags() {
-  const leftTag = document.getElementById("busHudLeftTag");
-  const rightTag = document.getElementById("busHudRightTag");
-  leftTag.textContent = busGame.leftAlive ? "En juego" : "Afuera";
-  leftTag.classList.toggle("bus-hud-tag-out", !busGame.leftAlive);
-  rightTag.textContent = busGame.rightAlive ? "En juego" : "Afuera";
-  rightTag.classList.toggle("bus-hud-tag-out", !busGame.rightAlive);
+  ["left", "right"].forEach((side) => {
+    const el = document.getElementById(side === "left" ? "busHudLeftTag" : "busHudRightTag");
+    const info = busHudTagInfo(side);
+    el.textContent = info.text;
+    el.classList.remove("bus-hud-tag-out", "bus-hud-tag-won");
+    if (info.cls) el.classList.add(info.cls);
+  });
 }
 
 function updateBusRoundPips() {
@@ -2315,8 +2353,8 @@ function startBusAttempt() {
   busGame.deck = busBuildShuffledDeck();
   busGame.revealed = [];
   busGame.round = 1;
-  busGame.leftAlive = true;
-  busGame.rightAlive = true;
+  busGame.leftAlive = busGame.leftPlaying && !busGame.leftDone;
+  busGame.rightAlive = busGame.rightPlaying && !busGame.rightDone;
   busGame.leftGuess = null;
   busGame.rightGuess = null;
   busGame.resolving = false;
@@ -2331,6 +2369,13 @@ function startBusAttempt() {
 }
 
 function startBusRoundTurn() {
+  const leftPending = busGame.leftPlaying && !busGame.leftDone;
+  const rightPending = busGame.rightPlaying && !busGame.rightDone;
+  if (!leftPending && !rightPending) {
+    settleBusPartida();
+    return;
+  }
+
   document.getElementById("busRoundQuestion").textContent = busRoundQuestionText(busGame.round);
   document.getElementById("busRestartBanner").classList.add("hidden");
   updateBusRoundPips();
@@ -2352,6 +2397,32 @@ function startBusRoundTurn() {
   statusEl.classList.add("pop");
 
   renderBusGuessOptions();
+}
+
+function onBusCashout() {
+  if (!busGame || busGame.resolving) return;
+  const side = busGame.currentTurn;
+  const mult = BUS_CUMULATIVE_MULT[busGame.round - 1];
+  const bet = side === "left" ? busGame.betLeft : busGame.betRight;
+  const payout = Math.round(bet * mult);
+  document.querySelectorAll(".bus-guess-btn").forEach((b) => (b.disabled = true));
+  playCashRegister();
+
+  if (side === "left") {
+    busGame.leftDone = true;
+    busGame.leftOutcome = "cashout";
+    busGame.leftPayout = payout;
+    busGame.leftAlive = false;
+  } else {
+    busGame.rightDone = true;
+    busGame.rightOutcome = "cashout";
+    busGame.rightPayout = payout;
+    busGame.rightAlive = false;
+  }
+  const name = side === "left" ? busState.championName : busState.challengerName;
+  document.getElementById("busGameStatus").textContent = `${name} se plantó y se llevó $${payout} 💰 (x${mult})`;
+  updateBusHudTags();
+  busSetTimeout(startBusRoundTurn, 900);
 }
 
 function onBusGuessClick(guessId) {
@@ -2409,11 +2480,13 @@ function resolveBusRound(card) {
   if (leftGuessed && !leftCorrect) busGame.leftAlive = false;
   if (rightGuessed && !rightCorrect) busGame.rightAlive = false;
   updateBusHudTags();
-
   document.getElementById("busGuessOptions").innerHTML = "";
 
-  if (!busGame.leftAlive && !busGame.rightAlive) {
-    document.getElementById("busGameStatus").textContent = "¡Los dos le erraron a esta ronda!";
+  const leftStillIn = busGame.leftPlaying && !busGame.leftDone && busGame.leftAlive;
+  const rightStillIn = busGame.rightPlaying && !busGame.rightDone && busGame.rightAlive;
+
+  if (!leftStillIn && !rightStillIn) {
+    document.getElementById("busGameStatus").textContent = "¡Le erraron todos a esta ronda!";
     playBuzz();
     busSetTimeout(() => {
       document.getElementById("busRestartBanner").classList.remove("hidden");
@@ -2423,7 +2496,17 @@ function resolveBusRound(card) {
   }
 
   if (busGame.round >= 4) {
-    finishBusPartida();
+    if (leftStillIn) {
+      busGame.leftDone = true;
+      busGame.leftOutcome = "won";
+      busGame.leftPayout = Math.round(busGame.betLeft * BUS_CUMULATIVE_MULT[4]);
+    }
+    if (rightStillIn) {
+      busGame.rightDone = true;
+      busGame.rightOutcome = "won";
+      busGame.rightPayout = Math.round(busGame.betRight * BUS_CUMULATIVE_MULT[4]);
+    }
+    settleBusPartida();
     return;
   }
 
@@ -2442,20 +2525,95 @@ function resolveBusRound(card) {
   busSetTimeout(startBusRoundTurn, 900);
 }
 
-function finishBusPartida() {
-  const leftWon = busGame.leftAlive;
-  const rightWon = busGame.rightAlive;
-  let msg;
-  if (leftWon && rightWon) msg = "¡Empate! Los dos llegaron vivos a la ronda 4 🎉";
-  else if (leftWon) msg = `¡${busState.championName} completó las 4 rondas y ganó la partida! 🏆`;
-  else msg = `¡${busState.challengerName} completó las 4 rondas y ganó la partida! 🏆`;
+function busOutcomeLabel(outcome, payout) {
+  if (outcome === "won") return `ganó $${payout} 🏆`;
+  if (outcome === "cashout") return `se plantó con $${payout} 💰`;
+  if (outcome === "lost") return "perdió su apuesta 💸";
+  return "no jugó esta partida";
+}
 
-  document.getElementById("busGameStatus").textContent = msg;
-  playFanfare();
-  launchConfetti();
-  // 🔜 Fase 2B engancha acá: liquidar la apuesta de esta partida,
-  // guardar el resultado en busState.history y arrancar la siguiente
-  // partida (o pasar a la pantalla final si era la última).
+function settleBusPartida() {
+  if (busGame.leftPlaying && !busGame.leftDone) {
+    busGame.leftDone = true;
+    busGame.leftOutcome = "lost";
+    busGame.leftPayout = 0;
+  }
+  if (busGame.rightPlaying && !busGame.rightDone) {
+    busGame.rightDone = true;
+    busGame.rightOutcome = "lost";
+    busGame.rightPayout = 0;
+  }
+
+  if (busGame.leftPlaying) busState.leftAmount = busState.leftAmount - busGame.betLeft + busGame.leftPayout;
+  if (busGame.rightPlaying) busState.rightAmount = busState.rightAmount - busGame.betRight + busGame.rightPayout;
+
+  busState.history.push({
+    game: busState.currentGameNum,
+    leftTotal: busState.leftAmount,
+    rightTotal: busState.rightAmount,
+    leftOutcome: busGame.leftPlaying ? busGame.leftOutcome : "sin-fondos",
+    rightOutcome: busGame.rightPlaying ? busGame.rightOutcome : "sin-fondos",
+  });
+
+  const leftLine = busGame.leftPlaying
+    ? `${busState.championName} ${busOutcomeLabel(busGame.leftOutcome, busGame.leftPayout)}`
+    : `${busState.championName} se quedó sin fondos`;
+  const rightLine = busGame.rightPlaying
+    ? `${busState.challengerName} ${busOutcomeLabel(busGame.rightOutcome, busGame.rightPayout)}`
+    : `${busState.challengerName} se quedó sin fondos`;
+  document.getElementById("busGameStatus").textContent = `${leftLine} — ${rightLine}`;
+
+  const anyWin = busGame.leftOutcome === "won" || busGame.leftOutcome === "cashout" ||
+                 busGame.rightOutcome === "won" || busGame.rightOutcome === "cashout";
+  if (anyWin) {
+    playFanfare();
+    launchConfetti();
+  } else {
+    playBuzz();
+  }
+
+  setChipVisual("left", Math.max(busState.leftAmount, 0));
+  setChipVisual("right", Math.max(busState.rightAmount, 0));
+
+  busSetTimeout(advanceBusFlow, 2200);
+}
+
+function advanceBusFlow() {
+  if (busState.currentGameNum >= busState.rounds) {
+    // 🔜 Fase 2C: pantalla final con marcador + gráfico de líneas.
+    document.getElementById("busGameStatus").textContent = "¡Se jugaron todas las partidas! (falta la Fase 2C: pantalla final)";
+    return;
+  }
+  busState.currentGameNum += 1;
+  openBusBetScreen();
+}
+
+function openBusBetScreen() {
+  document.getElementById("busBetGameNum").textContent = busState.currentGameNum;
+  document.getElementById("busBetGameTotal").textContent = busState.rounds;
+  document.getElementById("busBetLeftName").textContent = busState.championName;
+  document.getElementById("busBetRightName").textContent = busState.challengerName;
+
+  ["left", "right"].forEach((side) => {
+    const amount = side === "left" ? busState.leftAmount : busState.rightAmount;
+    const panel = document.getElementById(side === "left" ? "busBetLeftPanel" : "busBetRightPanel");
+    const slider = document.getElementById(side === "left" ? "busBetLeftSlider" : "busBetRightSlider");
+    const label = document.getElementById(side === "left" ? "busBetLeftAmount" : "busBetRightAmount");
+    const walletEl = document.getElementById(side === "left" ? "busBetLeftWallet" : "busBetRightWallet");
+    walletEl.textContent = amount;
+    if (amount <= 0) {
+      panel.classList.add("bus-bet-side-broke");
+      slider.disabled = true;
+      label.textContent = "Sin fondos 😢";
+    } else {
+      panel.classList.remove("bus-bet-side-broke");
+      slider.disabled = false;
+      slider.max = amount;
+      slider.value = Math.min(10, amount);
+      label.textContent = "$" + slider.value;
+    }
+  });
+  showBusScreen("busBetScreen");
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -2486,21 +2644,54 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("busRollBtnRight").addEventListener("click", () => spinBankroll("right"));
 
   document.getElementById("busBankrollNextBtn").addEventListener("click", () => {
-    busGame = {
-      deck: [], revealed: [], round: 1,
-      leftAlive: true, rightAlive: true,
-      leftGuess: null, rightGuess: null,
-      currentTurn: "left", resolving: false,
-    };
-    document.getElementById("busHudLeftName").textContent = busState.championName;
-    document.getElementById("busHudRightName").textContent = busState.challengerName;
-    document.getElementById("busGameNumLabel").textContent = "1";
-    document.getElementById("busGameTotalLabel").textContent = busState.rounds;
-    showBusScreen("busGameTable");
-    startBusAttempt();
+    busState.currentGameNum = 1;
+    busState.history = [];
+    openBusBetScreen();
   });
   document.getElementById("busGameExitBtn").addEventListener("click", () => {
     teardownBus();
     document.getElementById("busModal").classList.add("hidden");
+  });
+
+  ["left", "right"].forEach((side) => {
+    const slider = document.getElementById(side === "left" ? "busBetLeftSlider" : "busBetRightSlider");
+    const label = document.getElementById(side === "left" ? "busBetLeftAmount" : "busBetRightAmount");
+    slider.addEventListener("input", () => {
+      label.textContent = "$" + slider.value;
+    });
+  });
+  document.querySelectorAll(".bus-bet-preset").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const side = btn.dataset.side;
+      const pct = parseInt(btn.dataset.pct, 10);
+      const amount = side === "left" ? busState.leftAmount : busState.rightAmount;
+      if (amount <= 0) return;
+      const slider = document.getElementById(side === "left" ? "busBetLeftSlider" : "busBetRightSlider");
+      const label = document.getElementById(side === "left" ? "busBetLeftAmount" : "busBetRightAmount");
+      const val = Math.max(10, Math.round((amount * pct) / 100 / 10) * 10);
+      slider.value = Math.min(val, amount);
+      label.textContent = "$" + slider.value;
+    });
+  });
+  document.getElementById("busBetConfirmBtn").addEventListener("click", () => {
+    busGame = {
+      deck: [], revealed: [], round: 1,
+      leftPlaying: busState.leftAmount > 0,
+      rightPlaying: busState.rightAmount > 0,
+      leftDone: false, rightDone: false,
+      leftOutcome: null, rightOutcome: null,
+      leftPayout: 0, rightPayout: 0,
+      leftAlive: false, rightAlive: false,
+      leftGuess: null, rightGuess: null,
+      currentTurn: "left", resolving: false,
+      betLeft: busState.leftAmount > 0 ? parseInt(document.getElementById("busBetLeftSlider").value, 10) : 0,
+      betRight: busState.rightAmount > 0 ? parseInt(document.getElementById("busBetRightSlider").value, 10) : 0,
+    };
+    document.getElementById("busHudLeftName").textContent = busState.championName;
+    document.getElementById("busHudRightName").textContent = busState.challengerName;
+    document.getElementById("busGameNumLabel").textContent = busState.currentGameNum;
+    document.getElementById("busGameTotalLabel").textContent = busState.rounds;
+    showBusScreen("busGameTable");
+    startBusAttempt();
   });
 });
