@@ -3257,7 +3257,7 @@ const GMB_GOAL_LINE_X = GMB_FIELD_W - 34;
 const GMB_SHOOT_MAX_CHARGE = 850;   // ms de carga máxima del remate
 const GMB_SHOOT_BASE_SPEED = 6.2;
 const GMB_SHOOT_BONUS_SPEED = 7.5;
-const GMB_SHOOTOUT_TIMEOUT = 6000;  // si la pelota queda pinponeando sin definirse
+const GMB_SHOOTOUT_TIMEOUT = 11000;  // si la pelota queda pinponeando sin definirse
 
 let gmb = null;
 let gmbRafId = null;
@@ -3349,8 +3349,18 @@ function startGambetaMatch() {
   window.addEventListener("keydown", gmbOnKeyDown);
   window.addEventListener("keyup", gmbOnKeyUp);
 
+  gmbSetupCanvas();
   gmb.lastTs = performance.now();
   gmbRafId = requestAnimationFrame(gmbLoop);
+}
+
+function gmbSetupCanvas() {
+  const canvas = document.getElementById("gambetaCanvas");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = GMB_FIELD_W * dpr;
+  canvas.height = GMB_FIELD_H * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
 function gmbMakePlayer(side, x, y, color) {
@@ -3437,7 +3447,7 @@ function gmbDash(side) {
   player.dashingUntil = now + GMB_DASH_DURATION;
   player.dashReadyAt = now + GMB_DASH_COOLDOWN;
   player.dashTrailAt = now;
-  playTick();
+  busPlaySound("/static/audio/dash.wav", 0.55);
 }
 
 /* ---------- Loop principal ---------- */
@@ -3598,11 +3608,11 @@ function gmbStartShootout() {
   const attackerSide = gmb.attackerSide, defenderSide = gmb.defenderSide;
   const dir = attackerSide === "left" ? 1 : -1;
   const goalX = attackerSide === "left" ? GMB_GOAL_LINE_X : GMB_FIELD_W - GMB_GOAL_LINE_X;
-  const shootX = attackerSide === "left" ? GMB_FIELD_W - 240 : 240;
+  const runupX = attackerSide === "left" ? 130 : GMB_FIELD_W - 130;
 
   const attacker = gmb[attackerSide];
   const keeper = gmb[defenderSide];
-  attacker.x = shootX; attacker.y = GMB_FIELD_H / 2; attacker.vx = 0; attacker.vy = 0;
+  attacker.x = runupX; attacker.y = GMB_FIELD_H / 2; attacker.vx = 0; attacker.vy = 0;
   attacker.facingX = dir; attacker.facingY = 0;
   keeper.x = goalX; keeper.y = GMB_FIELD_H / 2; keeper.vx = 0; keeper.vy = 0;
 
@@ -3612,7 +3622,8 @@ function gmbStartShootout() {
 
   gmb.phase = "shootout";
   gmb.shootoutStartedAt = performance.now();
-  gmbSetPhaseLabel("Fase 2 · Definición");
+  gmbSetPhaseLabel("Fase 2 · ¡Corré y definí!");
+  gmbShowBanner("¡Arrancá la carrera y amagalo antes de rematar! 🏃💨", 1600);
 }
 
 function gmbFireShot() {
@@ -3630,31 +3641,46 @@ function gmbFireShot() {
   gmb.ball.vy = (angle / len) * speed;
   gmb.ball.x = attacker.x + dir * (attacker.r + gmb.ball.r + 2);
   gmb.kickBurst = { x: gmb.ball.x, y: gmb.ball.y, t: now };
-  playTick();
+  busPlaySound("/static/audio/kickball.wav", 0.6);
 }
 
 function gmbUpdateShootout(dt, ts) {
   const attackerSide = gmb.attackerSide, defenderSide = gmb.defenderSide;
   const attacker = gmb[attackerSide], keeper = gmb[defenderSide];
   const dir = attackerSide === "left" ? 1 : -1;
+  const goalX = attackerSide === "left" ? GMB_GOAL_LINE_X : GMB_FIELD_W - GMB_GOAL_LINE_X;
 
-  // Al atacante se le limita el rango de movimiento (no puede correr hasta el arco).
-  gmbApplyMovement(attacker, attackerSide, gmb.shoot.charging ? dt * 0.25 : dt);
-  const shootMinX = attackerSide === "left" ? GMB_FIELD_W - 300 : 60;
-  const shootMaxX = attackerSide === "left" ? GMB_FIELD_W - 170 : 200;
-  attacker.x = Math.max(Math.min(shootMinX, shootMaxX), Math.min(Math.max(shootMinX, shootMaxX), attacker.x));
+  // El atacante corre casi tan libre como en la Fase 1 (para poder amagar),
+  // solo se lo frena a la mitad al cargar el remate, y no puede caminar el
+  // gol: hay una distancia mínima obligatoria al arco.
+  gmbApplyMovement(attacker, attackerSide, gmb.shoot.charging ? dt * 0.5 : dt);
+  const approachLimit = 90;
+  if (dir === 1) attacker.x = Math.min(attacker.x, goalX - approachLimit);
+  else attacker.x = Math.max(attacker.x, goalX + approachLimit);
+  attacker.x = Math.max(GMB_WALL + attacker.r, Math.min(GMB_FIELD_W - GMB_WALL - attacker.r, attacker.x));
   attacker.y = Math.max(GMB_WALL + attacker.r, Math.min(GMB_FIELD_H - GMB_WALL - attacker.r, attacker.y));
 
-  // Al arquero se lo limita a moverse en la línea del arco (con el dash puede
-  // "lanzarse" un poco más lejos gracias al boost de velocidad del dash).
+  // El arquero ahora tiene física real dentro de una cajita frente al arco
+  // (ya no está pegado a la línea), para poder tapar mejor.
   gmbApplyMovement(keeper, defenderSide, dt);
-  const goalX = attackerSide === "left" ? GMB_GOAL_LINE_X : GMB_FIELD_W - GMB_GOAL_LINE_X;
-  keeper.x = goalX + (keeper.x - goalX) * 0.25; // lo "ata" a la línea, el dash igual lo mueve lateralmente
-  keeper.y = Math.max(GMB_FIELD_H / 2 - GMB_GOAL_HALF - 30, Math.min(GMB_FIELD_H / 2 + GMB_GOAL_HALF + 30, keeper.y));
+  const keeperBoxDepth = 78;
+  const kEdgeA = goalX - dir * keeperBoxDepth;
+  const kEdgeB = goalX + dir * 8;
+  const kMin = Math.min(kEdgeA, kEdgeB), kMax = Math.max(kEdgeA, kEdgeB);
+  keeper.x = Math.max(kMin, Math.min(kMax, keeper.x));
+  keeper.y = Math.max(GMB_FIELD_H / 2 - GMB_GOAL_HALF - 36, Math.min(GMB_FIELD_H / 2 + GMB_GOAL_HALF + 36, keeper.y));
 
   if (gmb.ball.owner === attackerSide) {
-    gmb.ball.x = attacker.x + dir * (attacker.r + gmb.ball.r + 2);
-    gmb.ball.y = attacker.y;
+    // Misma fórmula de "la pelota sigue hacia donde mirás" que la Fase 1,
+    // para que el amague en la corrida se sienta igual de bien.
+    const ball = gmb.ball;
+    const fLen = Math.hypot(attacker.facingX, attacker.facingY) || 1;
+    const tx = attacker.x + (attacker.facingX / fLen) * (attacker.r + ball.r + 3);
+    const ty = attacker.y + (attacker.facingY / fLen) * (attacker.r + ball.r + 3);
+    ball.vx += (tx - ball.x) * 0.05;
+    ball.vy += (ty - ball.y) * 0.05;
+    ball.vx *= 0.94; ball.vy *= 0.94;
+    ball.x += ball.vx * dt; ball.y += ball.vy * dt;
   } else {
     const ball = gmb.ball;
     ball.vx *= 0.995; ball.vy *= 0.995;
