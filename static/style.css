@@ -2211,14 +2211,23 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 .bus-mult-step.done { background: var(--win-green); border-color: var(--win-green); color: #0a2418; }
 
 .bus-hud-potential {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
+  font-family: var(--font-comic);
+  font-size: 20px;
   color: var(--gold-bright);
-  min-height: 14px;
-  text-shadow: 0 0 6px rgba(245, 205, 118, 0.35);
+  min-height: 26px;
+  text-shadow: 0 0 8px rgba(245, 205, 118, 0.4);
 }
 .bus-hud-potential-pop { animation: bus-potential-pop 0.35s ease; }
+.bus-hud-potential-win {
+  color: #6bffb0;
+  text-shadow: 0 0 12px rgba(107, 255, 176, 0.6);
+}
+.bus-hud-potential-loss {
+  color: #ff5f6d;
+  text-shadow: 0 0 12px rgba(255, 95, 109, 0.6);
+  cursor: pointer;
+}
+.bus-hud-potential-loss:hover { transform: scale(1.06); }
 @keyframes bus-potential-pop {
   0% { transform: scale(0.7); opacity: 0.3; }
   100% { transform: scale(1); opacity: 1; }
