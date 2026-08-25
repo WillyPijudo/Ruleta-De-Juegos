@@ -2595,15 +2595,18 @@ function resolveBusRound(card) {
   document.getElementById("busGuessOptions").innerHTML = "";
 
   // Si los dos jugaban esta ronda y los dos erraron -> Mazo nuevo y reinicio de intento
-  if (bothMissedThisRound) {
-    document.getElementById("busGameStatus").textContent = "¡Le erraron todos a esta ronda!";
-    playBuzz();
-    busSetTimeout(() => {
-      document.getElementById("busRestartBanner").classList.remove("hidden");
-      busSetTimeout(startBusAttempt, 1400);
-    }, 400);
-    return;
-  }
+if (bothMissedThisRound) {
+  busGame.leftAlive = false; busGame.leftDone = true; busGame.leftOutcome = "lost"; busGame.leftPayout = 0;
+  busGame.rightAlive = false; busGame.rightDone = true; busGame.rightOutcome = "lost"; busGame.rightPayout = 0;
+  document.getElementById("busGameStatus").textContent = "¡Le erraron todos a esta ronda!";
+  playBuzz();
+  updateBusHudTags();
+  const banner = document.getElementById("busRestartBanner");
+  banner.textContent = "💥 ¡Fallaron los dos pelotudos! Pierden la apuesta — arranca la próxima partida…";
+  banner.classList.remove("hidden");
+  busSetTimeout(settleBusPartida, 1400);
+  return;
+}
 
   // Si erró solo uno -> Queda eliminado definitivamente y el otro continúa
   if (leftGuessed && !leftCorrect) {
@@ -2714,7 +2717,8 @@ function settleBusPartida() {
 }
 
 function advanceBusFlow() {
-  if (busState.currentGameNum >= busState.rounds) {
+  const bothBroke = busState.leftAmount <= 0 && busState.rightAmount <= 0;
+  if (busState.currentGameNum >= busState.rounds || bothBroke) {
     showBusFinalScreen();
     return;
   }
@@ -2920,9 +2924,11 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("busModal").classList.add("hidden");
   });
   document.getElementById("busFinalReplayBtn").addEventListener("click", () => {
-    initBusBankroll();
-    showBusScreen("busBankroll");
-  });
+  busSelectedRounds = null;
+  document.querySelectorAll(".bus-rounds-pill").forEach((p) => p.classList.remove("active"));
+  document.getElementById("busRoundsNextBtn").disabled = true;
+  showBusScreen("busRoundsPick");
+});
   document.getElementById("busFinalExitBtn").addEventListener("click", () => {
     teardownBus();
     document.getElementById("busModal").classList.add("hidden");
