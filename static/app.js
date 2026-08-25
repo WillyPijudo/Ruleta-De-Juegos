@@ -3376,6 +3376,9 @@ const GMB_KNUCKLE_FREQ_MAX = 0.024;    // máximo
 const GMB_CURVE_MAX_ACCEL = 0.045; // fuerza lateral por frame a carga y tecla al 100%
 const GMB_CURVE_MAX_VY = 3.2;      // tope total de desvío — así el arquero siempre tiene chance
 const GMB_SHOOTOUT_TIMEOUT = 15000;  // si la pelota queda pinponeando sin definirse
+const GMB_AIM_MIN_FORWARD = 0.18;   // no te deja apuntar directamente para atrás
+const GMB_AIM_HISTORY_MS = 140;     // ventana de tiempo para medir el "latigazo" de comba
+const GMB_FLICK_CURVE_SCALE = 2.6;  // qué tan sensible es el gesto de comba
 
 let gmb = null;
 let gmbRafId = null;
@@ -3567,7 +3570,7 @@ function startGambetaMatch() {
     left: gmbMakePlayer("left", 110, GMB_FIELD_H / 2, "var(--gold-bright)"),
     right: gmbMakePlayer("right", GMB_FIELD_W - 110, GMB_FIELD_H / 2, "var(--teal-bright)"),
     ball: { x: 0, y: 0, vx: 0, vy: 0, r: GMB_BALL_R, owner: null, lastTouch: null },
-    shoot: { charging: false, chargeStart: 0 },
+    shoot: { charging: false, chargeStart: 0, aimX: 1, aimY: 0, aimHistory: [] },
     shootoutStartedAt: 0,
   };
 
@@ -3713,13 +3716,16 @@ function gmbTryAction(side) {
     gmbDash(side);
   } else if (gmb.phase === "shootout") {
     if (side === gmb.attackerSide) {
+      const dir = side === "left" ? 1 : -1;
       gmb.shoot.charging = true;
       gmb.shoot.chargeStart = now;
+      gmb.shoot.aimX = dir; gmb.shoot.aimY = 0;
+      gmb.shoot.aimHistory = [{ t: now, x: dir, y: 0 }];
+      player.vx = 0; player.vy = 0; // plantás los pies: ahora el input es 100% puntería
     } else {
       gmbDash(side); // lunge del arquero
     }
   }
-}
 function gmbReleaseAction(side) {
   if (!gmb || gmb.phase !== "shootout" || side !== gmb.attackerSide) return;
   if (gmb.shoot.charging) gmbFireShot();
@@ -3776,6 +3782,23 @@ function gmbApplyMovement(player, side, dt) {
   if (!player.trail) player.trail = [];
   if (dashing) player.trail.push({ x: player.x, y: player.y, t: now });
   if (player.trail.length) player.trail = player.trail.filter((pt) => now - pt.t < 280);
+}
+
+
+function gmbUpdateAim(side) {
+  const dir = side === "left" ? 1 : -1;
+  const { dx, dy } = gmbInputVector(side);
+  let ax = dx, ay = dy;
+  if (ax === 0 && ay === 0) { ax = gmb.shoot.aimX; ay = gmb.shoot.aimY; } // sin input, mantiene la última puntería
+  if (ax * dir < GMB_AIM_MIN_FORWARD) ax = GMB_AIM_MIN_FORWARD * dir; // nunca apunta para atrás
+  const len = Math.hypot(ax, ay) || 1;
+  gmb.shoot.aimX = ax / len; gmb.shoot.aimY = ay / len;
+
+  const now = performance.now();
+  gmb.shoot.aimHistory.push({ t: now, x: gmb.shoot.aimX, y: gmb.shoot.aimY });
+  while (gmb.shoot.aimHistory.length > 1 && now - gmb.shoot.aimHistory[0].t > GMB_AIM_HISTORY_MS) {
+    gmb.shoot.aimHistory.shift();
+  }
 }
 
 function gmbClampToField(player, minX, maxX) {
@@ -3943,7 +3966,7 @@ function gmbStartShootout() {
 
   gmb.ball.x = attacker.x + dir * 22; gmb.ball.y = attacker.y;
   gmb.ball.vx = 0; gmb.ball.vy = 0; gmb.ball.owner = attackerSide;
-  gmb.shoot.charging = false;
+  gmb.shoot = { charging: false, chargeStart: 0, aimX: dir, aimY: 0, aimHistory: [] };
 
   gmb.phase = "shootout";
   gmb.shootoutStartedAt = performance.now();
@@ -3957,27 +3980,32 @@ function gmbFireShot() {
   gmb.shoot.charging = false;
   const attacker = gmb[gmb.attackerSide];
   const dir = gmb.attackerSide === "left" ? 1 : -1;
-  const { dx, dy } = gmbInputVector(gmb.attackerSide);
+
+  const aimX = gmb.shoot.aimX, aimY = gmb.shoot.aimY;
   const speed = GMB_SHOOT_BASE_SPEED + charge * GMB_SHOOT_BONUS_SPEED;
-  const angle = dy * 0.55; // apunta arriba/abajo según input vertical al momento de patear
-  const len = Math.hypot(1, angle) || 1;
   gmb.ball.owner = null;
-  gmb.ball.vx = (dir / len) * speed;
-  gmb.ball.vy = (angle / len) * speed;
+  gmb.ball.vx = aimX * speed;
+  gmb.ball.vy = aimY * speed;
   gmb.ball.x = attacker.x + dir * (attacker.r + gmb.ball.r + 2);
   gmb.kickBurst = { x: gmb.ball.x, y: gmb.ball.y, t: now };
 
-  // NUEVO: comba — mantener ← o → al soltar el remate curva la pelota en vuelo.
-  // Fuerza escalada por la carga, con tope duro para que siga siendo atajable.
-  gmb.ball.hasCurve = dx !== 0;
-  const curveVariance = 0.85 + Math.random() * 0.4; // 0.85x a 1.25x — no siempre dobla igual
-  gmb.ball.curveAccel = -dx * charge * GMB_CURVE_MAX_ACCEL * curveVariance;
+  // Comba por LATIGAZO: comparamos hacia dónde apuntabas hace ~140ms contra
+  // hacia dónde apuntás justo al soltar. Si giraste la puntería en el último
+  // instante, ese giro se convierte en rosca — es un gesto, no una tecla que
+  // compite con el movimiento.
+  const hist = gmb.shoot.aimHistory;
+  const past = hist.length ? hist[0] : { x: aimX, y: aimY };
+  const cross = past.x * aimY - past.y * aimX; // de qué lado giraste
+  const flick = Math.max(-1, Math.min(1, cross * GMB_FLICK_CURVE_SCALE));
+
+  const curveVariance = 0.85 + Math.random() * 0.4;
+  gmb.ball.hasCurve = Math.abs(flick) > 0.04;
+  gmb.ball.curveAccel = flick * charge * GMB_CURVE_MAX_ACCEL * curveVariance;
   gmb.ball.curveApplied = 0;
-  // Comba "knuckle": baile errático con fase y frecuencia random en cada
-  // tiro, así ni el arquero (¡ni vos!) la lee igual dos veces.
+
   gmb.ball.knuckleSeed = Math.random() * Math.PI * 2;
   gmb.ball.knuckleFreq = GMB_KNUCKLE_FREQ_MIN + Math.random() * (GMB_KNUCKLE_FREQ_MAX - GMB_KNUCKLE_FREQ_MIN);
-  gmb.ball.knuckleAmp = GMB_KNUCKLE_AMPLITUDE * (0.6 + charge * 0.8); // más carga = más baile
+  gmb.ball.knuckleAmp = GMB_KNUCKLE_AMPLITUDE * (0.6 + charge * 0.8);
   gmb.ball.shotAt = now;
 
   busPlaySound("/static/audio/kickball.wav", 0.6);
@@ -3992,7 +4020,8 @@ function gmbUpdateShootout(dt, ts) {
   // El atacante corre casi tan libre como en la Fase 1 (para poder amagar),
   // solo se lo frena a la mitad al cargar el remate, y no puede caminar el
   // gol: hay una distancia mínima obligatoria al arco.
-  gmbApplyMovement(attacker, attackerSide, gmb.shoot.charging ? dt * 0.5 : dt);
+  if (gmb.shoot.charging) gmbUpdateAim(attackerSide);
+  else gmbApplyMovement(attacker, attackerSide, dt);
   const approachLimit = 90;
   if (dir === 1) attacker.x = Math.min(attacker.x, goalX - approachLimit);
   else attacker.x = Math.max(attacker.x, goalX + approachLimit);
@@ -4343,16 +4372,27 @@ function gmbDrawChargeArrow(ctx, ts) {
   const now = performance.now();
   const charge = Math.min(now - gmb.shoot.chargeStart, GMB_SHOOT_MAX_CHARGE) / GMB_SHOOT_MAX_CHARGE;
   const attacker = gmb[gmb.attackerSide];
-  const dir = gmb.attackerSide === "left" ? 1 : -1;
+  const aimX = gmb.shoot.aimX, aimY = gmb.shoot.aimY;
   const len = 20 + charge * 46;
   ctx.save();
   ctx.strokeStyle = `rgba(245, 205, 118, ${0.5 + charge * 0.5})`;
   ctx.lineWidth = 4 + charge * 4;
   ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(attacker.x + dir * (attacker.r + 6), attacker.y);
-  ctx.lineTo(attacker.x + dir * (attacker.r + 6 + len), attacker.y);
+  ctx.moveTo(attacker.x + aimX * (attacker.r + 6), attacker.y + aimY * (attacker.r + 6));
+  ctx.lineTo(attacker.x + aimX * (attacker.r + 6 + len), attacker.y + aimY * (attacker.r + 6 + len));
   ctx.stroke();
+
+  const tipX = attacker.x + aimX * (attacker.r + 6 + len);
+  const tipY = attacker.y + aimY * (attacker.r + 6 + len);
+  const ang = Math.atan2(aimY, aimX);
+  ctx.beginPath();
+  ctx.moveTo(tipX, tipY);
+  ctx.lineTo(tipX - Math.cos(ang - 0.4) * 10, tipY - Math.sin(ang - 0.4) * 10);
+  ctx.lineTo(tipX - Math.cos(ang + 0.4) * 10, tipY - Math.sin(ang + 0.4) * 10);
+  ctx.closePath();
+  ctx.fillStyle = `rgba(245, 205, 118, ${0.6 + charge * 0.4})`;
+  ctx.fill();
   ctx.restore();
 }
 
