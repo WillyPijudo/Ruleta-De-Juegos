@@ -2497,6 +2497,25 @@ function busHudTagInfo(side) {
   return alive ? { text: "En juego", cls: "" } : { text: "Afuera (este intento)", cls: "bus-hud-tag-out" };
 }
 
+function animateBusPotentialCounter(el, fromVal, toVal, prefix, isLoss) {
+  el.classList.remove("bus-hud-potential-win", "bus-hud-potential-loss");
+  let ticks = 0;
+  const totalTicks = 14;
+  clearInterval(el._busCounterTimer);
+  el._busCounterTimer = setInterval(() => {
+    ticks++;
+    if (ticks >= totalTicks) {
+      clearInterval(el._busCounterTimer);
+      el.textContent = `${prefix}$${Math.abs(toVal)} ${isLoss ? "💸" : "🎉"}`;
+      el.classList.add(isLoss ? "bus-hud-potential-loss" : "bus-hud-potential-win");
+      return;
+    }
+    const fake = Math.round((fromVal + (toVal - fromVal) * (ticks / totalTicks)) / 10) * 10;
+    el.textContent = `${prefix}$${Math.abs(fake)}`;
+    playTick();
+  }, 55);
+}
+
 function updateBusHudTags() {
   ["left", "right"].forEach((side) => {
     const el = document.getElementById(side === "left" ? "busHudLeftTag" : "busHudRightTag");
@@ -2521,7 +2540,11 @@ function updateBusHudTags() {
     } else if (done) {
       const outcome = side === "left" ? busGame.leftOutcome : busGame.rightOutcome;
       const payout = side === "left" ? busGame.leftPayout : busGame.rightPayout;
-      potentialEl.textContent = outcome === "lost" ? `-$${bet} 💸` : `+$${payout} 🎉`;
+      if (outcome === "lost") {
+        animateBusPotentialCounter(potentialEl, 0, bet, "-", true);
+      } else {
+        animateBusPotentialCounter(potentialEl, 0, payout, "+", false);
+      }
     } else if (alive) {
       const mult = busGame.round >= 2 ? BUS_CUMULATIVE_MULT[busGame.round - 1] : 1;
       potentialEl.textContent =
@@ -3212,6 +3235,15 @@ document.addEventListener("DOMContentLoaded", () => {
       pill.classList.add("active");
       busSelectedRounds = parseInt(pill.dataset.rounds, 10);
       document.getElementById("busRoundsNextBtn").disabled = false;
+    });
+  });
+
+  ["busHudPotentialLeft", "busHudPotentialRight"].forEach((id) => {
+    const el = document.getElementById(id);
+    el.addEventListener("mouseenter", () => {
+      if (el.classList.contains("bus-hud-potential-loss")) {
+        busPlaySound("/static/audio/troll-laugh.mp3", 0.6);
+      }
     });
   });
 
