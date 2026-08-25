@@ -618,7 +618,7 @@ function launchMoneyRain() {
     const piece = document.createElement("img");
     piece.src = "/static/img/cards/money.png";
     piece.className = "confetti-piece money-piece";
-    const size = 26 + Math.random() * 18;
+    const size = 34 + Math.random() * 22;
     piece.style.width = size + "px";
     piece.style.left = Math.random() * 100 + "vw";
     const duration = 2.4 + Math.random() * 1.8;
