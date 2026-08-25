@@ -3375,7 +3375,7 @@ const GMB_KNUCKLE_FREQ_MIN = 0.012;    // qué tan rápido oscila, mínimo
 const GMB_KNUCKLE_FREQ_MAX = 0.024;    // máximo
 const GMB_CURVE_MAX_ACCEL = 0.045; // fuerza lateral por frame a carga y tecla al 100%
 const GMB_CURVE_MAX_VY = 3.2;      // tope total de desvío — así el arquero siempre tiene chance
-const GMB_SHOOTOUT_TIMEOUT = 11000;  // si la pelota queda pinponeando sin definirse
+const GMB_SHOOTOUT_TIMEOUT = 15000;  // si la pelota queda pinponeando sin definirse
 
 let gmb = null;
 let gmbRafId = null;
