@@ -3352,7 +3352,8 @@ const GMB_BALL_R = 9;
 const GMB_MAX_SPEED = 4.4;
 const GMB_ACCEL = 0.55;
 const GMB_FRICTION = 0.90;
-const GMB_DASH_COOLDOWN = 4000;     // ms — pedido: 3-5s
+const GMB_DASH_COOLDOWN = 3400;     // un poco más rápido para todos
+const GMB_DASH_BALLCARRIER_PENALTY = 550; // el que tiene la pelota tarda un toque más en recargar
 const GMB_DASH_DURATION = 150;      // ms de impulso
 const GMB_DASH_POWER = 8.5;
 const GMB_DASH_MAXSPEED = 9.5;      // tope de velocidad SOLO mientras dashea
@@ -3362,11 +3363,15 @@ const GMB_PHASE1_TIME = 30000;      // shot clock fase 1 (ms) - default, lo pisa
 let gmbSelectedDuration = GMB_PHASE1_TIME;
 const GMB_ATTACK_ZONE_X = GMB_FIELD_W - 70;   // el atacante debe llegar acá con la pelota
 const GMB_STEAL_BACK_X = 70;                  // si el defensor se la roba y llega acá, gana él
-const GMB_GOAL_HALF = 80;           // medio ancho del arco (mouth)
+const GMB_GOAL_HALF = 104;          // medio ancho del arco (mouth) — más grande para compensar el dash del arquero
+const GMB_POST_R = 7;               // radio visual y físico de los palos
 const GMB_GOAL_LINE_X = GMB_FIELD_W - 34;
 const GMB_SHOOT_MAX_CHARGE = 850;   // ms de carga máxima del remate
-const GMB_SHOOT_BASE_SPEED = 7.4;
-const GMB_SHOOT_BONUS_SPEED = 9;
+const GMB_SHOOT_BASE_SPEED = 7.9;
+const GMB_SHOOT_BONUS_SPEED = 9.6;
+const GMB_KNUCKLE_AMPLITUDE = 0.028;   // fuerza del "baile" errático
+const GMB_KNUCKLE_FREQ_MIN = 0.012;    // qué tan rápido oscila, mínimo
+const GMB_KNUCKLE_FREQ_MAX = 0.024;    // máximo
 const GMB_CURVE_MAX_ACCEL = 0.045; // fuerza lateral por frame a carga y tecla al 100%
 const GMB_CURVE_MAX_VY = 3.2;      // tope total de desvío — así el arquero siempre tiene chance
 const GMB_SHOOTOUT_TIMEOUT = 11000;  // si la pelota queda pinponeando sin definirse
@@ -3729,7 +3734,8 @@ function gmbDash(side) {
   player.vx += (dirX / len) * GMB_DASH_POWER;
   player.vy += (dirY / len) * GMB_DASH_POWER;
   player.dashingUntil = now + GMB_DASH_DURATION;
-  player.dashReadyAt = now + GMB_DASH_COOLDOWN;
+  const hasBall = gmb.ball && gmb.ball.owner === side;
+  player.dashReadyAt = now + GMB_DASH_COOLDOWN + (hasBall ? GMB_DASH_BALLCARRIER_PENALTY : 0);
   player.dashTrailAt = now;
   busPlaySound("/static/audio/dash.wav", 0.55);
 }
@@ -3962,8 +3968,15 @@ function gmbFireShot() {
   // NUEVO: comba — mantener ← o → al soltar el remate curva la pelota en vuelo.
   // Fuerza escalada por la carga, con tope duro para que siga siendo atajable.
   gmb.ball.hasCurve = dx !== 0;
-  gmb.ball.curveAccel = -dx * charge * GMB_CURVE_MAX_ACCEL;
+  const curveVariance = 0.85 + Math.random() * 0.4; // 0.85x a 1.25x — no siempre dobla igual
+  gmb.ball.curveAccel = -dx * charge * GMB_CURVE_MAX_ACCEL * curveVariance;
   gmb.ball.curveApplied = 0;
+  // Comba "knuckle": baile errático con fase y frecuencia random en cada
+  // tiro, así ni el arquero (¡ni vos!) la lee igual dos veces.
+  gmb.ball.knuckleSeed = Math.random() * Math.PI * 2;
+  gmb.ball.knuckleFreq = GMB_KNUCKLE_FREQ_MIN + Math.random() * (GMB_KNUCKLE_FREQ_MAX - GMB_KNUCKLE_FREQ_MIN);
+  gmb.ball.knuckleAmp = GMB_KNUCKLE_AMPLITUDE * (0.6 + charge * 0.8); // más carga = más baile
+  gmb.ball.shotAt = now;
 
   busPlaySound("/static/audio/kickball.wav", 0.6);
 }
@@ -4023,6 +4036,10 @@ function gmbUpdateShootout(dt, ts) {
       ball.vy += step;
       ball.curveApplied += step;
     }
+    if (ball.knuckleAmp) {
+      const elapsed = ts - ball.shotAt;
+      ball.vy += Math.sin(elapsed * ball.knuckleFreq + ball.knuckleSeed) * ball.knuckleAmp * dt;
+    }
 
     ball.vx *= 0.995; ball.vy *= 0.995;
     ball.x += ball.vx * dt; ball.y += ball.vy * dt;
@@ -4031,7 +4048,7 @@ function gmbUpdateShootout(dt, ts) {
 
     // Palos (dos círculos fijos en las puntas del arco)
     [-1, 1].forEach((sgn) => {
-      const post = { x: goalX, y: GMB_FIELD_H / 2 + sgn * GMB_GOAL_HALF, r: 5 };
+      const post = { x: goalX, y: GMB_FIELD_H / 2 + sgn * GMB_GOAL_HALF, r: GMB_POST_R };
       const d = Math.hypot(ball.x - post.x, ball.y - post.y);
       if (d < post.r + ball.r) {
         const nx = (ball.x - post.x) / d, ny = (ball.y - post.y) / d;
@@ -4268,32 +4285,46 @@ function gmbDrawGoal(ctx) {
   const dir = attackerSide === "left" ? 1 : -1;
   const goalX = attackerSide === "left" ? GMB_GOAL_LINE_X : GMB_FIELD_W - GMB_GOAL_LINE_X;
   const topY = GMB_FIELD_H / 2 - GMB_GOAL_HALF, botY = GMB_FIELD_H / 2 + GMB_GOAL_HALF;
-  const netDepth = 26 * dir;
+  const bulge = 40 * dir; // cuánto se infla el arco hacia afuera, estilo Haxball
 
-  // Red (crosshatch)
+  // Red: la "panza" del arco es una sola curva del palo de arriba al de abajo
   ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(goalX, topY);
+  ctx.quadraticCurveTo(goalX + bulge, GMB_FIELD_H / 2, goalX, botY);
+  ctx.lineTo(goalX, topY);
+  ctx.closePath();
+  ctx.clip();
   ctx.strokeStyle = "rgba(255,255,255,0.35)";
   ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.rect(Math.min(goalX, goalX + netDepth), topY, Math.abs(netDepth), botY - topY);
-  ctx.clip();
   for (let i = -6; i <= 6; i++) {
     ctx.beginPath(); ctx.moveTo(goalX + i * 8, topY - 20); ctx.lineTo(goalX + i * 8, botY + 20); ctx.stroke();
   }
-  for (let j = 0; j <= 12; j++) {
-    ctx.beginPath(); ctx.moveTo(goalX - 40, topY + j * 8); ctx.lineTo(goalX + 40, topY + j * 8); ctx.stroke();
+  for (let j = 0; j <= 16; j++) {
+    ctx.beginPath(); ctx.moveTo(goalX - 50, topY + j * 8); ctx.lineTo(goalX + 50, topY + j * 8); ctx.stroke();
   }
   ctx.restore();
 
-  // Línea de gol
+  // El arco en sí: una sola curva estilo Haxball, de palo a palo
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(goalX, topY);
+  ctx.quadraticCurveTo(goalX + bulge, GMB_FIELD_H / 2, goalX, botY);
   ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 4;
+  ctx.lineCap = "round";
+  ctx.stroke();
+  ctx.restore();
+
+  // Línea de gol (la que define si entró o no)
+  ctx.strokeStyle = "rgba(255,255,255,0.85)";
   ctx.lineWidth = 3;
   ctx.beginPath(); ctx.moveTo(goalX, topY); ctx.lineTo(goalX, botY); ctx.stroke();
 
   // Palos
   [topY, botY].forEach((y) => {
     ctx.beginPath();
-    ctx.arc(goalX, y, 5, 0, Math.PI * 2);
+    ctx.arc(goalX, y, GMB_POST_R, 0, Math.PI * 2);
     ctx.fillStyle = "#fff";
     ctx.fill();
     ctx.strokeStyle = "rgba(0,0,0,0.3)";
@@ -4371,16 +4402,63 @@ function gmbDrawBall(ctx) {
     });
     ctx.restore();
   }
+
+  // Sombra en el piso, le da volumen
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(b.x, b.y + b.r * 0.75, b.r * 0.9, b.r * 0.35, 0, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  ctx.fill();
+  ctx.restore();
+
   ctx.save();
   ctx.beginPath();
   ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-  ctx.fillStyle = "#f4f1e8";
+  ctx.clip();
+
+  // Esfera con degradé (luz arriba-izq, sombra abajo-der)
+  const grad = ctx.createRadialGradient(
+    b.x - b.r * 0.4, b.y - b.r * 0.45, b.r * 0.15,
+    b.x, b.y, b.r * 1.15
+  );
+  grad.addColorStop(0, "#ffffff");
+  grad.addColorStop(0.55, "#f2efe4");
+  grad.addColorStop(1, "#cfc9b8");
+  ctx.fillStyle = grad;
+  ctx.fillRect(b.x - b.r, b.y - b.r, b.r * 2, b.r * 2);
+
+  // Gajos tipo pelota de fútbol, "rotando" según la posición (efecto de
+  // rodar sin trackear spin real, así queda liviano)
+  const rot = b.x * 0.05 + b.y * 0.05;
+  ctx.translate(b.x, b.y);
+  ctx.rotate(rot);
+  ctx.fillStyle = "rgba(20,18,14,0.85)";
+  for (let i = 0; i < 5; i++) {
+    const ang = (i / 5) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, b.r * 0.62, ang - 0.26, ang + 0.26);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.arc(0, 0, b.r * 0.24, 0, Math.PI * 2);
   ctx.fill();
-  ctx.lineWidth = 1.5;
-  ctx.strokeStyle = "rgba(0,0,0,0.5)";
+  ctx.rotate(-rot);
+  ctx.translate(-b.x, -b.y);
+  ctx.restore();
+
+  // Borde y brillo
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = "rgba(0,0,0,0.45)";
   ctx.stroke();
-  ctx.fillStyle = "rgba(0,0,0,0.55)";
-  ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.32, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  ctx.arc(b.x - b.r * 0.32, b.y - b.r * 0.35, b.r * 0.22, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255,255,255,0.7)";
+  ctx.fill();
   ctx.restore();
 }
 
