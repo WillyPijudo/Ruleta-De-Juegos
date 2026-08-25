@@ -4105,20 +4105,6 @@ function gmbFinishTanda(side, flavor) {
   playFanfare();
 }
 
-  gmbSetTimeout(() => {
-    document.getElementById("gambetaPlay").classList.add("hidden");
-    document.getElementById("gambetaResult").classList.remove("hidden");
-    document.getElementById("gambetaResultTitle").textContent =
-      winnerKind === "shooterWin" ? "🏆 ¡GOLAZO!" : (winnerKind === "keeperWin" && reason === "atajada") ? "🧤 ¡Atajada!" : "🛡️ ¡Se lo bancó!";
-    const resultEl = document.getElementById("gambetaResultText");
-    resultEl.classList.remove("show");
-    resolveDuelResult(resultEl, side, REASON_MSG[reason] || "");
-    if (winnerKind === "shooterWin") { launchConfetti(); playFanfare(); }
-    else if (winnerKind === "keeperWin") { playFanfare(); }
-    else { playBuzz(); }
-  }, 250);
-}
-
 /* ===================== Gambeta 1v1 — dibujo, HUD, táctil ===================== */
 
 function gmbSetPhaseLabel(text) {
