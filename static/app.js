@@ -2825,6 +2825,10 @@ function settleBusPartida() {
     rightTotal: busState.rightAmount,
     leftOutcome: busGame.leftPlaying ? busGame.leftOutcome : "sin-fondos",
     rightOutcome: busGame.rightPlaying ? busGame.rightOutcome : "sin-fondos",
+    leftBet: busGame.leftPlaying ? busGame.betLeft : 0,
+    rightBet: busGame.rightPlaying ? busGame.betRight : 0,
+    leftNet: leftNet,
+    rightNet: rightNet,
   });
 
   const leftLine = busGame.leftPlaying
@@ -2930,11 +2934,15 @@ function renderBusFinalChart() {
     return el;
   };
 
-  // Ejes
+  // Fondo tipo paño de mesa
+  svg.appendChild(svgEl("rect", {
+    x: marginLeft - 10, y: marginTop - 6, width: plotW + 20, height: plotH + 14,
+    rx: 10, class: "bus-chart-plot-bg",
+  }));
+
   svg.appendChild(svgEl("line", { x1: marginLeft, y1: marginTop, x2: marginLeft, y2: marginTop + plotH, class: "bus-chart-axis" }));
   svg.appendChild(svgEl("line", { x1: marginLeft, y1: marginTop + plotH, x2: marginLeft + plotW, y2: marginTop + plotH, class: "bus-chart-axis" }));
 
-  // Etiquetas de valores mínimo/máximo en el eje Y
   [minV, maxV].forEach((v) => {
     const t = svgEl("text", {
       x: marginLeft - 8,
@@ -2946,7 +2954,6 @@ function renderBusFinalChart() {
     svg.appendChild(t);
   });
 
-  // Etiquetas de partida en el eje X (P0, P1, P2…)
   history.forEach((h, i) => {
     const t = svgEl("text", {
       x: xAt(i),
@@ -2958,7 +2965,6 @@ function renderBusFinalChart() {
     svg.appendChild(t);
   });
 
-  // Líneas (dorada = Campeón, celeste = Retador)
   const buildLine = (key, cls) => {
     const d = history
       .map((h, i) => `${i === 0 ? "M" : "L"} ${xAt(i).toFixed(1)},${yAt(h[key]).toFixed(1)}`)
@@ -2970,26 +2976,96 @@ function renderBusFinalChart() {
   const leftPath = buildLine("leftTotal", "bus-chart-line bus-chart-line-left");
   const rightPath = buildLine("rightTotal", "bus-chart-line bus-chart-line-right");
 
-  // Puntitos por partida
-  const addDots = (key, cls) => {
-    history.forEach((h, i) => {
-      svg.appendChild(svgEl("circle", { cx: xAt(i), cy: yAt(h[key]), r: 3.2, class: cls }));
-    });
-  };
-  addDots("leftTotal", "bus-chart-dot bus-chart-dot-left");
-  addDots("rightTotal", "bus-chart-dot bus-chart-dot-right");
+  // Caritas con el resultado de cada partida (reemplaza los puntos lisos de antes)
+  const buildFace = (h, i, key, betKey, netKey) => {
+    const net = h[netKey] || 0;
+    const isWin = net > 0;
+    const cx = xAt(i), cy = yAt(h[key]);
+    const g = svgEl("g", { class: `bus-chart-face ${isWin ? "is-win" : "is-loss"}` });
 
-  // Animación de trazado con stroke-dashoffset
+    g.appendChild(svgEl("circle", { cx, cy, r: 15, class: "bus-chart-face-hit" }));
+    g.appendChild(svgEl("circle", { cx, cy, r: 7, class: "bus-chart-face-base" }));
+    g.appendChild(svgEl("circle", { cx: cx - 2.4, cy: cy - 1.5, r: 1, class: "bus-chart-face-eye" }));
+    g.appendChild(svgEl("circle", { cx: cx + 2.4, cy: cy - 1.5, r: 1, class: "bus-chart-face-eye" }));
+    const mouthD = isWin
+      ? `M ${(cx - 3).toFixed(1)},${(cy + 1.5).toFixed(1)} Q ${cx.toFixed(1)},${(cy + 5).toFixed(1)} ${(cx + 3).toFixed(1)},${(cy + 1.5).toFixed(1)}`
+      : `M ${(cx - 3).toFixed(1)},${(cy + 3).toFixed(1)} Q ${cx.toFixed(1)},${(cy - 0.5).toFixed(1)} ${(cx + 3).toFixed(1)},${(cy + 3).toFixed(1)}`;
+    g.appendChild(svgEl("path", { d: mouthD, class: "bus-chart-face-mouth" }));
+
+    const bubbleY = Math.max(cy - 30, marginTop + 16);
+    const tooltip = svgEl("g", { class: "bus-chart-tooltip" });
+    tooltip.appendChild(svgEl("rect", { x: cx - 38, y: bubbleY - 16, width: 76, height: 30, rx: 9, class: "bus-chart-tooltip-bg" }));
+    const betText = svgEl("text", { x: cx, y: bubbleY - 4, class: "bus-chart-tooltip-bet", "text-anchor": "middle" });
+    betText.textContent = "Apostó $" + (h[betKey] || 0);
+    const resultText = svgEl("text", {
+      x: cx, y: bubbleY + 10,
+      class: `bus-chart-tooltip-result ${isWin ? "win" : "loss"}`,
+      "text-anchor": "middle",
+    });
+    resultText.textContent = isWin ? `+$${net} 🎉` : `-$${Math.abs(net)} 💸`;
+    tooltip.appendChild(betText);
+    tooltip.appendChild(resultText);
+    g.appendChild(tooltip);
+
+    g.addEventListener("mouseenter", () => {
+      if (isWin) playCashRegister(); else playTrollLaugh();
+    });
+
+    return g;
+  };
+
+  const faceGroups = [];
+  history.forEach((h, i) => {
+    if (i === 0) return; // el punto de arranque no es "resultado de una partida"
+    const leftFace = buildFace(h, i, "leftTotal", "leftBet", "leftNet");
+    const rightFace = buildFace(h, i, "rightTotal", "rightBet", "rightNet");
+    svg.appendChild(leftFace);
+    svg.appendChild(rightFace);
+    faceGroups.push({ g: leftFace, i }, { g: rightFace, i });
+  });
+
+  const drawDuration = 1100;
   [leftPath, rightPath].forEach((path) => {
     const len = path.getTotalLength();
     path.style.strokeDasharray = String(len);
     path.style.strokeDashoffset = String(len);
-    void path.getBoundingClientRect(); // fuerza reflow antes de animar
+    void path.getBoundingClientRect();
     requestAnimationFrame(() => {
-      path.style.transition = "stroke-dashoffset 1.1s ease";
+      path.style.transition = `stroke-dashoffset ${drawDuration}ms ease`;
       path.style.strokeDashoffset = "0";
     });
   });
+
+  // Las caritas van "apareciendo" a medida que la línea las alcanza, con un honk en cada una
+  const stepCount = history.length - 1;
+  let honked = {};
+  faceGroups.forEach(({ g, i }) => {
+    const delay = stepCount > 0 ? (i / stepCount) * drawDuration : 0;
+    busSetTimeout(() => {
+      g.classList.add("revealed");
+      if (!honked[i]) { honked[i] = true; playHonk(); }
+    }, delay);
+  });
+}
+
+function playHonk() {
+  if (!soundEnabled) return;
+  const ctx = getAudioCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(220, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(140, ctx.currentTime + 0.12);
+  gain.gain.setValueAtTime(0.16, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.16);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + 0.18);
+}
+
+function playTrollLaugh() {
+  if (!soundEnabled) return;
+  busPlaySound("/static/audio/troll-laugh.mp3", 0.6);
 }
 
 // Tope de apuesta: el menor entre $1000 y el 50% de lo que tiene el que va ganando
@@ -3259,6 +3335,7 @@ const GMB_DASH_DURATION = 150;      // ms de impulso
 const GMB_DASH_POWER = 8.5;
 const GMB_DASH_MAXSPEED = 9.5;      // tope de velocidad SOLO mientras dashea
 const GMB_KICK_POWER = 14;         // impulso que recibe la PELOTA cuando el atacante patea (fase 1)
+const GMB_KICK_IMMUNITY_MS = 380;  // el que pateó no puede "readueñarse" de la pelota por cercanía durante este ratito
 const GMB_PHASE1_TIME = 30000;      // shot clock fase 1 (ms) - default, lo pisa gmbSelectedDuration
 let gmbSelectedDuration = GMB_PHASE1_TIME;
 const GMB_ATTACK_ZONE_X = GMB_FIELD_W - 70;   // el atacante debe llegar acá con la pelota
@@ -3518,7 +3595,7 @@ function gmbOnKeyUp(e) {
    la Fase 1. Así queda libre para dribblar seguido, y el dash queda
    exclusivamente para el impulso/lunge de siempre. */
 function gmbTryKick(side) {
-  if (!gmb || gmb.phase !== "dribble" || side !== gmb.attackerSide) return;
+  if (!gmb || gmb.phase !== "dribble") return;
   if (gmb.ball.owner !== side) { playTick(); return; }
   const player = gmb[side];
   const { dx, dy } = gmbInputVector(side);
@@ -3529,6 +3606,8 @@ function gmbTryKick(side) {
   ball.vx += (dirX / len) * GMB_KICK_POWER;
   ball.vy += (dirY / len) * GMB_KICK_POWER;
   ball.owner = null;
+  ball.kickedBy = side;
+  ball.kickImmuneUntil = performance.now() + GMB_KICK_IMMUNITY_MS;
   gmb.kickBurst = { x: ball.x, y: ball.y, t: performance.now() };
   busPlaySound("/static/audio/kickball.wav", 0.55);
 }
@@ -3685,6 +3764,7 @@ function gmbUpdateDribble(dt, ts) {
     if (dist >= minDist + 3) return;
 
     if (ball.owner === null) {
+      if (side === ball.kickedBy && performance.now() < ball.kickImmuneUntil) return;
       ball.owner = side;
     } else if (ball.owner !== side) {
       const mySpeed = Math.hypot(p.vx, p.vy);
@@ -3734,7 +3814,7 @@ function gmbUpdateDribble(dt, ts) {
   const attackerPast = attackerGoalDir * attacker.x >= attackerGoalDir * attackerTargetX;
   const ballPast = attackerGoalDir * ball.x >= attackerGoalDir * attackerTargetX;
 
-  if (attackerPast && ballPast) {
+  if (attackerPast && ballPast && ball.owner === gmb.attackerSide) {
     gmbStartTransition();
   } else if (ball.owner === gmb.defenderSide && attackerGoalDir * defender.x <= attackerGoalDir * stealBackX) {
     gmbFinish("defenderWin", "robo");
