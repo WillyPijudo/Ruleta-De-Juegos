@@ -611,6 +611,24 @@ function launchConfetti() {
   }
 }
 
+function launchMoneyRain() {
+  const layer = document.getElementById("confettiLayer");
+  const count = 40;
+  for (let i = 0; i < count; i++) {
+    const piece = document.createElement("img");
+    piece.src = "/static/img/cards/money.png";
+    piece.className = "confetti-piece money-piece";
+    const size = 26 + Math.random() * 18;
+    piece.style.width = size + "px";
+    piece.style.left = Math.random() * 100 + "vw";
+    const duration = 2.4 + Math.random() * 1.8;
+    piece.style.animationDuration = duration + "s";
+    piece.style.animationDelay = Math.random() * 0.5 + "s";
+    layer.appendChild(piece);
+    setTimeout(() => piece.remove(), (duration + 0.6) * 1000);
+  }
+}
+
 /* ---------------- spin logic ----------------
    Instead of handing a CSS transition a start/end angle and walking
    away, we drive the rotation ourselves frame by frame. That lets us:
@@ -2121,6 +2139,10 @@ function buildChipStackEl(row, col, count, badgeExtra) {
 function renderChipPile(containerId, side, amount) {
   const container = document.getElementById(containerId);
   if (!container) return;
+  const prevAmount = parseFloat(container.dataset.prevAmount || "0");
+  const grew = amount > prevAmount;
+  const changed = amount !== prevAmount;
+  container.dataset.prevAmount = String(amount);
   container.innerHTML = "";
   const { row, colOffset } = BUS_CHIP_COLOR[side];
   const counts = busChipBreakdown(amount);
@@ -2143,9 +2165,22 @@ function renderChipPile(containerId, side, amount) {
     }
   });
 
-  container.classList.toggle("bus-chip-pile-empty", !anyChip);
-}
+  // Escalonamos la caída de todas las fichas del contenedor
+  container.querySelectorAll(".bus-chip-pile-piece").forEach((piece, idx) => {
+    piece.style.animationDelay = `${idx * 30}ms`;
+  });
 
+  container.classList.toggle("bus-chip-pile-empty", !anyChip);
+
+  if (changed && anyChip) {
+    container.classList.remove("bus-chip-pile-pulse");
+    void container.offsetWidth;
+    container.classList.add("bus-chip-pile-pulse");
+  }
+  if (grew) {
+    busPlaySound("/static/audio/Poker_chips5.wav", 0.45);
+  }
+}
 function randomBankroll() {
   return Math.round((100 + Math.random() * 900) / 10) * 10;
 }
@@ -2235,8 +2270,10 @@ function initBusBankroll() {
     rightAmount: 0,
     leftRolled: false,
     rightRolled: false,
-    ticketUsed: false,        // NUEVO
-    ticketAvailableFor: null, // NUEVO: "left" | "right" | null
+    ticketUsed: false,
+    ticketAvailableFor: null,
+    leftStreak: 0,   
+    rightStreak: 0,  
   };
   busBetState = { leftHetero: false, rightHetero: false }; // NUEVO
   document.getElementById("busWalletLeftName").textContent = championName;
@@ -2325,6 +2362,17 @@ function busPlaySound(path, volume) {
     a.play().catch(() => {});
   } catch (e) {
     /* no rompe el juego si el navegador bloquea el audio */
+  }
+}
+
+function busPlaySoundThen(path, volume, callback) {
+  try {
+    const a = new Audio(path);
+    a.volume = volume != null ? volume : 0.55;
+    a.addEventListener("ended", () => callback && callback());
+    a.play().catch(() => { callback && callback(); });
+  } catch (e) {
+    callback && callback();
   }
 }
 
@@ -2446,6 +2494,7 @@ function updateBusHudTags() {
     void potentialEl.offsetWidth;
     potentialEl.classList.add("bus-hud-potential-pop");
   });
+  updateBusLeaderCrown();    
 }
 
 function updateBusRoundPips() {
@@ -2647,6 +2696,7 @@ if (bothMissedThisRound) {
       busGame.rightOutcome = "won";
       busGame.rightPayout = Math.round(busGame.betRight * BUS_CUMULATIVE_MULT[4]);
     }
+    launchMoneyRain();      
     settleBusPartida();
     return;
   }
@@ -2673,6 +2723,30 @@ function busOutcomeLabel(outcome, payout) {
   return "no jugó esta partida";
 }
 
+function updateBusStreakBadges() {
+  const leftEl = document.getElementById("busHudLeftStreak");
+  const rightEl = document.getElementById("busHudRightStreak");
+  if (!leftEl || !rightEl) return;
+  leftEl.textContent = (busState.leftStreak || 0) >= 2 ? `🔥 x${busState.leftStreak}` : "";
+  rightEl.textContent = (busState.rightStreak || 0) >= 2 ? `🔥 x${busState.rightStreak}` : "";
+}
+
+function updateBusLeaderCrown() {
+  const crown = document.getElementById("busHudCrownFloat");
+  if (!crown) return;
+  if (!busState || busState.leftAmount === busState.rightAmount) {
+    crown.classList.add("hidden");
+    return;
+  }
+  const leaderSide = busState.leftAmount > busState.rightAmount ? "left" : "right";
+  const nameEl = document.getElementById(leaderSide === "left" ? "busHudLeftName" : "busHudRightName");
+  if (!nameEl) return;
+  const rect = nameEl.getBoundingClientRect();
+  crown.classList.remove("hidden");
+  crown.style.left = `${rect.left + rect.width / 2 - 14}px`;
+  crown.style.top = `${rect.top - 26}px`;
+}
+
 function settleBusPartida() {
   if (busGame.leftPlaying && !busGame.leftDone) {
     busGame.leftDone = true;
@@ -2687,6 +2761,21 @@ function settleBusPartida() {
 
   if (busGame.leftPlaying) busState.leftAmount = busState.leftAmount - busGame.betLeft + busGame.leftPayout;
   if (busGame.rightPlaying) busState.rightAmount = busState.rightAmount - busGame.betRight + busGame.rightPayout;
+  // NUEVO: racha de victorias consecutivas (compara quién ganó más plata neta esta partida)
+  const leftNet = busGame.leftPlaying ? busGame.leftPayout - busGame.betLeft : 0;
+  const rightNet = busGame.rightPlaying ? busGame.rightPayout - busGame.betRight : 0;
+  if (leftNet > rightNet) {
+    busState.leftStreak = (busState.leftStreak || 0) + 1;
+    busState.rightStreak = 0;
+  } else if (rightNet > leftNet) {
+    busState.rightStreak = (busState.rightStreak || 0) + 1;
+    busState.leftStreak = 0;
+  } else {
+    busState.leftStreak = 0;
+    busState.rightStreak = 0;
+  }
+  updateBusStreakBadges();
+  updateBusLeaderCrown();    
   updateBusHudTags();  
 
   busState.history.push({
@@ -2883,17 +2972,67 @@ function updateBusTicketEligibility() {
     : null; // remontó sin usarlo -> se le esfuma
 }
 
-// Usa el boleto: le sube la billetera al que va atrás hasta el 60% del líder (plata de regalo)
 function useBusTicket(side) {
   if (busState.ticketUsed || busState.ticketAvailableFor !== side) return;
   const leader = Math.max(busState.leftAmount, busState.rightAmount);
-  const target = Math.round((leader * 0.6) / 10) * 10;
-  if (side === "left") busState.leftAmount = Math.max(busState.leftAmount, target);
-  else busState.rightAmount = Math.max(busState.rightAmount, target);
+  const oldAmount = side === "left" ? busState.leftAmount : busState.rightAmount;
+  const target = Math.max(oldAmount, Math.round((leader * 0.6) / 10) * 10);
+  playBusTicketSequence(side, oldAmount, target);
+}
+
+function playBusTicketSequence(side, oldAmount, target) {
+  const overlay = document.getElementById("busTicketOverlay");
+  const img = document.getElementById("busTicketOverlayImg");
+  const rouletteEl = document.getElementById("busTicketRouletteNumber");
+  overlay.classList.remove("hidden");
+  img.classList.remove("bus-ticket-laugh", "bus-ticket-shrink");
+  void img.offsetWidth;
+  img.classList.add("bus-ticket-laugh");
+  rouletteEl.classList.add("hidden");
+  rouletteEl.classList.remove("bus-ticket-final-glow", "bus-ticket-fly-out");
+
+  busPlaySoundThen("/static/audio/troll_laugh.wav", 0.8, () => {
+    img.classList.remove("bus-ticket-laugh");
+    img.classList.add("bus-ticket-shrink");
+    rouletteEl.classList.remove("hidden");
+    runBusTicketRoulette(rouletteEl, oldAmount, target, () => {
+      rouletteEl.classList.add("bus-ticket-fly-out");
+      busSetTimeout(() => {
+        overlay.classList.add("hidden");
+        img.classList.remove("bus-ticket-shrink");
+        rouletteEl.classList.remove("bus-ticket-fly-out");
+        finalizeBusTicket(side, target);
+      }, 550);
+    });
+  });
+}
+
+function runBusTicketRoulette(el, oldAmount, target, onDone) {
+  let ticks = 0;
+  const totalTicks = 18;
+  const timer = setInterval(() => {
+    ticks++;
+    if (ticks >= totalTicks) {
+      clearInterval(timer);
+      el.textContent = "$" + target;
+      el.classList.add("bus-ticket-final-glow");
+      busPlaySound("/static/audio/card-slide.wav", 0.3);
+      busSetTimeout(onDone, 500);
+      return;
+    }
+    const fake = Math.max(0, Math.round((oldAmount + Math.random() * (target - oldAmount + 400)) / 10) * 10);
+    el.textContent = "$" + fake;
+    playTick();
+  }, 90);
+}
+
+function finalizeBusTicket(side, target) {
+  if (side === "left") busState.leftAmount = target;
+  else busState.rightAmount = target;
   busState.ticketUsed = true;
   busState.ticketAvailableFor = null;
   toast("🎫 ¡Boleto usado! La billetera subió de golpe.");
-  openBusBetScreen(); // re-renderiza con la plata nueva
+  openBusBetScreen();
 }
 
 function openBusBetScreen() {
