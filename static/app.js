@@ -3664,29 +3664,54 @@ function gmbOnKeyUp(e) {
   if (!gmb) return;
   const k = e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase();
   gmb.keys[k] = false;
-  if (k === GMB_KEYS_LEFT.dash) gmbReleaseAction("left");
-  if (k === GMB_KEYS_RIGHT.dash) gmbReleaseAction("right");
+  if (k === GMB_KEYS_LEFT.kick) gmbReleaseKick("left");
+  if (k === GMB_KEYS_RIGHT.kick) gmbReleaseKick("right");
 }
 
 /* Patear: tecla propia, sin cooldown - solo sirve si tenés la pelota en
    la Fase 1. Así queda libre para dribblar seguido, y el dash queda
    exclusivamente para el impulso/lunge de siempre. */
 function gmbTryKick(side) {
-  if (!gmb || gmb.phase !== "dribble") return;
-  if (gmb.ball.owner !== side) { playTick(); return; }
-  const player = gmb[side];
-  const { dx, dy } = gmbInputVector(side);
-  let dirX = dx, dirY = dy;
-  if (dirX === 0 && dirY === 0) { dirX = player.facingX; dirY = player.facingY; }
-  const len = Math.hypot(dirX, dirY) || 1;
-  const ball = gmb.ball;
-  ball.vx += (dirX / len) * GMB_KICK_POWER;
-  ball.vy += (dirY / len) * GMB_KICK_POWER;
-  ball.owner = null;
-  ball.kickedBy = side;
-  ball.kickImmuneUntil = performance.now() + GMB_KICK_IMMUNITY_MS;
-  gmb.kickBurst = { x: ball.x, y: ball.y, t: performance.now() };
-  busPlaySound("/static/audio/kickball.wav", 0.55);
+  if (!gmb) return;
+
+  if (gmb.phase === "dribble") {
+    if (gmb.ball.owner !== side) { playTick(); return; }
+    const player = gmb[side];
+    const { dx, dy } = gmbInputVector(side);
+    let dirX = dx, dirY = dy;
+    if (dirX === 0 && dirY === 0) { dirX = player.facingX; dirY = player.facingY; }
+    const len = Math.hypot(dirX, dirY) || 1;
+    const ball = gmb.ball;
+    ball.vx += (dirX / len) * GMB_KICK_POWER;
+    ball.vy += (dirY / len) * GMB_KICK_POWER;
+    ball.owner = null;
+    ball.kickedBy = side;
+    ball.kickImmuneUntil = performance.now() + GMB_KICK_IMMUNITY_MS;
+    gmb.kickBurst = { x: ball.x, y: ball.y, t: performance.now() };
+    busPlaySound("/static/audio/kickball.wav", 0.55);
+    return;
+  }
+
+  if (gmb.phase === "shootout" && side === gmb.attackerSide) {
+    const player = gmb[side];
+    const ball = gmb.ball;
+    if (gmb.shoot.charging) return; // ya está cargando, no reinicia la carga
+    const closeEnough = Math.hypot(ball.x - player.x, ball.y - player.y) < player.r + ball.r + 6;
+    if (!closeEnough) { playTick(); return; } // la pelota no está a tu alcance, no se re-patea en el aire
+    const dir = side === "left" ? 1 : -1;
+    const now = performance.now();
+    gmb.shoot.charging = true;
+    gmb.shoot.chargeStart = now;
+    gmb.shoot.aimAngle = 0;
+    gmb.shoot.aimX = dir; gmb.shoot.aimY = 0;
+    gmb.shoot.aimHistory = [{ t: now, x: dir, y: 0 }];
+    player.vx = 0; player.vy = 0;
+  }
+}
+
+function gmbReleaseKick(side) {
+  if (!gmb || gmb.phase !== "shootout" || side !== gmb.attackerSide) return;
+  if (gmb.shoot.charging) gmbFireShot();
 }
 
 function gmbInputVector(side) {
@@ -3704,37 +3729,15 @@ function gmbInputVector(side) {
   return { dx, dy };
 }
 
-/* "dash" en fase 1 = impulso. En fase 2, para el que ataca = cargar remate,
-   para el arquero = amague/lunge lateral rápido. */
+/* El dash es siempre el mismo impulso/lunge, para los dos jugadores, en
+   cualquier fase (en Fase 2 el arquero lo usa para el amague lateral). El
+   remate ahora vive 100% en la tecla de patear (gmbTryKick/gmbReleaseKick). */
 function gmbTryAction(side) {
   if (!gmb || gmb.phase === "done" || gmb.phase === "transition") return;
   const player = gmb[side];
   const now = performance.now();
   if (now < player.dashReadyAt) { playTick(); return; } // sonido "seco" de cooldown
-
-  if (gmb.phase === "dribble") {
-    gmbDash(side);
-} else if (gmb.phase === "shootout") {
-    if (side === gmb.attackerSide) {
-      const ball = gmb.ball;
-      const closeEnough = Math.hypot(ball.x - player.x, ball.y - player.y) < player.r + ball.r + 6;
-      if (!closeEnough) { playTick(); return; } // la pelota no está a tu alcance, no se re-patea en el aire
-      const dir = side === "left" ? 1 : -1;
-      gmb.shoot.charging = true;
-      gmb.shoot.chargeStart = now;
-      gmb.shoot.aimAngle = 0;
-      gmb.shoot.aimX = dir; gmb.shoot.aimY = 0;
-      gmb.shoot.aimHistory = [{ t: now, x: dir, y: 0 }];
-      player.vx = 0; player.vy = 0;
-    } else {
-      gmbDash(side);
-    }
-}
-}
-
-function gmbReleaseAction(side) {
-  if (!gmb || gmb.phase !== "shootout" || side !== gmb.attackerSide) return;
-  if (gmb.shoot.charging) gmbFireShot();
+  gmbDash(side);
 }
 
 function gmbDash(side) {
@@ -4564,6 +4567,6 @@ function gmbSetupTouchZone(zoneId, joyId, dashBtnId, kickBtnId, side) {
   zone.addEventListener("touchcancel", endTouch);
 
   dashBtn.addEventListener("touchstart", (e) => { e.preventDefault(); gmbTryAction(side); }, { passive: false });
-  dashBtn.addEventListener("touchend", (e) => { e.preventDefault(); gmbReleaseAction(side); }, { passive: false });
   kickBtn.addEventListener("touchstart", (e) => { e.preventDefault(); gmbTryKick(side); }, { passive: false });
+  kickBtn.addEventListener("touchend", (e) => { e.preventDefault(); gmbReleaseKick(side); }, { passive: false });
 }
