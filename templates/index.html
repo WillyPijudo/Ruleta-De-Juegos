@@ -165,6 +165,11 @@
         <span class="duel-mode-title">Ride the Bus</span>
         <span class="duel-mode-sub">Cartas + apuestas</span>
       </button>
+      <button id="pickGambetaBtn" class="duel-mode-card" type="button">
+        <span class="duel-mode-icon">⚽💨</span>
+        <span class="duel-mode-title">Gambeta y Definición</span>
+        <span class="duel-mode-sub">Físicas + reflejos</span>
+      </button>      
     </div>
     <div class="modal-actions">
       <button id="closeDuelSelectModal" class="btn btn-ghost btn-small" type="button">Cancelar</button>
@@ -664,6 +669,88 @@
 
   </div>
 </div>
+
+<!-- Gambeta 1v1 duel modal -->
+<div id="gambetaModal" class="modal hidden">
+  <div class="modal-card gambeta-card">
+
+    <div id="gambetaIntro" class="duel-intro">
+      <p class="modal-eyebrow">1 vs 1 · Físicas de cancha</p>
+      <h3 class="rps-title">⚽💨 Gambeta y Definición</h3>
+      <p class="modal-body-text">
+        Fase 1: <b id="gambetaIntroAttacker">-</b> ataca con la pelota y tiene que gambetear a
+        <b id="gambetaIntroDefender">-</b> hasta cruzar la línea dorada antes de que se acabe el tiempo.
+        Si lo logra, pasa a la Fase 2: ahora <span id="gambetaIntroDefender2">el defensor</span> es el arquero
+        y tiene que atajarle el remate 🧤
+      </p>
+      <div class="controls-legend">
+        <div class="controls-col">
+          <span class="controls-who" id="gambetaLeftKeyName">Campeón</span>
+          <div class="key-row"><span class="key-badge">W A S D</span><span class="key-mean">Moverse</span></div>
+          <div class="key-row"><span class="key-badge">Shift</span><span class="key-mean">Dash / Cargar remate</span></div>
+        </div>
+        <div class="controls-col">
+          <span class="controls-who" id="gambetaRightKeyName">Retador</span>
+          <div class="key-row"><span class="key-badge">↑ ↓ ← →</span><span class="key-mean">Moverse</span></div>
+          <div class="key-row"><span class="key-badge">Enter</span><span class="key-mean">Dash / Cargar remate</span></div>
+        </div>
+      </div>
+      <p class="modal-body-text">El dash tiene 4s de recarga — usalo para desmarcarte o para cerrarle el ángulo al que remata. En el celular, cada uno controla su joystick y su botón de acción de su lado de la pantalla.</p>
+      <div class="modal-actions">
+        <button id="gambetaStartBtn" class="btn btn-duel btn-small" type="button">¡Arrancar! 🔥</button>
+        <button id="backFromGambetaIntro" class="btn btn-ghost btn-small" type="button">← Volver</button>
+      </div>
+    </div>
+
+    <div id="gambetaPlay" class="hidden gambeta-play">
+      <div class="gambeta-hud">
+        <div class="gambeta-hud-side gambeta-hud-left">
+          <span class="gambeta-hud-name" id="gambetaLeftName">Campeón</span>
+          <div class="gambeta-dash-meter"><div class="gambeta-dash-fill gambeta-dash-fill-left" id="gambetaLeftDashFill"></div></div>
+        </div>
+        <div class="gambeta-hud-center">
+          <span class="gambeta-phase-label" id="gambetaPhaseLabel">Fase 1 · Gambeta</span>
+          <span class="gambeta-timer" id="gambetaTimer">13.0s</span>
+        </div>
+        <div class="gambeta-hud-side gambeta-hud-right">
+          <span class="gambeta-hud-name" id="gambetaRightName">Retador</span>
+          <div class="gambeta-dash-meter"><div class="gambeta-dash-fill gambeta-dash-fill-right" id="gambetaRightDashFill"></div></div>
+        </div>
+      </div>
+
+      <div class="gambeta-canvas-wrap">
+        <canvas id="gambetaCanvas" width="900" height="380"></canvas>
+        <div class="gambeta-banner hidden" id="gambetaBanner"></div>
+      </div>
+
+      <div class="gambeta-touch-controls" id="gambetaTouchControls">
+        <div class="gambeta-touch-zone gambeta-touch-left" id="gambetaTouchLeft">
+          <div class="gambeta-joystick" id="gambetaJoyLeft"><div class="gambeta-joystick-knob"></div></div>
+          <button class="gambeta-dash-btn" id="gambetaDashBtnLeft" type="button">⚡</button>
+        </div>
+        <div class="gambeta-touch-zone gambeta-touch-right" id="gambetaTouchRight">
+          <div class="gambeta-joystick" id="gambetaJoyRight"><div class="gambeta-joystick-knob"></div></div>
+          <button class="gambeta-dash-btn" id="gambetaDashBtnRight" type="button">⚡</button>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="gambetaExitBtn" class="btn btn-ghost btn-small" type="button">✕ Salir del juego</button>
+      </div>
+    </div>
+
+    <div id="gambetaResult" class="hidden duel-intro">
+      <p class="modal-eyebrow">Resultado</p>
+      <h3 class="rps-title" id="gambetaResultTitle">🏆 ¡Golazo!</h3>
+      <p class="rps-result show" id="gambetaResultText"></p>
+      <div class="modal-actions">
+        <button id="gambetaRematchBtn" class="btn btn-duel btn-small" type="button">🔁 Revancha</button>
+        <button id="gambetaBackBtn" class="btn btn-ghost btn-small" type="button">← Volver</button>
+      </div>
+    </div>
+
+  </div>
+</div>  
 
 <!-- Share modal -->
 <div id="shareModal" class="modal hidden">
