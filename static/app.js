@@ -2953,8 +2953,7 @@ function renderBusFinalChart() {
 
 // Tope de apuesta: el menor entre $1000 y el 50% de lo que tiene el que va ganando
 function busBaseBetCap() {
-  const leaderAmount = Math.max(busState.leftAmount, busState.rightAmount);
-  return Math.min(1000, Math.max(10, Math.round((leaderAmount * 0.5) / 10) * 10));
+  return 1000;
 }
 
 // Recalcula si alguien tiene boleto disponible (desde la partida 2, y solo si no se usó ya)
