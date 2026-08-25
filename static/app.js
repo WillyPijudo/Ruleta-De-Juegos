@@ -1547,8 +1547,18 @@ document.addEventListener("DOMContentLoaded", () => {
     teardownGambeta();
     document.getElementById("gambetaModal").classList.add("hidden");
   });
-  gmbSetupTouchZone("gambetaTouchLeft", "gambetaJoyLeft", "gambetaDashBtnLeft", "left");
-  gmbSetupTouchZone("gambetaTouchRight", "gambetaJoyRight", "gambetaDashBtnRight", "right");
+  document.getElementById("gambetaControlsBtn").addEventListener("click", () => {
+    gmbBuildRemapUI();
+    document.getElementById("gambetaIntro").classList.add("hidden");
+    document.getElementById("gambetaControlsScreen").classList.remove("hidden");
+  });
+  document.getElementById("gambetaRemapBackBtn").addEventListener("click", () => {
+    document.getElementById("gambetaControlsScreen").classList.add("hidden");
+    document.getElementById("gambetaIntro").classList.remove("hidden");
+  });
+  document.getElementById("gambetaRemapResetBtn").addEventListener("click", gmbResetControls);
+  gmbSetupTouchZone("gambetaTouchLeft", "gambetaJoyLeft", "gambetaDashBtnLeft", "gambetaKickBtnLeft", "left");
+  gmbSetupTouchZone("gambetaTouchRight", "gambetaJoyRight", "gambetaDashBtnRight", "gambetaKickBtnRight", "right");
 
   document.getElementById("rpsStartBtn").addEventListener("click", beginRpsMatch);
   document.getElementById("backFromRpsIntro").addEventListener("click", () => {
@@ -3284,8 +3294,86 @@ function openGambetaModal() {
   document.getElementById("gambetaModal").classList.remove("hidden");
   document.getElementById("gambetaResult").classList.add("hidden");
   document.getElementById("gambetaPlay").classList.add("hidden");
+  document.getElementById("gambetaControlsScreen").classList.add("hidden");
   document.getElementById("gambetaIntro").classList.remove("hidden");
+  gmbLoadControls();
+  gmbRenderControlsLegendBadges();
   gmbBuildIntroLegend();
+}
+
+function gmbRenderControlsLegendBadges() {
+  document.getElementById("gambetaLeftKickBadge").textContent = gmbKeyDisplayName(GMB_KEYS_LEFT.kick);
+  document.getElementById("gambetaLeftDashBadge").textContent = gmbKeyDisplayName(GMB_KEYS_LEFT.dash);
+  document.getElementById("gambetaRightKickBadge").textContent = gmbKeyDisplayName(GMB_KEYS_RIGHT.kick);
+  document.getElementById("gambetaRightDashBadge").textContent = gmbKeyDisplayName(GMB_KEYS_RIGHT.dash);
+}
+
+const GMB_CONTROL_ACTIONS = [
+  { key: "up", label: "Arriba" },
+  { key: "down", label: "Abajo" },
+  { key: "left", label: "Izquierda" },
+  { key: "right", label: "Derecha" },
+  { key: "kick", label: "Patear (fase 1)" },
+  { key: "dash", label: "Dash / Cargar remate" },
+];
+
+function gmbBuildRemapUI() {
+  const leftCol = document.getElementById("gambetaRemapLeftCol");
+  const rightCol = document.getElementById("gambetaRemapRightCol");
+  leftCol.innerHTML = "";
+  rightCol.innerHTML = "";
+  const championName = (currentWinnerGame && currentWinnerGame.added_by) || "Campeón";
+  const challengerName = pendingChallengerName || "Retador";
+
+  const buildSide = (col, side, title) => {
+    const heading = document.createElement("span");
+    heading.className = "controls-who";
+    heading.textContent = title;
+    col.appendChild(heading);
+    GMB_CONTROL_ACTIONS.forEach((action) => {
+      const row = document.createElement("div");
+      row.className = "key-row";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "key-badge gambeta-remap-btn";
+      const map = side === "left" ? GMB_KEYS_LEFT : GMB_KEYS_RIGHT;
+      btn.textContent = gmbKeyDisplayName(map[action.key]);
+      btn.addEventListener("click", () => gmbStartRebind(side, action.key, btn));
+      const label = document.createElement("span");
+      label.className = "key-mean";
+      label.textContent = action.label;
+      row.appendChild(btn);
+      row.appendChild(label);
+      col.appendChild(row);
+    });
+  };
+  buildSide(leftCol, "left", championName);
+  buildSide(rightCol, "right", challengerName);
+}
+
+let gmbRebindListener = null;
+function gmbStartRebind(side, actionKey, btn) {
+  if (gmbRebindListener) return;
+  const original = btn.textContent;
+  btn.textContent = "…";
+  btn.classList.add("gambeta-remap-listening");
+  gmbRebindListener = (e) => {
+    e.preventDefault();
+    const k = e.key.toLowerCase();
+    if (k !== "escape") {
+      const map = side === "left" ? GMB_KEYS_LEFT : GMB_KEYS_RIGHT;
+      map[actionKey] = k;
+      gmbSaveControls();
+      gmbRenderControlsLegendBadges();
+      btn.textContent = gmbKeyDisplayName(k);
+    } else {
+      btn.textContent = original;
+    }
+    btn.classList.remove("gambeta-remap-listening");
+    window.removeEventListener("keydown", gmbRebindListener, true);
+    gmbRebindListener = null;
+  };
+  window.addEventListener("keydown", gmbRebindListener, true);
 }
 
 function gmbBuildIntroLegend() {
@@ -3374,9 +3462,36 @@ function gmbMakePlayer(side, x, y, color) {
 
 /* ---------- Input ---------- */
 
-const GMB_KEYS_LEFT  = { up: "w", down: "s", left: "a", right: "d", dash: "shift" };
-const GMB_KEYS_RIGHT = { up: "arrowup", down: "arrowdown", left: "arrowleft", right: "arrowright", dash: "enter" };
+const GMB_DEFAULT_KEYS_LEFT  = { up: "w", down: "s", left: "a", right: "d", kick: "j", dash: "k" };
+const GMB_DEFAULT_KEYS_RIGHT = { up: "arrowup", down: "arrowdown", left: "arrowleft", right: "arrowright", kick: "z", dash: "x" };
+const GMB_KEYS_LEFT  = { ...GMB_DEFAULT_KEYS_LEFT };
+const GMB_KEYS_RIGHT = { ...GMB_DEFAULT_KEYS_RIGHT };
 const GMB_PREVENT_DEFAULT = new Set(["arrowup", "arrowdown", "arrowleft", "arrowright", "enter", " "]);
+
+function gmbLoadControls() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("gmbControls") || "null");
+    if (saved && saved.left && saved.right) {
+      Object.assign(GMB_KEYS_LEFT, saved.left);
+      Object.assign(GMB_KEYS_RIGHT, saved.right);
+    }
+  } catch (e) { /* si el localStorage falla, se queda con los defaults */ }
+}
+function gmbSaveControls() {
+  try { localStorage.setItem("gmbControls", JSON.stringify({ left: GMB_KEYS_LEFT, right: GMB_KEYS_RIGHT })); }
+  catch (e) {}
+}
+function gmbResetControls() {
+  Object.assign(GMB_KEYS_LEFT, GMB_DEFAULT_KEYS_LEFT);
+  Object.assign(GMB_KEYS_RIGHT, GMB_DEFAULT_KEYS_RIGHT);
+  gmbSaveControls();
+  gmbRenderControlsLegendBadges();
+  gmbBuildRemapUI();
+}
+function gmbKeyDisplayName(k) {
+  const NAMES = { arrowup: "↑", arrowdown: "↓", arrowleft: "←", arrowright: "→", " ": "Espacio", enter: "Enter", shift: "Shift" };
+  return NAMES[k] || (k || "?").toUpperCase();
+}
 
 function gmbOnKeyDown(e) {
   if (!gmb) return;
@@ -3387,6 +3502,8 @@ function gmbOnKeyDown(e) {
   if (!already) {
     if (k === GMB_KEYS_LEFT.dash) gmbTryAction("left");
     if (k === GMB_KEYS_RIGHT.dash) gmbTryAction("right");
+    if (k === GMB_KEYS_LEFT.kick) gmbTryKick("left");
+    if (k === GMB_KEYS_RIGHT.kick) gmbTryKick("right");
   }
 }
 function gmbOnKeyUp(e) {
@@ -3395,6 +3512,25 @@ function gmbOnKeyUp(e) {
   gmb.keys[k] = false;
   if (k === GMB_KEYS_LEFT.dash) gmbReleaseAction("left");
   if (k === GMB_KEYS_RIGHT.dash) gmbReleaseAction("right");
+}
+
+/* Patear: tecla propia, sin cooldown - solo sirve si tenés la pelota en
+   la Fase 1. Así queda libre para dribblar seguido, y el dash queda
+   exclusivamente para el impulso/lunge de siempre. */
+function gmbTryKick(side) {
+  if (!gmb || gmb.phase !== "dribble" || side !== gmb.attackerSide) return;
+  if (gmb.ball.owner !== side) { playTick(); return; }
+  const player = gmb[side];
+  const { dx, dy } = gmbInputVector(side);
+  let dirX = dx, dirY = dy;
+  if (dirX === 0 && dirY === 0) { dirX = player.facingX; dirY = player.facingY; }
+  const len = Math.hypot(dirX, dirY) || 1;
+  const ball = gmb.ball;
+  ball.vx += (dirX / len) * GMB_KICK_POWER;
+  ball.vy += (dirY / len) * GMB_KICK_POWER;
+  ball.owner = null;
+  gmb.kickBurst = { x: ball.x, y: ball.y, t: performance.now() };
+  busPlaySound("/static/audio/kickball.wav", 0.55);
 }
 
 function gmbInputVector(side) {
@@ -3449,18 +3585,6 @@ function gmbDash(side) {
   player.dashReadyAt = now + GMB_DASH_COOLDOWN;
   player.dashTrailAt = now;
   busPlaySound("/static/audio/dash.wav", 0.55);
-
-  // Si es el atacante y tiene la pelota, el dash también es un PIQUE:
-  // la pelota se desprende y sale disparada - deja de estar pegada,
-  // hay que correrla como en la cancha de verdad.
-  if (gmb.phase === "dribble" && side === gmb.attackerSide && gmb.ball.owner === side) {
-    const ball = gmb.ball;
-    ball.vx += (dirX / len) * GMB_KICK_POWER;
-    ball.vy += (dirY / len) * GMB_KICK_POWER;
-    ball.owner = null;
-    gmb.kickBurst = { x: ball.x, y: ball.y, t: now };
-    busPlaySound("/static/audio/kickball.wav", 0.5);
-  }
 }
 
 /* ---------- Loop principal ---------- */
@@ -4036,11 +4160,12 @@ function gmbResolveColor(varName) {
 
 /* ---------- Controles táctiles (joystick doble para mobile) ---------- */
 
-function gmbSetupTouchZone(zoneId, joyId, dashBtnId, side) {
+function gmbSetupTouchZone(zoneId, joyId, dashBtnId, kickBtnId, side) {
   const zone = document.getElementById(zoneId);
   const joy = document.getElementById(joyId);
   const knob = joy.querySelector(".gambeta-joystick-knob");
   const dashBtn = document.getElementById(dashBtnId);
+  const kickBtn = document.getElementById(kickBtnId);
   let activeTouchId = null;
   let baseX = 0, baseY = 0;
   const MAX_R = 34;
@@ -4079,4 +4204,5 @@ function gmbSetupTouchZone(zoneId, joyId, dashBtnId, side) {
 
   dashBtn.addEventListener("touchstart", (e) => { e.preventDefault(); gmbTryAction(side); }, { passive: false });
   dashBtn.addEventListener("touchend", (e) => { e.preventDefault(); gmbReleaseAction(side); }, { passive: false });
+  kickBtn.addEventListener("touchstart", (e) => { e.preventDefault(); gmbTryKick(side); }, { passive: false });
 }
