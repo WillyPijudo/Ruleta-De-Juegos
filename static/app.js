@@ -3248,6 +3248,7 @@ const GMB_DASH_COOLDOWN = 4000;     // ms — pedido: 3-5s
 const GMB_DASH_DURATION = 150;      // ms de impulso
 const GMB_DASH_POWER = 8.5;
 const GMB_DASH_MAXSPEED = 9.5;      // tope de velocidad SOLO mientras dashea
+const GMB_KICK_POWER = 9.5;         // impulso que recibe la PELOTA cuando el atacante patea (fase 1)
 const GMB_PHASE1_TIME = 30000;      // shot clock fase 1 (ms) - default, lo pisa gmbSelectedDuration
 let gmbSelectedDuration = GMB_PHASE1_TIME;
 const GMB_ATTACK_ZONE_X = GMB_FIELD_W - 70;   // el atacante debe llegar acá con la pelota
@@ -3448,6 +3449,18 @@ function gmbDash(side) {
   player.dashReadyAt = now + GMB_DASH_COOLDOWN;
   player.dashTrailAt = now;
   busPlaySound("/static/audio/dash.wav", 0.55);
+
+  // Si es el atacante y tiene la pelota, el dash también es un PIQUE:
+  // la pelota se desprende y sale disparada - deja de estar pegada,
+  // hay que correrla como en la cancha de verdad.
+  if (gmb.phase === "dribble" && side === gmb.attackerSide && gmb.ball.owner === side) {
+    const ball = gmb.ball;
+    ball.vx += (dirX / len) * GMB_KICK_POWER;
+    ball.vy += (dirY / len) * GMB_KICK_POWER;
+    ball.owner = null;
+    gmb.kickBurst = { x: ball.x, y: ball.y, t: now };
+    busPlaySound("/static/audio/kickball.wav", 0.5);
+  }
 }
 
 /* ---------- Loop principal ---------- */
@@ -3589,7 +3602,10 @@ function gmbUpdateDribble(dt, ts) {
   const attackerTargetX = gmb.attackerSide === "left" ? GMB_ATTACK_ZONE_X : GMB_FIELD_W - GMB_ATTACK_ZONE_X;
   const stealBackX = gmb.attackerSide === "left" ? GMB_STEAL_BACK_X : GMB_FIELD_W - GMB_STEAL_BACK_X;
 
-  if (ball.owner === gmb.attackerSide && attackerGoalDir * attacker.x >= attackerGoalDir * attackerTargetX) {
+  const attackerPast = attackerGoalDir * attacker.x >= attackerGoalDir * attackerTargetX;
+  const ballPast = attackerGoalDir * ball.x >= attackerGoalDir * attackerTargetX;
+
+  if (attackerPast && ballPast) {
     gmbStartTransition();
   } else if (ball.owner === gmb.defenderSide && attackerGoalDir * defender.x <= attackerGoalDir * stealBackX) {
     gmbFinish("defenderWin", "robo");
@@ -3700,22 +3716,45 @@ function gmbUpdateShootout(dt, ts) {
       }
     });
 
-    // Atajada: colisión con el arquero
+    // Atajada: la ÚNICA forma de terminar la ronda a favor del arquero
+    // (aparte del timeout de estancamiento de más abajo) es que su
+    // círculo toque la pelota de verdad.
     const dK = Math.hypot(ball.x - keeper.x, ball.y - keeper.y);
     if (dK < keeper.r + ball.r) {
       gmbFinish("keeperWin", "atajada");
       return;
     }
 
-    // Gol / afuera
+    // Si nadie la tiene, el atacante puede ir a buscarla y patear de nuevo
+    // cuantas veces quiera - mientras el arquero no la toque, sigue viva.
+    if (ball.owner === null) {
+      const dA = Math.hypot(ball.x - attacker.x, ball.y - attacker.y);
+      if (dA < attacker.r + ball.r + 2) {
+        ball.owner = attackerSide;
+        playTick();
+      }
+    }
+
+    // Gol si entra en el arco. Si se va afuera (ancho o al palo y sigue),
+    // YA NO termina la ronda: rebota como si pegara en el cartel de fondo
+    // y sigue jugándose.
     const pastLine = dir === 1 ? ball.x - ball.r > goalX : ball.x + ball.r < goalX;
     if (pastLine) {
       const inMouth = Math.abs(ball.y - GMB_FIELD_H / 2) <= GMB_GOAL_HALF;
-      gmbFinish(inMouth ? "shooterWin" : "keeperWin", inMouth ? "gol" : "afuera");
-      return;
+      if (inMouth) {
+        gmbFinish("shooterWin", "gol");
+        return;
+      }
+      ball.x = goalX - dir * (ball.r + 2);
+      ball.vx *= -0.45;
+      ball.vy *= 0.6;
+      if (!gmb.wideMissShown || ts - gmb.wideMissShown > 1500) {
+        gmbShowBanner("¡Afuera! Pero sigue viva, andá a buscarla 🏃", 1300);
+        gmb.wideMissShown = ts;
+      }
     }
     if (performance.now() - gmb.shootoutStartedAt > GMB_SHOOTOUT_TIMEOUT) {
-      gmbFinish("keeperWin", "afuera");
+      gmbFinish("keeperWin", "tiempo");
       return;
     }
   }
@@ -3751,7 +3790,7 @@ function gmbFinish(winnerKind, reason) {
     document.getElementById("gambetaPlay").classList.add("hidden");
     document.getElementById("gambetaResult").classList.remove("hidden");
     document.getElementById("gambetaResultTitle").textContent =
-      winnerKind === "shooterWin" ? "🏆 ¡GOLAZO!" : winnerKind === "keeperWin" ? "🧤 ¡Atajada!" : "🛡️ ¡Se lo bancó!";
+      winnerKind === "shooterWin" ? "🏆 ¡GOLAZO!" : (winnerKind === "keeperWin" && reason === "atajada") ? "🧤 ¡Atajada!" : "🛡️ ¡Se lo bancó!";
     const resultEl = document.getElementById("gambetaResultText");
     resultEl.classList.remove("show");
     resolveDuelResult(resultEl, side, REASON_MSG[reason] || "");
