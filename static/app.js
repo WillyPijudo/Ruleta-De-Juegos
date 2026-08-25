@@ -2037,6 +2037,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 let busSelectedRounds = null;
 let busState = null;
+let busBetState = { leftHetero: false, rightHetero: false };
 let busPendingTimeouts = [];
 
 function busSetTimeout(fn, ms) {
@@ -2234,7 +2235,10 @@ function initBusBankroll() {
     rightAmount: 0,
     leftRolled: false,
     rightRolled: false,
+    ticketUsed: false,        // NUEVO
+    ticketAvailableFor: null, // NUEVO: "left" | "right" | null
   };
+  busBetState = { leftHetero: false, rightHetero: false }; // NUEVO
   document.getElementById("busWalletLeftName").textContent = championName;
   document.getElementById("busWalletRightName").textContent = challengerName;
   document.getElementById("busRoundsLabel").textContent = busSelectedRounds;
@@ -2858,7 +2862,43 @@ function renderBusFinalChart() {
   });
 }
 
+// Tope de apuesta: el menor entre $1000 y el 50% de lo que tiene el que va ganando
+function busBaseBetCap() {
+  const leaderAmount = Math.max(busState.leftAmount, busState.rightAmount);
+  return Math.min(1000, Math.max(10, Math.round((leaderAmount * 0.5) / 10) * 10));
+}
+
+// Recalcula si alguien tiene boleto disponible (desde la partida 2, y solo si no se usó ya)
+function updateBusTicketEligibility() {
+  if (busState.ticketUsed || busState.currentGameNum < 2) {
+    busState.ticketAvailableFor = null;
+    return;
+  }
+  const leader = Math.max(busState.leftAmount, busState.rightAmount);
+  const trailing = Math.min(busState.leftAmount, busState.rightAmount);
+  if (leader <= 0) { busState.ticketAvailableFor = null; return; }
+  const ratio = trailing / leader;
+  busState.ticketAvailableFor = ratio < 0.5
+    ? (busState.leftAmount < busState.rightAmount ? "left" : "right")
+    : null; // remontó sin usarlo -> se le esfuma
+}
+
+// Usa el boleto: le sube la billetera al que va atrás hasta el 60% del líder (plata de regalo)
+function useBusTicket(side) {
+  if (busState.ticketUsed || busState.ticketAvailableFor !== side) return;
+  const leader = Math.max(busState.leftAmount, busState.rightAmount);
+  const target = Math.round((leader * 0.6) / 10) * 10;
+  if (side === "left") busState.leftAmount = Math.max(busState.leftAmount, target);
+  else busState.rightAmount = Math.max(busState.rightAmount, target);
+  busState.ticketUsed = true;
+  busState.ticketAvailableFor = null;
+  toast("🎫 ¡Boleto usado! La billetera subió de golpe.");
+  openBusBetScreen(); // re-renderiza con la plata nueva
+}
+
 function openBusBetScreen() {
+  updateBusTicketEligibility(); // NUEVO
+
   document.getElementById("busBetGameNum").textContent = busState.currentGameNum;
   document.getElementById("busBetGameTotal").textContent = busState.rounds;
   document.getElementById("busBetLeftName").textContent = busState.championName;
@@ -2870,18 +2910,45 @@ function openBusBetScreen() {
     const slider = document.getElementById(side === "left" ? "busBetLeftSlider" : "busBetRightSlider");
     const label = document.getElementById(side === "left" ? "busBetLeftAmount" : "busBetRightAmount");
     const walletEl = document.getElementById(side === "left" ? "busBetLeftWallet" : "busBetRightWallet");
+    const heteroBtn = document.getElementById(side === "left" ? "busHeteroBtnLeft" : "busHeteroBtnRight");
+    const ticketBtn = document.getElementById(side === "left" ? "busTicketBtnLeft" : "busTicketBtnRight");
+    const heteroActive = side === "left" ? busBetState.leftHetero : busBetState.rightHetero;
+
     walletEl.textContent = amount;
-    renderChipPile(side === "left" ? "busBetPileLeft" : "busBetPileRight", side, amount); 
-    if (amount < 10) { // FIX: antes era amount <= 0, rompía el slider si quedaba plata < al mínimo de apuesta
+    renderChipPile(side === "left" ? "busBetPileLeft" : "busBetPileRight", side, amount);
+
+    // Boleto de repechaje
+    if (busState.ticketAvailableFor === side) {
+      ticketBtn.classList.remove("hidden");
+    } else {
+      ticketBtn.classList.add("hidden");
+    }
+
+    if (amount < 10) {
       panel.classList.add("bus-bet-side-broke");
       slider.disabled = true;
       label.textContent = "Sin fondos 😢";
+      heteroBtn.classList.add("hidden");
     } else {
       panel.classList.remove("bus-bet-side-broke");
       slider.disabled = false;
-      slider.max = amount;
-      slider.value = Math.min(10, amount);
+
+      // Tope de apuesta + Modo Hetero
+      const baseCap = busBaseBetCap();
+      const effectiveCap = heteroActive ? amount : Math.min(amount, baseCap);
+      slider.max = effectiveCap;
+      slider.value = Math.min(parseInt(slider.value, 10) || 10, effectiveCap);
       label.textContent = "$" + slider.value;
+
+      if (amount > 1000 && baseCap < amount) {
+        heteroBtn.classList.remove("hidden");
+        heteroBtn.classList.toggle("bus-hetero-active", heteroActive);
+        heteroBtn.textContent = heteroActive
+          ? "🔓 Modo Hetero activado — vas con todo"
+          : "🔒 Modo Hetero (apostar todo)";
+      } else {
+        heteroBtn.classList.add("hidden");
+      }
     }
   });
   showBusScreen("busBetScreen");
@@ -2941,16 +3008,28 @@ document.addEventListener("DOMContentLoaded", () => {
       label.textContent = "$" + slider.value;
     });
   });
+    document.getElementById("busHeteroBtnLeft").addEventListener("click", () => {
+    busBetState.leftHetero = !busBetState.leftHetero;
+    openBusBetScreen();
+  });
+    document.getElementById("busHeteroBtnRight").addEventListener("click", () => {
+    busBetState.rightHetero = !busBetState.rightHetero;
+    openBusBetScreen();
+  });
+  document.getElementById("busTicketBtnLeft").addEventListener("click", () => useBusTicket("left"));
+  document.getElementById("busTicketBtnRight").addEventListener("click", () => useBusTicket("right"));
   document.querySelectorAll(".bus-bet-preset").forEach((btn) => {
     btn.addEventListener("click", () => {
       const side = btn.dataset.side;
       const pct = parseInt(btn.dataset.pct, 10);
       const amount = side === "left" ? busState.leftAmount : busState.rightAmount;
       if (amount < 10) return;
+      const heteroActive = side === "left" ? busBetState.leftHetero : busBetState.rightHetero;
+      const cap = heteroActive ? amount : Math.min(amount, busBaseBetCap());
       const slider = document.getElementById(side === "left" ? "busBetLeftSlider" : "busBetRightSlider");
       const label = document.getElementById(side === "left" ? "busBetLeftAmount" : "busBetRightAmount");
       const val = Math.max(10, Math.round((amount * pct) / 100 / 10) * 10);
-      slider.value = Math.min(val, amount);
+      slider.value = Math.min(val, cap);
       label.textContent = "$" + slider.value;
     });
   });
