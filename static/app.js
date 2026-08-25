@@ -3367,6 +3367,8 @@ const GMB_GOAL_LINE_X = GMB_FIELD_W - 34;
 const GMB_SHOOT_MAX_CHARGE = 850;   // ms de carga máxima del remate
 const GMB_SHOOT_BASE_SPEED = 7.4;
 const GMB_SHOOT_BONUS_SPEED = 9;
+const GMB_CURVE_MAX_ACCEL = 0.045; // fuerza lateral por frame a carga y tecla al 100%
+const GMB_CURVE_MAX_VY = 3.2;      // tope total de desvío — así el arquero siempre tiene chance
 const GMB_SHOOTOUT_TIMEOUT = 11000;  // si la pelota queda pinponeando sin definirse
 
 let gmb = null;
@@ -3923,7 +3925,7 @@ function gmbFireShot() {
   gmb.shoot.charging = false;
   const attacker = gmb[gmb.attackerSide];
   const dir = gmb.attackerSide === "left" ? 1 : -1;
-  const { dy } = gmbInputVector(gmb.attackerSide);
+  const { dx, dy } = gmbInputVector(gmb.attackerSide);
   const speed = GMB_SHOOT_BASE_SPEED + charge * GMB_SHOOT_BONUS_SPEED;
   const angle = dy * 0.55; // apunta arriba/abajo según input vertical al momento de patear
   const len = Math.hypot(1, angle) || 1;
@@ -3932,6 +3934,13 @@ function gmbFireShot() {
   gmb.ball.vy = (angle / len) * speed;
   gmb.ball.x = attacker.x + dir * (attacker.r + gmb.ball.r + 2);
   gmb.kickBurst = { x: gmb.ball.x, y: gmb.ball.y, t: now };
+
+  // NUEVO: comba — mantener ← o → al soltar el remate curva la pelota en vuelo.
+  // Fuerza escalada por la carga, con tope duro para que siga siendo atajable.
+  gmb.ball.hasCurve = dx !== 0;
+  gmb.ball.curveAccel = -dx * charge * GMB_CURVE_MAX_ACCEL;
+  gmb.ball.curveApplied = 0;
+
   busPlaySound("/static/audio/kickball.wav", 0.6);
 }
 
@@ -3974,6 +3983,14 @@ function gmbUpdateShootout(dt, ts) {
     ball.x += ball.vx * dt; ball.y += ball.vy * dt;
   } else {
     const ball = gmb.ball;
+
+    // NUEVO: aplica la comba mientras dura el vuelo, hasta el tope
+    if (ball.hasCurve && Math.abs(ball.curveApplied) < GMB_CURVE_MAX_VY) {
+      const step = ball.curveAccel * dt;
+      ball.vy += step;
+      ball.curveApplied += step;
+    }
+
     ball.vx *= 0.995; ball.vy *= 0.995;
     ball.x += ball.vx * dt; ball.y += ball.vy * dt;
     gmbBounceBallOffWalls(ball, GMB_WALL, GMB_FIELD_H - GMB_WALL);
