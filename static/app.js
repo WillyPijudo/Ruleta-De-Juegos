@@ -3970,6 +3970,8 @@ function gmbUpdateShootout(dt, ts) {
   keeper.x = Math.max(kMin, Math.min(kMax, keeper.x));
   keeper.y = Math.max(GMB_FIELD_H / 2 - GMB_GOAL_HALF - 36, Math.min(GMB_FIELD_H / 2 + GMB_GOAL_HALF + 36, keeper.y));
 
+  gmbResolveCircleCollision(attacker, keeper); // NUEVO: ya no se atraviesan como fantasmas    
+
   if (gmb.ball.owner === attackerSide) {
     // Misma fórmula de "la pelota sigue hacia donde mirás" que la Fase 1,
     // para que el amague en la corrida se sienta igual de bien.
@@ -3981,6 +3983,13 @@ function gmbUpdateShootout(dt, ts) {
     ball.vy += (ty - ball.y) * 0.05;
     ball.vx *= 0.94; ball.vy *= 0.94;
     ball.x += ball.vx * dt; ball.y += ball.vy * dt;
+
+    // NUEVO: si el arquero llega a tocar la pelota mientras la maneja el atacante, se la quita
+    const dSteal = Math.hypot(ball.x - keeper.x, ball.y - keeper.y);
+    if (dSteal < keeper.r + ball.r) {
+      gmbFinish("keeperWin", "quite");
+      return;
+    }
   } else {
     const ball = gmb.ball;
 
@@ -4085,6 +4094,7 @@ function gmbFinish(winnerKind, reason) {
     atajada: `¡${winnerName} lo tapó de una gran atajada! 🧤`,
     afuera: `El remate se fue lejos del arco. ¡Sigue siendo arquero, ${winnerName}! 🧤`,
     gol: `¡GOLAZO! ${winnerName} la clavó en el ángulo ⚽🔥`,
+    quite: `¡${winnerName} le achicó bien el ángulo y se la sacó de los pies! 🧤🦵`,
   };
 
   const decided = gmbTandaDecided();
