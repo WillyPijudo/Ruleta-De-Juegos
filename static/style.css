@@ -2405,12 +2405,24 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   box-shadow: 0 3px 8px rgba(0,0,0,0.5);
 }
 .gambeta-touch-right .gambeta-joystick-knob { background: var(--teal-bright); }
-.gambeta-dash-btn {
+.gambeta-touch-btns { display: flex; gap: 8px; }
+.gambeta-dash-btn, .gambeta-kick-btn {
   width: 54px; height: 54px; border-radius: 50%; border: 2px solid var(--border-bright);
   background: linear-gradient(180deg, var(--gold-bright), var(--gold));
   font-size: 20px; color: #221703; touch-action: none;
 }
-.gambeta-touch-right .gambeta-dash-btn { background: linear-gradient(180deg, var(--teal-bright), #1f6a85); color: #eafcff; }
+.gambeta-touch-right .gambeta-dash-btn, .gambeta-touch-right .gambeta-kick-btn { background: linear-gradient(180deg, var(--teal-bright), #1f6a85); color: #eafcff; }
+.gambeta-kick-btn { background: linear-gradient(180deg, var(--pink), #8a1c40); color: #fff0f4; }
+.gambeta-touch-right .gambeta-kick-btn { background: linear-gradient(180deg, var(--pink), #8a1c40); }
+
+/* ---------- Pantalla de configurar controles ---------- */
+.gambeta-remap-btn { cursor: pointer; transition: transform 0.12s ease, border-color 0.12s ease; }
+.gambeta-remap-btn:hover { transform: translateY(-2px); border-color: var(--pink); }
+.gambeta-remap-btn.gambeta-remap-listening {
+  border-color: var(--pink); color: var(--pink);
+  animation: gambeta-remap-pulse 0.6s ease-in-out infinite;
+}
+@keyframes gambeta-remap-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
 @media (max-width: 720px) {
   .gambeta-hud-side { width: 110px; }
