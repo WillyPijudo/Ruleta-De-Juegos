@@ -2314,7 +2314,8 @@ function initBusBankroll() {
     rightAmount: 0,
     leftRolled: false,
     rightRolled: false,
-    ticketUsed: false,
+    leftTicketUsed: false,
+    rightTicketUsed: false,
     ticketAvailableFor: null,
     leftStreak: 0,   
     rightStreak: 0,  
@@ -2695,9 +2696,7 @@ function busEvaluateGuess(round, guess, card) {
   if (round === 3) {
     const a = busGame.revealed[0].value, b = busGame.revealed[1].value;
     const lo = Math.min(a, b), hi = Math.max(a, b);
-    if (card.value === lo || card.value === hi) return false; // cae justo en el borde: pierde sí o sí
-    if (lo === hi) return guess === "out"; // par: adentro es imposible
-    const inside = card.value > lo && card.value < hi;
+    const inside = card.value >= lo && card.value <= hi; // empate en el borde cuenta como "adentro"
     return guess === (inside ? "in" : "out");
   }
   return guess === card.suit;
@@ -3088,7 +3087,7 @@ function busBaseBetCap() {
 
 // Recalcula si alguien tiene boleto disponible (desde la partida 2, y solo si no se usó ya)
 function updateBusTicketEligibility() {
-  if (busState.ticketUsed || busState.currentGameNum < 2) {
+  if (busState.currentGameNum < 2) {
     busState.ticketAvailableFor = null;
     return;
   }
@@ -3096,13 +3095,15 @@ function updateBusTicketEligibility() {
   const trailing = Math.min(busState.leftAmount, busState.rightAmount);
   if (leader <= 0) { busState.ticketAvailableFor = null; return; }
   const ratio = trailing / leader;
-  busState.ticketAvailableFor = ratio < 0.5
-    ? (busState.leftAmount < busState.rightAmount ? "left" : "right")
-    : null; // remontó sin usarlo -> se le esfuma
+  if (ratio >= 0.5) { busState.ticketAvailableFor = null; return; } // remontó sin usarlo -> se le esfuma
+  const trailingSide = busState.leftAmount < busState.rightAmount ? "left" : "right";
+  const alreadyUsed = trailingSide === "left" ? busState.leftTicketUsed : busState.rightTicketUsed;
+  busState.ticketAvailableFor = alreadyUsed ? null : trailingSide;
 }
 
 function useBusTicket(side) {
-  if (busState.ticketUsed || busState.ticketAvailableFor !== side) return;
+  const alreadyUsed = side === "left" ? busState.leftTicketUsed : busState.rightTicketUsed;
+  if (alreadyUsed || busState.ticketAvailableFor !== side) return;
   const leader = Math.max(busState.leftAmount, busState.rightAmount);
   const oldAmount = side === "left" ? busState.leftAmount : busState.rightAmount;
   const target = Math.max(oldAmount, Math.round((leader * 0.6) / 10) * 10);
@@ -3156,9 +3157,13 @@ function runBusTicketRoulette(el, oldAmount, target, onDone) {
 }
 
 function finalizeBusTicket(side, target) {
-  if (side === "left") busState.leftAmount = target;
-  else busState.rightAmount = target;
-  busState.ticketUsed = true;
+  if (side === "left") {
+    busState.leftAmount = target;
+    busState.leftTicketUsed = true;
+  } else {
+    busState.rightAmount = target;
+    busState.rightTicketUsed = true;
+  }
   busState.ticketAvailableFor = null;
   toast("🎫 ¡Boleto usado! La billetera subió de golpe.");
   openBusBetScreen();
