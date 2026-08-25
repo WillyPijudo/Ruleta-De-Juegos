@@ -4212,6 +4212,7 @@ function gmbUpdateHud(ts) {
     timerEl.textContent = "";
     timerEl.classList.remove("gambeta-timer-danger");
   }
+}
 
 /* ---------- Render ---------- */
 
