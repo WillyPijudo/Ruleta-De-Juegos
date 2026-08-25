@@ -2934,7 +2934,6 @@ function renderBusFinalChart() {
     return el;
   };
 
-  // Fondo tipo paño de mesa
   svg.appendChild(svgEl("rect", {
     x: marginLeft - 10, y: marginTop - 6, width: plotW + 20, height: plotH + 14,
     rx: 10, class: "bus-chart-plot-bg",
@@ -2976,29 +2975,36 @@ function renderBusFinalChart() {
   const leftPath = buildLine("leftTotal", "bus-chart-line bus-chart-line-left");
   const rightPath = buildLine("rightTotal", "bus-chart-line bus-chart-line-right");
 
-  // Caritas con el resultado de cada partida (reemplaza los puntos lisos de antes)
-  const buildFace = (h, i, key, betKey, netKey) => {
+  const buildFace = (h, i, key, betKey, netKey, dodge) => {
     const net = h[netKey] || 0;
     const isWin = net > 0;
-    const cx = xAt(i), cy = yAt(h[key]);
+    const cx = xAt(i) + (dodge || 0), cy = yAt(h[key]);
     const g = svgEl("g", { class: `bus-chart-face ${isWin ? "is-win" : "is-loss"}` });
 
-    g.appendChild(svgEl("circle", { cx, cy, r: 15, class: "bus-chart-face-hit" }));
-    g.appendChild(svgEl("circle", { cx, cy, r: 7, class: "bus-chart-face-base" }));
-    g.appendChild(svgEl("circle", { cx: cx - 2.4, cy: cy - 1.5, r: 1, class: "bus-chart-face-eye" }));
-    g.appendChild(svgEl("circle", { cx: cx + 2.4, cy: cy - 1.5, r: 1, class: "bus-chart-face-eye" }));
-    const mouthD = isWin
-      ? `M ${(cx - 3).toFixed(1)},${(cy + 1.5).toFixed(1)} Q ${cx.toFixed(1)},${(cy + 5).toFixed(1)} ${(cx + 3).toFixed(1)},${(cy + 1.5).toFixed(1)}`
-      : `M ${(cx - 3).toFixed(1)},${(cy + 3).toFixed(1)} Q ${cx.toFixed(1)},${(cy - 0.5).toFixed(1)} ${(cx + 3).toFixed(1)},${(cy + 3).toFixed(1)}`;
-    g.appendChild(svgEl("path", { d: mouthD, class: "bus-chart-face-mouth" }));
+    // Detector de hover: NO se mueve nunca, así el bounce/shake de abajo no lo saca de bajo el mouse.
+    g.appendChild(svgEl("circle", { cx, cy, r: 18, class: "bus-chart-face-hit" }));
 
-    const bubbleY = Math.max(cy - 30, marginTop + 16);
+    const visual = svgEl("g", { class: "bus-chart-face-visual" });
+    visual.appendChild(svgEl("circle", { cx, cy, r: 9, class: "bus-chart-face-base" }));
+    visual.appendChild(svgEl("circle", { cx: cx - 3, cy: cy - 2, r: 1.3, class: "bus-chart-face-eye" }));
+    visual.appendChild(svgEl("circle", { cx: cx + 3, cy: cy - 2, r: 1.3, class: "bus-chart-face-eye" }));
+    const mouthD = isWin
+      ? `M ${(cx - 4).toFixed(1)},${(cy + 2).toFixed(1)} Q ${cx.toFixed(1)},${(cy + 6.5).toFixed(1)} ${(cx + 4).toFixed(1)},${(cy + 2).toFixed(1)}`
+      : `M ${(cx - 4).toFixed(1)},${(cy + 4).toFixed(1)} Q ${cx.toFixed(1)},${(cy - 0.5).toFixed(1)} ${(cx + 4).toFixed(1)},${(cy + 4).toFixed(1)}`;
+    visual.appendChild(svgEl("path", { d: mouthD, class: "bus-chart-face-mouth" }));
+    g.appendChild(visual);
+
+    const bubbleY = Math.max(cy - 36, marginTop + 20);
     const tooltip = svgEl("g", { class: "bus-chart-tooltip" });
-    tooltip.appendChild(svgEl("rect", { x: cx - 38, y: bubbleY - 16, width: 76, height: 30, rx: 9, class: "bus-chart-tooltip-bg" }));
-    const betText = svgEl("text", { x: cx, y: bubbleY - 4, class: "bus-chart-tooltip-bet", "text-anchor": "middle" });
+    tooltip.appendChild(svgEl("rect", { x: cx - 42, y: bubbleY - 18, width: 84, height: 34, rx: 10, class: "bus-chart-tooltip-bg" }));
+    tooltip.appendChild(svgEl("path", {
+      d: `M ${(cx - 5).toFixed(1)},${(bubbleY + 16).toFixed(1)} L ${(cx + 5).toFixed(1)},${(bubbleY + 16).toFixed(1)} L ${cx.toFixed(1)},${(bubbleY + 23).toFixed(1)} Z`,
+      class: "bus-chart-tooltip-bg",
+    }));
+    const betText = svgEl("text", { x: cx, y: bubbleY - 5, class: "bus-chart-tooltip-bet", "text-anchor": "middle" });
     betText.textContent = "Apostó $" + (h[betKey] || 0);
     const resultText = svgEl("text", {
-      x: cx, y: bubbleY + 10,
+      x: cx, y: bubbleY + 11,
       class: `bus-chart-tooltip-result ${isWin ? "win" : "loss"}`,
       "text-anchor": "middle",
     });
@@ -3016,9 +3022,11 @@ function renderBusFinalChart() {
 
   const faceGroups = [];
   history.forEach((h, i) => {
-    if (i === 0) return; // el punto de arranque no es "resultado de una partida"
-    const leftFace = buildFace(h, i, "leftTotal", "leftBet", "leftNet");
-    const rightFace = buildFace(h, i, "rightTotal", "rightBet", "rightNet");
+    if (i === 0) return;
+    // Si campeón y retador quedaron con la misma plata, no los dejo pisarse.
+    const overlap = h.leftTotal === h.rightTotal;
+    const leftFace = buildFace(h, i, "leftTotal", "leftBet", "leftNet", overlap ? -9 : 0);
+    const rightFace = buildFace(h, i, "rightTotal", "rightBet", "rightNet", overlap ? 9 : 0);
     svg.appendChild(leftFace);
     svg.appendChild(rightFace);
     faceGroups.push({ g: leftFace, i }, { g: rightFace, i });
@@ -3036,7 +3044,6 @@ function renderBusFinalChart() {
     });
   });
 
-  // Las caritas van "apareciendo" a medida que la línea las alcanza, con un honk en cada una
   const stepCount = history.length - 1;
   let honked = {};
   faceGroups.forEach(({ g, i }) => {
@@ -3046,26 +3053,6 @@ function renderBusFinalChart() {
       if (!honked[i]) { honked[i] = true; playHonk(); }
     }, delay);
   });
-}
-
-function playHonk() {
-  if (!soundEnabled) return;
-  const ctx = getAudioCtx();
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = "sawtooth";
-  osc.frequency.setValueAtTime(220, ctx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(140, ctx.currentTime + 0.12);
-  gain.gain.setValueAtTime(0.16, ctx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.16);
-  osc.connect(gain).connect(ctx.destination);
-  osc.start();
-  osc.stop(ctx.currentTime + 0.18);
-}
-
-function playTrollLaugh() {
-  if (!soundEnabled) return;
-  busPlaySound("/static/audio/troll-laugh.mp3", 0.6);
 }
 
 // Tope de apuesta: el menor entre $1000 y el 50% de lo que tiene el que va ganando
