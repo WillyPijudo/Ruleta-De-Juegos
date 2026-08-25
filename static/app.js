@@ -1519,6 +1519,30 @@ document.addEventListener("DOMContentLoaded", () => {
     openPenaltyModal();
   });
 
+  document.getElementById("pickGambetaBtn").addEventListener("click", () => {
+    closeDuelSelect();
+    openGambetaModal();
+  });
+
+  document.getElementById("gambetaStartBtn").addEventListener("click", startGambetaMatch);
+  document.getElementById("backFromGambetaIntro").addEventListener("click", () => {
+    document.getElementById("gambetaModal").classList.add("hidden");
+  });
+  document.getElementById("gambetaExitBtn").addEventListener("click", () => {
+    teardownGambeta();
+    document.getElementById("gambetaModal").classList.add("hidden");
+  });
+  document.getElementById("gambetaRematchBtn").addEventListener("click", () => {
+    gmbRoleFlip = !gmbRoleFlip; // en la revancha se invierten los roles (quién ataca primero)
+    startGambetaMatch();
+  });
+  document.getElementById("gambetaBackBtn").addEventListener("click", () => {
+    teardownGambeta();
+    document.getElementById("gambetaModal").classList.add("hidden");
+  });
+  gmbSetupTouchZone("gambetaTouchLeft", "gambetaJoyLeft", "gambetaDashBtnLeft", "left");
+  gmbSetupTouchZone("gambetaTouchRight", "gambetaJoyRight", "gambetaDashBtnRight", "right");
+
   document.getElementById("rpsStartBtn").addEventListener("click", beginRpsMatch);
   document.getElementById("backFromRpsIntro").addEventListener("click", () => {
     document.getElementById("rpsModal").classList.add("hidden");
@@ -3201,3 +3225,719 @@ document.addEventListener("DOMContentLoaded", () => {
     startBusAttempt();
   });
 });
+
+
+
+/* ===================== Gambeta 1v1 — física, canvas, input ===================== */
+
+const GMB_FIELD_W = 900, GMB_FIELD_H = 380;
+const GMB_WALL = 6;                 // grosor visual del borde
+const GMB_PLAYER_R = 17;
+const GMB_BALL_R = 9;
+const GMB_MAX_SPEED = 4.4;
+const GMB_ACCEL = 0.55;
+const GMB_FRICTION = 0.90;
+const GMB_DASH_COOLDOWN = 4000;     // ms — pedido: 3-5s
+const GMB_DASH_DURATION = 150;      // ms de impulso
+const GMB_DASH_POWER = 8.5;
+const GMB_DASH_MAXSPEED = 9.5;      // tope de velocidad SOLO mientras dashea
+const GMB_PHASE1_TIME = 13000;      // shot clock fase 1 (ms)
+const GMB_ATTACK_ZONE_X = GMB_FIELD_W - 70;   // el atacante debe llegar acá con la pelota
+const GMB_STEAL_BACK_X = 70;                  // si el defensor se la roba y llega acá, gana él
+const GMB_GOAL_HALF = 62;           // medio ancho del arco (mouth)
+const GMB_GOAL_LINE_X = GMB_FIELD_W - 34;
+const GMB_SHOOT_MAX_CHARGE = 850;   // ms de carga máxima del remate
+const GMB_SHOOT_BASE_SPEED = 6.2;
+const GMB_SHOOT_BONUS_SPEED = 7.5;
+const GMB_SHOOTOUT_TIMEOUT = 6000;  // si la pelota queda pinponeando sin definirse
+
+let gmb = null;
+let gmbRafId = null;
+let gmbPendingTimeouts = [];
+let gmbRoleFlip = false; // se invierte en cada revancha: quién ataca primero
+
+function gmbSetTimeout(fn, ms) {
+  const id = setTimeout(() => {
+    gmbPendingTimeouts = gmbPendingTimeouts.filter((t) => t !== id);
+    fn();
+  }, ms);
+  gmbPendingTimeouts.push(id);
+  return id;
+}
+function gmbClearTimeouts() {
+  gmbPendingTimeouts.forEach((id) => clearTimeout(id));
+  gmbPendingTimeouts = [];
+}
+
+/* ---------- Setup ---------- */
+
+function openGambetaModal() {
+  document.getElementById("gambetaModal").classList.remove("hidden");
+  document.getElementById("gambetaResult").classList.add("hidden");
+  document.getElementById("gambetaPlay").classList.add("hidden");
+  document.getElementById("gambetaIntro").classList.remove("hidden");
+  gmbBuildIntroLegend();
+}
+
+function gmbBuildIntroLegend() {
+  const championName = (currentWinnerGame && currentWinnerGame.added_by) || "Campeón";
+  const challengerName = pendingChallengerName || "Retador";
+  const attackerIsLeft = !gmbRoleFlip;
+  const attackerName = attackerIsLeft ? championName : challengerName;
+  const defenderName = attackerIsLeft ? challengerName : championName;
+  document.getElementById("gambetaIntroAttacker").textContent = attackerName;
+  document.getElementById("gambetaIntroDefender").textContent = defenderName;
+  document.getElementById("gambetaLeftKeyName").textContent = championName;
+  document.getElementById("gambetaRightKeyName").textContent = challengerName;
+}
+
+function teardownGambeta() {
+  gmbClearTimeouts();
+  if (gmbRafId) cancelAnimationFrame(gmbRafId);
+  gmbRafId = null;
+  window.removeEventListener("keydown", gmbOnKeyDown);
+  window.removeEventListener("keyup", gmbOnKeyUp);
+  gmb = null;
+}
+
+function startGambetaMatch() {
+  const championName = (currentWinnerGame && currentWinnerGame.added_by) || "Campeón";
+  const challengerName = pendingChallengerName || "Retador";
+  const attackerSide = gmbRoleFlip ? "right" : "left";
+  const defenderSide = attackerSide === "left" ? "right" : "left";
+
+  gmb = {
+    championName, challengerName,
+    attackerSide, defenderSide,
+    phase: "dribble", // dribble | transition | shootout | done
+    phaseClock: GMB_PHASE1_TIME,
+    lastTs: null,
+    keys: {},
+    touch: {
+      left: { dx: 0, dy: 0 },
+      right: { dx: 0, dy: 0 },
+    },
+    left: gmbMakePlayer("left", 110, GMB_FIELD_H / 2, "var(--gold-bright)"),
+    right: gmbMakePlayer("right", GMB_FIELD_W - 110, GMB_FIELD_H / 2, "var(--teal-bright)"),
+    ball: { x: 0, y: 0, vx: 0, vy: 0, r: GMB_BALL_R, owner: null, lastTouch: null },
+    shoot: { charging: false, chargeStart: 0 },
+    shootoutStartedAt: 0,
+  };
+
+  // La pelota arranca a los pies del atacante.
+  const attacker = gmb[attackerSide];
+  gmb.ball.x = attacker.x + (attackerSide === "left" ? 26 : -26);
+  gmb.ball.y = attacker.y;
+  gmb.ball.owner = attackerSide;
+
+  document.getElementById("gambetaIntro").classList.add("hidden");
+  document.getElementById("gambetaResult").classList.add("hidden");
+  document.getElementById("gambetaPlay").classList.remove("hidden");
+  document.getElementById("gambetaLeftName").textContent = championName;
+  document.getElementById("gambetaRightName").textContent = challengerName;
+  gmbShowBanner(attackerSide === "left" ? `¡${championName} arranca gambeteando! 🔥` : `¡${challengerName} arranca gambeteando! 🔥`, 1400);
+  gmbSetPhaseLabel("Fase 1 · Gambeta");
+
+  window.addEventListener("keydown", gmbOnKeyDown);
+  window.addEventListener("keyup", gmbOnKeyUp);
+
+  gmb.lastTs = performance.now();
+  gmbRafId = requestAnimationFrame(gmbLoop);
+}
+
+function gmbMakePlayer(side, x, y, color) {
+  return {
+    side, x, y, vx: 0, vy: 0, r: GMB_PLAYER_R, color,
+    facingX: side === "left" ? 1 : -1, facingY: 0,
+    dashReadyAt: 0, dashingUntil: 0,
+  };
+}
+
+/* ---------- Input ---------- */
+
+const GMB_KEYS_LEFT  = { up: "w", down: "s", left: "a", right: "d", dash: "shift" };
+const GMB_KEYS_RIGHT = { up: "arrowup", down: "arrowdown", left: "arrowleft", right: "arrowright", dash: "enter" };
+const GMB_PREVENT_DEFAULT = new Set(["arrowup", "arrowdown", "arrowleft", "arrowright", "enter", " "]);
+
+function gmbOnKeyDown(e) {
+  if (!gmb) return;
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase();
+  if (GMB_PREVENT_DEFAULT.has(k)) e.preventDefault();
+  const already = gmb.keys[k];
+  gmb.keys[k] = true;
+  if (!already) {
+    if (k === GMB_KEYS_LEFT.dash) gmbTryAction("left");
+    if (k === GMB_KEYS_RIGHT.dash) gmbTryAction("right");
+  }
+}
+function gmbOnKeyUp(e) {
+  if (!gmb) return;
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase();
+  gmb.keys[k] = false;
+  if (k === GMB_KEYS_LEFT.dash) gmbReleaseAction("left");
+  if (k === GMB_KEYS_RIGHT.dash) gmbReleaseAction("right");
+}
+
+function gmbInputVector(side) {
+  const map = side === "left" ? GMB_KEYS_LEFT : GMB_KEYS_RIGHT;
+  let dx = 0, dy = 0;
+  if (gmb.keys[map.left]) dx -= 1;
+  if (gmb.keys[map.right]) dx += 1;
+  if (gmb.keys[map.up]) dy -= 1;
+  if (gmb.keys[map.down]) dy += 1;
+  // Suma el joystick táctil si está activo (dx/dy ya vienen normalizados -1..1)
+  const t = gmb.touch[side];
+  if (t && (t.dx || t.dy)) { dx += t.dx; dy += t.dy; }
+  const len = Math.hypot(dx, dy);
+  if (len > 1) { dx /= len; dy /= len; }
+  return { dx, dy };
+}
+
+/* "dash" en fase 1 = impulso. En fase 2, para el que ataca = cargar remate,
+   para el arquero = amague/lunge lateral rápido. */
+function gmbTryAction(side) {
+  if (!gmb || gmb.phase === "done" || gmb.phase === "transition") return;
+  const player = gmb[side];
+  const now = performance.now();
+  if (now < player.dashReadyAt) { playTick(); return; } // sonido "seco" de cooldown
+
+  if (gmb.phase === "dribble") {
+    gmbDash(side);
+  } else if (gmb.phase === "shootout") {
+    if (side === gmb.attackerSide) {
+      gmb.shoot.charging = true;
+      gmb.shoot.chargeStart = now;
+    } else {
+      gmbDash(side); // lunge del arquero
+    }
+  }
+}
+function gmbReleaseAction(side) {
+  if (!gmb || gmb.phase !== "shootout" || side !== gmb.attackerSide) return;
+  if (gmb.shoot.charging) gmbFireShot();
+}
+
+function gmbDash(side) {
+  const player = gmb[side];
+  const now = performance.now();
+  const { dx, dy } = gmbInputVector(side);
+  let dirX = dx, dirY = dy;
+  if (dirX === 0 && dirY === 0) { dirX = player.facingX; dirY = player.facingY; }
+  const len = Math.hypot(dirX, dirY) || 1;
+  player.vx += (dirX / len) * GMB_DASH_POWER;
+  player.vy += (dirY / len) * GMB_DASH_POWER;
+  player.dashingUntil = now + GMB_DASH_DURATION;
+  player.dashReadyAt = now + GMB_DASH_COOLDOWN;
+  player.dashTrailAt = now;
+  playTick();
+}
+
+/* ---------- Loop principal ---------- */
+
+function gmbLoop(ts) {
+  if (!gmb) return;
+  const dt = Math.min(ts - gmb.lastTs, 40) / (1000 / 60); // normalizado a "frames de 60fps"
+  gmb.lastTs = ts;
+
+  if (gmb.phase === "dribble") gmbUpdateDribble(dt, ts);
+  else if (gmb.phase === "shootout") gmbUpdateShootout(dt, ts);
+
+  gmbDraw(ts);
+  gmbUpdateHud(ts);
+
+  if (gmb.phase !== "done") gmbRafId = requestAnimationFrame(gmbLoop);
+}
+
+function gmbApplyMovement(player, side, dt) {
+  const { dx, dy } = gmbInputVector(side);
+  const dashing = performance.now() < player.dashingUntil;
+  player.vx += dx * GMB_ACCEL * dt;
+  player.vy += dy * GMB_ACCEL * dt;
+  const fr = Math.pow(GMB_FRICTION, dt);
+  player.vx *= fr; player.vy *= fr;
+  const cap = dashing ? GMB_DASH_MAXSPEED : GMB_MAX_SPEED;
+  const speed = Math.hypot(player.vx, player.vy);
+  if (speed > cap) { player.vx = (player.vx / speed) * cap; player.vy = (player.vy / speed) * cap; }
+  if (dx || dy) { player.facingX = dx || player.facingX; player.facingY = dy || player.facingY; }
+  player.x += player.vx * dt;
+  player.y += player.vy * dt;
+}
+
+function gmbClampToField(player, minX, maxX) {
+  player.x = Math.max(minX + player.r, Math.min(maxX - player.r, player.x));
+  player.y = Math.max(GMB_WALL + player.r, Math.min(GMB_FIELD_H - GMB_WALL - player.r, player.y));
+}
+
+function gmbResolveCircleCollision(a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const dist = Math.hypot(dx, dy) || 0.001;
+  const minDist = a.r + b.r;
+  if (dist >= minDist) return;
+  const overlap = (minDist - dist) / 2;
+  const nx = dx / dist, ny = dy / dist;
+  a.x -= nx * overlap; a.y -= ny * overlap;
+  b.x += nx * overlap; b.y += ny * overlap;
+  // un empujoncito de velocidad a lo largo de la normal (arcade, no elástico puro)
+  const rvx = b.vx - a.vx, rvy = b.vy - a.vy;
+  const rel = rvx * nx + rvy * ny;
+  if (rel < 0) {
+    const push = -rel * 0.5;
+    a.vx -= nx * push; a.vy -= ny * push;
+    b.vx += nx * push; b.vy += ny * push;
+  }
+}
+
+function gmbBounceBallOffWalls(ball, top, bottom) {
+  if (ball.y - ball.r < top) { ball.y = top + ball.r; ball.vy = Math.abs(ball.vy) * 0.6; }
+  if (ball.y + ball.r > bottom) { ball.y = bottom - ball.r; ball.vy = -Math.abs(ball.vy) * 0.6; }
+}
+
+function gmbUpdateDribble(dt, ts) {
+  gmb.phaseClock -= (dt * 1000) / 60;
+  if (gmb.phaseClock <= 0) { gmbFinish("defenderWin", "tiempo"); return; }
+
+  ["left", "right"].forEach((side) => gmbApplyMovement(gmb[side], side, dt));
+  gmb.left.x = Math.max(GMB_WALL + gmb.left.r, Math.min(GMB_FIELD_W - GMB_WALL - gmb.left.r, gmb.left.x));
+  gmb.left.y = Math.max(GMB_WALL + gmb.left.r, Math.min(GMB_FIELD_H - GMB_WALL - gmb.left.r, gmb.left.y));
+  gmb.right.x = Math.max(GMB_WALL + gmb.right.r, Math.min(GMB_FIELD_W - GMB_WALL - gmb.right.r, gmb.right.x));
+  gmb.right.y = Math.max(GMB_WALL + gmb.right.r, Math.min(GMB_FIELD_H - GMB_WALL - gmb.right.r, gmb.right.y));
+
+  gmbResolveCircleCollision(gmb.left, gmb.right);
+
+  const ball = gmb.ball;
+  const owner = ball.owner ? gmb[ball.owner] : null;
+
+  // Disputa de pelota: si el que NO tiene la posesión toca la pelota con más
+  // velocidad que el dueño actual, se la roba.
+  ["left", "right"].forEach((side) => {
+    const p = gmb[side];
+    const d = Math.hypot(p.x - ball.x, p.y - ball.y);
+    if (d < p.r + ball.r + 3) {
+      if (ball.owner === null) { ball.owner = side; }
+      else if (ball.owner !== side) {
+        const mySpeed = Math.hypot(p.vx, p.vy);
+        const ownerSpeed = Math.hypot(gmb[ball.owner].vx, gmb[ball.owner].vy);
+        if (mySpeed > ownerSpeed + 0.4 || performance.now() < p.dashingUntil) {
+          ball.owner = side;
+          ball.vx += p.vx * 0.4; ball.vy += p.vy * 0.4;
+          playTick();
+        }
+      }
+    }
+  });
+
+  if (ball.owner) {
+    const p = gmb[ball.owner];
+    const fLen = Math.hypot(p.facingX, p.facingY) || 1;
+    const tx = p.x + (p.facingX / fLen) * (p.r + ball.r + 3);
+    const ty = p.y + (p.facingY / fLen) * (p.r + ball.r + 3);
+    ball.vx += (tx - ball.x) * 0.05;
+    ball.vy += (ty - ball.y) * 0.05;
+  }
+  ball.vx *= 0.94; ball.vy *= 0.94;
+  ball.x += ball.vx * dt; ball.y += ball.vy * dt;
+  if (ball.x - ball.r < GMB_WALL) { ball.x = GMB_WALL + ball.r; ball.vx = Math.abs(ball.vx) * 0.6; }
+  if (ball.x + ball.r > GMB_FIELD_W - GMB_WALL) { ball.x = GMB_FIELD_W - GMB_WALL - ball.r; ball.vx = -Math.abs(ball.vx) * 0.6; }
+  gmbBounceBallOffWalls(ball, GMB_WALL, GMB_FIELD_H - GMB_WALL);
+
+  const attacker = gmb[gmb.attackerSide];
+  const defender = gmb[gmb.defenderSide];
+  const attackerGoalDir = gmb.attackerSide === "left" ? 1 : -1;
+  const attackerTargetX = gmb.attackerSide === "left" ? GMB_ATTACK_ZONE_X : GMB_FIELD_W - GMB_ATTACK_ZONE_X;
+  const stealBackX = gmb.attackerSide === "left" ? GMB_STEAL_BACK_X : GMB_FIELD_W - GMB_STEAL_BACK_X;
+
+  if (ball.owner === gmb.attackerSide && attackerGoalDir * attacker.x >= attackerGoalDir * attackerTargetX) {
+    gmbStartTransition();
+  } else if (ball.owner === gmb.defenderSide && attackerGoalDir * defender.x <= attackerGoalDir * stealBackX) {
+    gmbFinish("defenderWin", "robo");
+  }
+}
+
+function gmbStartTransition() {
+  gmb.phase = "transition";
+  gmbSetPhaseLabel("¡Rompió la marca! 🔥");
+  playFanfare();
+  gmbShowBanner("¡Se la llevó! Ahora es mano a mano con el arquero 🧤", 1300);
+  gmbSetTimeout(() => gmbStartShootout(), 1300);
+}
+
+function gmbStartShootout() {
+  const attackerSide = gmb.attackerSide, defenderSide = gmb.defenderSide;
+  const dir = attackerSide === "left" ? 1 : -1;
+  const goalX = attackerSide === "left" ? GMB_GOAL_LINE_X : GMB_FIELD_W - GMB_GOAL_LINE_X;
+  const shootX = attackerSide === "left" ? GMB_FIELD_W - 240 : 240;
+
+  const attacker = gmb[attackerSide];
+  const keeper = gmb[defenderSide];
+  attacker.x = shootX; attacker.y = GMB_FIELD_H / 2; attacker.vx = 0; attacker.vy = 0;
+  attacker.facingX = dir; attacker.facingY = 0;
+  keeper.x = goalX; keeper.y = GMB_FIELD_H / 2; keeper.vx = 0; keeper.vy = 0;
+
+  gmb.ball.x = attacker.x + dir * 22; gmb.ball.y = attacker.y;
+  gmb.ball.vx = 0; gmb.ball.vy = 0; gmb.ball.owner = attackerSide;
+  gmb.shoot.charging = false;
+
+  gmb.phase = "shootout";
+  gmb.shootoutStartedAt = performance.now();
+  gmbSetPhaseLabel("Fase 2 · Definición");
+}
+
+function gmbFireShot() {
+  const now = performance.now();
+  const charge = Math.min(now - gmb.shoot.chargeStart, GMB_SHOOT_MAX_CHARGE) / GMB_SHOOT_MAX_CHARGE;
+  gmb.shoot.charging = false;
+  const attacker = gmb[gmb.attackerSide];
+  const dir = gmb.attackerSide === "left" ? 1 : -1;
+  const { dy } = gmbInputVector(gmb.attackerSide);
+  const speed = GMB_SHOOT_BASE_SPEED + charge * GMB_SHOOT_BONUS_SPEED;
+  const angle = dy * 0.55; // apunta arriba/abajo según input vertical al momento de patear
+  const len = Math.hypot(1, angle) || 1;
+  gmb.ball.owner = null;
+  gmb.ball.vx = (dir / len) * speed;
+  gmb.ball.vy = (angle / len) * speed;
+  gmb.ball.x = attacker.x + dir * (attacker.r + gmb.ball.r + 2);
+  playTick();
+}
+
+function gmbUpdateShootout(dt, ts) {
+  const attackerSide = gmb.attackerSide, defenderSide = gmb.defenderSide;
+  const attacker = gmb[attackerSide], keeper = gmb[defenderSide];
+  const dir = attackerSide === "left" ? 1 : -1;
+
+  // Al atacante se le limita el rango de movimiento (no puede correr hasta el arco).
+  gmbApplyMovement(attacker, attackerSide, gmb.shoot.charging ? dt * 0.25 : dt);
+  const shootMinX = attackerSide === "left" ? GMB_FIELD_W - 300 : 60;
+  const shootMaxX = attackerSide === "left" ? GMB_FIELD_W - 170 : 200;
+  attacker.x = Math.max(Math.min(shootMinX, shootMaxX), Math.min(Math.max(shootMinX, shootMaxX), attacker.x));
+  attacker.y = Math.max(GMB_WALL + attacker.r, Math.min(GMB_FIELD_H - GMB_WALL - attacker.r, attacker.y));
+
+  // Al arquero se lo limita a moverse en la línea del arco (con el dash puede
+  // "lanzarse" un poco más lejos gracias al boost de velocidad del dash).
+  gmbApplyMovement(keeper, defenderSide, dt);
+  const goalX = attackerSide === "left" ? GMB_GOAL_LINE_X : GMB_FIELD_W - GMB_GOAL_LINE_X;
+  keeper.x = goalX + (keeper.x - goalX) * 0.25; // lo "ata" a la línea, el dash igual lo mueve lateralmente
+  keeper.y = Math.max(GMB_FIELD_H / 2 - GMB_GOAL_HALF - 30, Math.min(GMB_FIELD_H / 2 + GMB_GOAL_HALF + 30, keeper.y));
+
+  if (gmb.ball.owner === attackerSide) {
+    gmb.ball.x = attacker.x + dir * (attacker.r + gmb.ball.r + 2);
+    gmb.ball.y = attacker.y;
+  } else {
+    const ball = gmb.ball;
+    ball.vx *= 0.995; ball.vy *= 0.995;
+    ball.x += ball.vx * dt; ball.y += ball.vy * dt;
+    gmbBounceBallOffWalls(ball, GMB_WALL, GMB_FIELD_H - GMB_WALL);
+
+    // Palos (dos círculos fijos en las puntas del arco)
+    [-1, 1].forEach((sgn) => {
+      const post = { x: goalX, y: GMB_FIELD_H / 2 + sgn * GMB_GOAL_HALF, r: 5 };
+      const d = Math.hypot(ball.x - post.x, ball.y - post.y);
+      if (d < post.r + ball.r) {
+        const nx = (ball.x - post.x) / d, ny = (ball.y - post.y) / d;
+        ball.x = post.x + nx * (post.r + ball.r);
+        ball.y = post.y + ny * (post.r + ball.r);
+        ball.vx *= -0.5; ball.vy *= -0.5;
+      }
+    });
+
+    // Atajada: colisión con el arquero
+    const dK = Math.hypot(ball.x - keeper.x, ball.y - keeper.y);
+    if (dK < keeper.r + ball.r) {
+      gmbFinish("keeperWin", "atajada");
+      return;
+    }
+
+    // Gol / afuera
+    const pastLine = dir === 1 ? ball.x - ball.r > goalX : ball.x + ball.r < goalX;
+    if (pastLine) {
+      const inMouth = Math.abs(ball.y - GMB_FIELD_H / 2) <= GMB_GOAL_HALF;
+      gmbFinish(inMouth ? "shooterWin" : "keeperWin", inMouth ? "gol" : "afuera");
+      return;
+    }
+    if (performance.now() - gmb.shootoutStartedAt > GMB_SHOOTOUT_TIMEOUT) {
+      gmbFinish("keeperWin", "afuera");
+      return;
+    }
+  }
+}
+
+/* ---------- Resolución y resultado ---------- */
+
+function gmbFinish(winnerKind, reason) {
+  if (!gmb || gmb.phase === "done") return;
+  gmb.phase = "done";
+  if (gmbRafId) cancelAnimationFrame(gmbRafId);
+  gmbRafId = null;
+  window.removeEventListener("keydown", gmbOnKeyDown);
+  window.removeEventListener("keyup", gmbOnKeyUp);
+
+  const attackerSide = gmb.attackerSide, defenderSide = gmb.defenderSide;
+  let winnerSide;
+  if (winnerKind === "shooterWin") winnerSide = attackerSide;
+  else winnerSide = defenderSide; // keeperWin o defenderWin (tiempo/robo) -> gana el defensor/arquero
+
+  const side = winnerSide === "left" ? "champion" : "challenger";
+  const winnerName = winnerSide === "left" ? gmb.championName : gmb.challengerName;
+
+  const REASON_MSG = {
+    tiempo: `Se acabó el tiempo y ${winnerName} nunca lo dejó pasar 🛡️`,
+    robo: `¡Le robó la pelota y se la llevó hasta el otro lado! 🦵`,
+    atajada: `¡${winnerName} lo tapó de una gran atajada! 🧤`,
+    afuera: `El remate se fue lejos del arco. ¡Sigue siendo arquero, ${winnerName}! 🧤`,
+    gol: `¡GOLAZO! ${winnerName} la clavó en el ángulo ⚽🔥`,
+  };
+
+  gmbSetTimeout(() => {
+    document.getElementById("gambetaPlay").classList.add("hidden");
+    document.getElementById("gambetaResult").classList.remove("hidden");
+    document.getElementById("gambetaResultTitle").textContent =
+      winnerKind === "shooterWin" ? "🏆 ¡GOLAZO!" : winnerKind === "keeperWin" ? "🧤 ¡Atajada!" : "🛡️ ¡Se lo bancó!";
+    const resultEl = document.getElementById("gambetaResultText");
+    resultEl.classList.remove("show");
+    resolveDuelResult(resultEl, side, REASON_MSG[reason] || "");
+    if (winnerKind === "shooterWin") { launchConfetti(); playFanfare(); }
+    else if (winnerKind === "keeperWin") { playFanfare(); }
+    else { playBuzz(); }
+  }, 250);
+}
+
+/* ===================== Gambeta 1v1 — dibujo, HUD, táctil ===================== */
+
+function gmbSetPhaseLabel(text) {
+  document.getElementById("gambetaPhaseLabel").textContent = text;
+}
+
+function gmbShowBanner(text, ms) {
+  const el = document.getElementById("gambetaBanner");
+  el.textContent = text;
+  el.classList.remove("hidden", "gambeta-banner-pop");
+  void el.offsetWidth;
+  el.classList.add("gambeta-banner-pop");
+  gmbSetTimeout(() => el.classList.add("hidden"), ms);
+}
+
+function gmbUpdateHud(ts) {
+  if (!gmb) return;
+  const now = performance.now();
+  const leftCd = Math.max(0, gmb.left.dashReadyAt - now) / GMB_DASH_COOLDOWN;
+  const rightCd = Math.max(0, gmb.right.dashReadyAt - now) / GMB_DASH_COOLDOWN;
+  document.getElementById("gambetaLeftDashFill").style.transform = `scaleX(${1 - leftCd})`;
+  document.getElementById("gambetaRightDashFill").style.transform = `scaleX(${1 - rightCd})`;
+  document.getElementById("gambetaLeftDashFill").classList.toggle("gambeta-dash-ready", leftCd === 0);
+  document.getElementById("gambetaRightDashFill").classList.toggle("gambeta-dash-ready", rightCd === 0);
+
+  const timerEl = document.getElementById("gambetaTimer");
+  if (gmb.phase === "dribble") {
+    timerEl.textContent = Math.max(0, gmb.phaseClock / 1000).toFixed(1) + "s";
+    timerEl.classList.toggle("gambeta-timer-danger", gmb.phaseClock < 3500);
+  } else {
+    timerEl.textContent = gmb.phase === "shootout" ? "⚽" : "";
+    timerEl.classList.remove("gambeta-timer-danger");
+  }
+}
+
+/* ---------- Render ---------- */
+
+function gmbDraw(ts) {
+  const canvas = document.getElementById("gambetaCanvas");
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, GMB_FIELD_W, GMB_FIELD_H);
+
+  gmbDrawPitch(ctx);
+  if (gmb.phase === "shootout" || gmb.phase === "transition") gmbDrawGoal(ctx);
+
+  gmbDrawPlayer(ctx, gmb.left, ts);
+  gmbDrawPlayer(ctx, gmb.right, ts);
+  gmbDrawBall(ctx);
+
+  if (gmb.phase === "shootout" && gmb.shoot.charging) gmbDrawChargeArrow(ctx, ts);
+}
+
+function gmbDrawPitch(ctx) {
+  // Césped con franjas diagonales, mismo espíritu que el resto de la web.
+  ctx.fillStyle = "#4f7a3d";
+  ctx.fillRect(0, 0, GMB_FIELD_W, GMB_FIELD_H);
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,0.05)";
+  ctx.lineWidth = 26;
+  for (let x = -GMB_FIELD_H; x < GMB_FIELD_W + GMB_FIELD_H; x += 52) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + GMB_FIELD_H, GMB_FIELD_H);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.strokeStyle = "rgba(230,240,225,0.85)";
+  ctx.lineWidth = GMB_WALL;
+  ctx.strokeRect(GMB_WALL / 2, GMB_WALL / 2, GMB_FIELD_W - GMB_WALL, GMB_FIELD_H - GMB_WALL);
+
+  if (gmb.phase === "dribble") {
+    // Línea de meta del atacante (zona a alcanzar) y línea de robo del defensor
+    const dir = gmb.attackerSide === "left" ? 1 : -1;
+    const targetX = gmb.attackerSide === "left" ? GMB_ATTACK_ZONE_X : GMB_FIELD_W - GMB_ATTACK_ZONE_X;
+    ctx.save();
+    ctx.setLineDash([10, 8]);
+    ctx.strokeStyle = "rgba(245, 205, 118, 0.55)";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(targetX, GMB_WALL); ctx.lineTo(targetX, GMB_FIELD_H - GMB_WALL); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function gmbDrawGoal(ctx) {
+  const attackerSide = gmb.attackerSide;
+  const dir = attackerSide === "left" ? 1 : -1;
+  const goalX = attackerSide === "left" ? GMB_GOAL_LINE_X : GMB_FIELD_W - GMB_GOAL_LINE_X;
+  const topY = GMB_FIELD_H / 2 - GMB_GOAL_HALF, botY = GMB_FIELD_H / 2 + GMB_GOAL_HALF;
+  const netDepth = 26 * dir;
+
+  // Red (crosshatch)
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.rect(Math.min(goalX, goalX + netDepth), topY, Math.abs(netDepth), botY - topY);
+  ctx.clip();
+  for (let i = -6; i <= 6; i++) {
+    ctx.beginPath(); ctx.moveTo(goalX + i * 8, topY - 20); ctx.lineTo(goalX + i * 8, botY + 20); ctx.stroke();
+  }
+  for (let j = 0; j <= 12; j++) {
+    ctx.beginPath(); ctx.moveTo(goalX - 40, topY + j * 8); ctx.lineTo(goalX + 40, topY + j * 8); ctx.stroke();
+  }
+  ctx.restore();
+
+  // Línea de gol
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(goalX, topY); ctx.lineTo(goalX, botY); ctx.stroke();
+
+  // Palos
+  [topY, botY].forEach((y) => {
+    ctx.beginPath();
+    ctx.arc(goalX, y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.3)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  });
+}
+
+function gmbDrawChargeArrow(ctx, ts) {
+  const now = performance.now();
+  const charge = Math.min(now - gmb.shoot.chargeStart, GMB_SHOOT_MAX_CHARGE) / GMB_SHOOT_MAX_CHARGE;
+  const attacker = gmb[gmb.attackerSide];
+  const dir = gmb.attackerSide === "left" ? 1 : -1;
+  const len = 20 + charge * 46;
+  ctx.save();
+  ctx.strokeStyle = `rgba(245, 205, 118, ${0.5 + charge * 0.5})`;
+  ctx.lineWidth = 4 + charge * 4;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(attacker.x + dir * (attacker.r + 6), attacker.y);
+  ctx.lineTo(attacker.x + dir * (attacker.r + 6 + len), attacker.y);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function gmbDrawPlayer(ctx, p, ts) {
+  const dashing = performance.now() < p.dashingUntil;
+  // Estela del dash
+  if (p.dashTrailAt && performance.now() - p.dashTrailAt < 260) {
+    const age = (performance.now() - p.dashTrailAt) / 260;
+    ctx.save();
+    ctx.globalAlpha = (1 - age) * 0.35;
+    ctx.beginPath();
+    ctx.arc(p.x - p.vx * 2, p.y - p.vy * 2, p.r * (1 + age * 0.4), 0, Math.PI * 2);
+    ctx.fillStyle = gmbResolveColor(p.color);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.save();
+  if (dashing) { ctx.shadowColor = gmbResolveColor(p.color); ctx.shadowBlur = 16; }
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+  ctx.fillStyle = gmbResolveColor(p.color);
+  ctx.fill();
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = "rgba(0,0,0,0.45)";
+  ctx.stroke();
+  ctx.restore();
+
+  // Iniciales, como en el resto de la web (fichas/HUD con 2 letras)
+  ctx.fillStyle = "#0e0a11";
+  ctx.font = "bold 12px 'JetBrains Mono', monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const label = p.side === gmb.attackerSide ? "⚽" : "🧤";
+  ctx.fillText(label, p.x, p.y + 1);
+}
+
+function gmbDrawBall(ctx) {
+  const b = gmb.ball;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+  ctx.fillStyle = "#f4f1e8";
+  ctx.fill();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "rgba(0,0,0,0.5)";
+  ctx.stroke();
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.32, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function gmbResolveColor(varName) {
+  if (!varName.startsWith("var(")) return varName;
+  const name = varName.slice(4, -1);
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "#fff";
+}
+
+/* ---------- Controles táctiles (joystick doble para mobile) ---------- */
+
+function gmbSetupTouchZone(zoneId, joyId, dashBtnId, side) {
+  const zone = document.getElementById(zoneId);
+  const joy = document.getElementById(joyId);
+  const knob = joy.querySelector(".gambeta-joystick-knob");
+  const dashBtn = document.getElementById(dashBtnId);
+  let activeTouchId = null;
+  let baseX = 0, baseY = 0;
+  const MAX_R = 34;
+
+  const setKnob = (dx, dy) => { knob.style.transform = `translate(${dx}px, ${dy}px)`; };
+  const resetKnob = () => { setKnob(0, 0); if (gmb) { gmb.touch[side].dx = 0; gmb.touch[side].dy = 0; } };
+
+  zone.addEventListener("touchstart", (e) => {
+    const t = e.changedTouches[0];
+    activeTouchId = t.identifier;
+    const rect = joy.getBoundingClientRect();
+    baseX = rect.left + rect.width / 2;
+    baseY = rect.top + rect.height / 2;
+    e.preventDefault();
+  }, { passive: false });
+
+  zone.addEventListener("touchmove", (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== activeTouchId) continue;
+      let dx = t.clientX - baseX, dy = t.clientY - baseY;
+      const len = Math.hypot(dx, dy);
+      if (len > MAX_R) { dx = (dx / len) * MAX_R; dy = (dy / len) * MAX_R; }
+      setKnob(dx, dy);
+      if (gmb) { gmb.touch[side].dx = dx / MAX_R; gmb.touch[side].dy = dy / MAX_R; }
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  const endTouch = (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === activeTouchId) { activeTouchId = null; resetKnob(); }
+    }
+  };
+  zone.addEventListener("touchend", endTouch);
+  zone.addEventListener("touchcancel", endTouch);
+
+  dashBtn.addEventListener("touchstart", (e) => { e.preventDefault(); gmbTryAction(side); }, { passive: false });
+  dashBtn.addEventListener("touchend", (e) => { e.preventDefault(); gmbReleaseAction(side); }, { passive: false });
+}
