@@ -699,6 +699,7 @@
         </div>
       </div>
       <p class="modal-body-text">El dash tiene 4s de recarga — usalo para desmarcarte o para cerrarle el ángulo al que remata. Patear es libre, sin recarga. En el celular, cada uno controla su joystick y sus botones de su lado de la pantalla.</p>
+      <p class="modal-body-text"><b>Campeón ataca primero</b> — después se turnan en cada intento. Mejor de 5, y si siguen empatados, muerte súbita (como en Penales).</p>
       <p class="modal-body-text" style="margin-bottom:6px;">¿Cuánto dura la gambeta (Fase 1)?</p>
       <div class="bus-rounds-grid" id="gambetaDurationGrid">
         <button type="button" class="bus-rounds-pill gambeta-duration-pill active" data-duration="30">30s</button>
@@ -730,6 +731,17 @@
     </div>
 
 <div id="gambetaPlay" class="hidden gambeta-play fight-screen">
+<div class="penalty-scoreboard" id="gambetaScoreboard">
+  <div class="pb-side" id="gmbTbChampionSide">
+    <span class="pb-name" id="gmbTbChampionName">Campeón</span>
+    <div class="pb-dots" id="gmbTbChampionDots"></div>
+  </div>
+  <div class="pb-score" id="gmbTbScore">0<span class="pb-score-sep">-</span>0</div>
+  <div class="pb-side pb-side-right" id="gmbTbChallengerSide">
+    <span class="pb-name" id="gmbTbChallengerName">Retador</span>
+    <div class="pb-dots" id="gmbTbChallengerDots"></div>
+  </div>
+</div>
       <div class="gambeta-hud">
         <div class="gambeta-hud-side gambeta-hud-left">
           <span class="gambeta-hud-name" id="gambetaLeftName">Campeón</span>
