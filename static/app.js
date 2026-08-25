@@ -1531,7 +1531,10 @@ document.addEventListener("DOMContentLoaded", () => {
       gmbSelectedDuration = parseInt(pill.dataset.duration, 10) * 1000;
     });
   });
-  document.getElementById("gambetaStartBtn").addEventListener("click", startGambetaMatch);
+  document.getElementById("gambetaStartBtn").addEventListener("click", () => {
+    gmbInitTanda();
+    startGambetaMatch();
+  });
   document.getElementById("backFromGambetaIntro").addEventListener("click", () => {
     document.getElementById("gambetaModal").classList.add("hidden");
   });
@@ -1540,7 +1543,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("gambetaModal").classList.add("hidden");
   });
   document.getElementById("gambetaRematchBtn").addEventListener("click", () => {
-    gmbRoleFlip = !gmbRoleFlip; // en la revancha se invierten los roles (quién ataca primero)
+    gmbInitTanda(); // revancha = tanda nueva de cero, campeón arranca atacando otra vez
     startGambetaMatch();
   });
   document.getElementById("gambetaBackBtn").addEventListener("click", () => {
@@ -3369,7 +3372,7 @@ const GMB_SHOOTOUT_TIMEOUT = 11000;  // si la pelota queda pinponeando sin defin
 let gmb = null;
 let gmbRafId = null;
 let gmbPendingTimeouts = [];
-let gmbRoleFlip = false; // se invierte en cada revancha: quién ataca primero
+let gmbTanda = null; // marcador de la tanda completa (mejor de 5 + muerte súbita)
 
 function gmbSetTimeout(fn, ms) {
   const id = setTimeout(() => {
@@ -3475,13 +3478,55 @@ function gmbStartRebind(side, actionKey, btn) {
 function gmbBuildIntroLegend() {
   const championName = (currentWinnerGame && currentWinnerGame.added_by) || "Campeón";
   const challengerName = pendingChallengerName || "Retador";
-  const attackerIsLeft = !gmbRoleFlip;
-  const attackerName = attackerIsLeft ? championName : challengerName;
-  const defenderName = attackerIsLeft ? challengerName : championName;
-  document.getElementById("gambetaIntroAttacker").textContent = attackerName;
-  document.getElementById("gambetaIntroDefender").textContent = defenderName;
+  document.getElementById("gambetaIntroAttacker").textContent = championName;
+  document.getElementById("gambetaIntroDefender").textContent = challengerName;
   document.getElementById("gambetaLeftKeyName").textContent = championName;
   document.getElementById("gambetaRightKeyName").textContent = challengerName;
+}
+
+function gmbInitTanda() {
+  const championName = (currentWinnerGame && currentWinnerGame.added_by) || "Campeón";
+  let challengerName = (pendingChallengerName || "").trim() || "Retador";
+  if (challengerName.toLowerCase() === championName.toLowerCase()) {
+    challengerName = `${challengerName} (Retador)`;
+  }
+  gmbTanda = {
+    championName, challengerName,
+    currentAttacker: "champion", // el campeón ataca primero, siempre
+    championResults: [],
+    challengerResults: [],
+  };
+  document.getElementById("gmbTbChampionName").textContent = championName;
+  document.getElementById("gmbTbChallengerName").textContent = challengerName;
+  document.getElementById("gmbTbChampionSide").classList.remove("pb-winner");
+  document.getElementById("gmbTbChallengerSide").classList.remove("pb-winner");
+  document.getElementById("gambetaScoreboard").classList.remove("sudden-death");
+  gmbRenderScoreboard();
+}
+
+function gmbRenderScoreboard() {
+  renderDots("gmbTbChampionDots", gmbTanda.championResults);
+  renderDots("gmbTbChallengerDots", gmbTanda.challengerResults);
+  const champScore = gmbTanda.championResults.filter(Boolean).length;
+  const chalScore = gmbTanda.challengerResults.filter(Boolean).length;
+  document.getElementById("gmbTbScore").innerHTML = `${champScore}<span class="pb-score-sep">-</span>${chalScore}`;
+}
+
+function gmbTandaDecided() {
+  const champTaken = gmbTanda.championResults.length;
+  const chalTaken = gmbTanda.challengerResults.length;
+  const champScore = gmbTanda.championResults.filter(Boolean).length;
+  const chalScore = gmbTanda.challengerResults.filter(Boolean).length;
+
+  let decided = null;
+  if (champTaken <= 5 && chalTaken <= 5) {
+    if (champScore > chalScore + (5 - chalTaken)) decided = "champion";
+    else if (chalScore > champScore + (5 - champTaken)) decided = "challenger";
+  }
+  if (!decided && champTaken === chalTaken && champTaken >= 5 && champScore !== chalScore) {
+    decided = champScore > chalScore ? "champion" : "challenger";
+  }
+  return decided;
 }
 
 function teardownGambeta() {
@@ -3491,12 +3536,13 @@ function teardownGambeta() {
   window.removeEventListener("keydown", gmbOnKeyDown);
   window.removeEventListener("keyup", gmbOnKeyUp);
   gmb = null;
+  gmbTanda = null; // NUEVO
 }
 
 function startGambetaMatch() {
   const championName = (currentWinnerGame && currentWinnerGame.added_by) || "Campeón";
   const challengerName = pendingChallengerName || "Retador";
-  const attackerSide = gmbRoleFlip ? "right" : "left";
+  const attackerSide = gmbTanda.currentAttacker === "challenger" ? "right" : "left";
   const defenderSide = attackerSide === "left" ? "right" : "left";
 
   gmb = {
@@ -3528,7 +3574,8 @@ function startGambetaMatch() {
   document.getElementById("gambetaPlay").classList.remove("hidden");
   document.getElementById("gambetaLeftName").textContent = championName;
   document.getElementById("gambetaRightName").textContent = challengerName;
-  gmbShowBanner(attackerSide === "left" ? `¡${championName} arranca gambeteando! 🔥` : `¡${challengerName} arranca gambeteando! 🔥`, 1400);
+  const gmbScoreTxt = `${gmbTanda.championResults.filter(Boolean).length}-${gmbTanda.challengerResults.filter(Boolean).length}`;
+  gmbShowBanner(attackerSide === "left" ? `¡${championName} arranca gambeteando! (${gmbScoreTxt}) 🔥` : `¡${challengerName} arranca gambeteando! (${gmbScoreTxt}) 🔥`, 1400);
   gmbSetPhaseLabel("Fase 1 · Gambeta");
 
   window.addEventListener("keydown", gmbOnKeyDown);
@@ -3999,10 +4046,19 @@ function gmbFinish(winnerKind, reason) {
   window.removeEventListener("keyup", gmbOnKeyUp);
 
   const attackerSide = gmb.attackerSide, defenderSide = gmb.defenderSide;
-  let winnerSide;
-  if (winnerKind === "shooterWin") winnerSide = attackerSide;
-  else winnerSide = defenderSide; // keeperWin o defenderWin (tiempo/robo) -> gana el defensor/arquero
+  const attackerScored = winnerKind === "shooterWin";
+  const attackerIdentity = attackerSide === "left" ? "champion" : "challenger";
 
+  // Anotamos el intento en la tanda
+  if (attackerIdentity === "champion") gmbTanda.championResults.push(attackerScored);
+  else gmbTanda.challengerResults.push(attackerScored);
+  gmbRenderScoreboard();
+
+  const champTaken = gmbTanda.championResults.length;
+  const chalTaken = gmbTanda.challengerResults.length;
+  document.getElementById("gambetaScoreboard").classList.toggle("sudden-death", champTaken > 5 || chalTaken > 5);
+
+  const winnerSide = attackerScored ? attackerSide : defenderSide;
   const side = winnerSide === "left" ? "champion" : "challenger";
   const winnerName = winnerSide === "left" ? gmb.championName : gmb.challengerName;
 
@@ -4013,6 +4069,41 @@ function gmbFinish(winnerKind, reason) {
     afuera: `El remate se fue lejos del arco. ¡Sigue siendo arquero, ${winnerName}! 🧤`,
     gol: `¡GOLAZO! ${winnerName} la clavó en el ángulo ⚽🔥`,
   };
+
+  const decided = gmbTandaDecided();
+
+  if (decided) {
+    gmbSetTimeout(() => gmbFinishTanda(decided, REASON_MSG[reason] || ""), 1300);
+    return;
+  }
+
+  // La tanda sigue: banner cortito con el resultado del intento + arranca el próximo con roles invertidos
+  const scoreTxt = `${gmbTanda.championResults.filter(Boolean).length}-${gmbTanda.challengerResults.filter(Boolean).length}`;
+  gmbShowBanner(attackerScored ? `⚽ ¡GOL de ${winnerName}! (${scoreTxt})` : `🧤 ¡Se lo bancó ${winnerName}! (${scoreTxt})`, 1500);
+
+  if (winnerKind === "shooterWin") { launchConfetti(); playFanfare(); }
+  else if (winnerKind === "keeperWin") { playFanfare(); }
+  else { playBuzz(); }
+
+  gmbTanda.currentAttacker = gmbTanda.currentAttacker === "champion" ? "challenger" : "champion";
+  gmbSetTimeout(startGambetaMatch, 1700);
+}
+
+function gmbFinishTanda(side, flavor) {
+  const winnerName = side === "champion" ? gmbTanda.championName : gmbTanda.challengerName;
+  document.getElementById("gambetaPlay").classList.add("hidden");
+  document.getElementById("gambetaResult").classList.remove("hidden");
+  document.getElementById("gambetaResultTitle").textContent = `🏆 ¡${winnerName} se queda con la tanda!`;
+  document
+    .getElementById(side === "champion" ? "gmbTbChampionSide" : "gmbTbChallengerSide")
+    .classList.add("pb-winner");
+  const resultEl = document.getElementById("gambetaResultText");
+  resultEl.classList.remove("show");
+  resolveDuelResult(resultEl, side, flavor);
+  launchTrophyBurst();
+  launchConfetti();
+  playFanfare();
+}
 
   gmbSetTimeout(() => {
     document.getElementById("gambetaPlay").classList.add("hidden");
