@@ -3794,6 +3794,24 @@ function gmbResolveCircleCollision(a, b) {
   }
 }
 
+function gmbSeparateBallFromPlayer(ball, p, side) {
+  const dx = ball.x - p.x, dy = ball.y - p.y;
+  const dist = Math.hypot(dx, dy) || 0.001;
+  const minDist = p.r + ball.r;
+  if (dist >= minDist) return;
+  const nx = dx / dist, ny = dy / dist;
+  ball.x = p.x + nx * minDist;
+  ball.y = p.y + ny * minDist;
+  // Si la pelota es de ESTE jugador no lo empujamos más (ya la sigue el
+  // "seguimiento" de arriba). Si es del rival o está suelta, rebota un
+  // toque para que el cuerpo se sienta sólido y no un fantasma.
+  if (ball.owner !== side) {
+    const rel = ball.vx * nx + ball.vy * ny;
+    if (rel < 0) { ball.vx -= rel * nx * 1.3; ball.vy -= rel * ny * 1.3; }
+  }
+}
+
+
 function gmbBounceBallOffWalls(ball, top, bottom) {
   if (ball.y - ball.r < top) { ball.y = top + ball.r; ball.vy = Math.abs(ball.vy) * 0.6; }
   if (ball.y + ball.r > bottom) { ball.y = bottom - ball.r; ball.vy = -Math.abs(ball.vy) * 0.6; }
@@ -3820,19 +3838,28 @@ function gmbUpdateDribble(dt, ts) {
   gmbResolveCircleCollision(gmb.left, gmb.right);
 
   const ball = gmb.ball;
-  const owner = ball.owner ? gmb[ball.owner] : null;
 
-  // Disputa de pelota: si el que NO tiene la posesión toca la pelota con más
-  // velocidad que el dueño actual, se la roba.
+  // Disputa de pelota: acá SOLO se decide de quién es la posesión.
+  // El choque físico bola-cuerpo se resuelve más abajo, una sola vez para
+  // los dos jugadores, así nunca queda "adentro" de nadie.
   ["left", "right"].forEach((side) => {
     const p = gmb[side];
     const dx = ball.x - p.x, dy = ball.y - p.y;
     const dist = Math.hypot(dx, dy) || 0.001;
-    const minDist = p.r + ball.r;
-    if (dist >= minDist + 3) return;
+    const pickupDist = p.r + ball.r + 3;
+    if (dist >= pickupDist) return;
 
     if (ball.owner === null) {
-      if (side === ball.kickedBy && performance.now() < ball.kickImmuneUntil) return;
+      const immune = side === ball.kickedBy && performance.now() < ball.kickImmuneUntil;
+      if (immune) return;
+      // Si los dos están al alcance a la vez, se la queda el que esté MÁS
+      // cerca (antes siempre ganaba "left" por el orden del forEach).
+      const otherSide = side === "left" ? "right" : "left";
+      const other = gmb[otherSide];
+      const otherDist = Math.hypot(ball.x - other.x, ball.y - other.y);
+      const otherImmune = otherSide === ball.kickedBy && performance.now() < ball.kickImmuneUntil;
+      const otherCloser = !otherImmune && otherDist < other.r + ball.r + 3 && otherDist < dist;
+      if (otherCloser) return;
       ball.owner = side;
     } else if (ball.owner !== side) {
       const mySpeed = Math.hypot(p.vx, p.vy);
@@ -3842,13 +3869,6 @@ function gmbUpdateDribble(dt, ts) {
         ball.owner = side;
         ball.vx += p.vx * 0.4; ball.vy += p.vy * 0.4;
         playTick();
-      } else if (dist < minDist) {
-        // No alcanza para robarla, pero el cuerpo SÍ la bloquea físicamente:
-        // no puede atravesarlo como un fantasma, rebota un toque.
-        const nx = dx / dist, ny = dy / dist;
-        ball.x = p.x + nx * minDist;
-        ball.y = p.y + ny * minDist;
-        ball.vx += nx * 1.4; ball.vy += ny * 1.4;
       }
     }
   });
@@ -3863,14 +3883,18 @@ function gmbUpdateDribble(dt, ts) {
     ball.vx *= 0.94; ball.vy *= 0.94;
   } else {
     // Pelota libre (recién pateada): frena mucho menos que la pegada,
-    // así un pique fuerte se siente rápido y hay que correrla en serio,
-    // no queda "clavada" al lado tuyo al instante.
+    // así un pique fuerte se siente rápido y no queda "clavada" al toque.
     ball.vx *= 0.985; ball.vy *= 0.985;
   }
   ball.x += ball.vx * dt; ball.y += ball.vy * dt;
   if (ball.x - ball.r < GMB_WALL) { ball.x = GMB_WALL + ball.r; ball.vx = Math.abs(ball.vx) * 0.6; }
   if (ball.x + ball.r > GMB_FIELD_W - GMB_WALL) { ball.x = GMB_FIELD_W - GMB_WALL - ball.r; ball.vx = -Math.abs(ball.vx) * 0.6; }
   gmbBounceBallOffWalls(ball, GMB_WALL, GMB_FIELD_H - GMB_WALL);
+
+  // FIX del bug: separación física pelota-cuerpo en un solo lugar, para los
+  // DOS jugadores, después de mover la bola. Esto evita que quede "peleada"
+  // entre el seguimiento del dueño y el rebote contra el cuerpo del rival.
+  ["left", "right"].forEach((side) => gmbSeparateBallFromPlayer(ball, gmb[side], side));
   gmbTrackBallTrail(ball);
 
   const attacker = gmb[gmb.attackerSide];
