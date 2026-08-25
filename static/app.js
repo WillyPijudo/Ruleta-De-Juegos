@@ -3350,6 +3350,7 @@ const GMB_WALL = 6;                 // grosor visual del borde
 const GMB_PLAYER_R = 17;
 const GMB_BALL_R = 9;
 const GMB_MAX_SPEED = 4.4;
+const GMB_KEEPER_SPEED_MULT = 0.82; // el arquero se mueve un poco más lento que el atacante
 const GMB_ACCEL = 0.55;
 const GMB_FRICTION = 0.90;
 const GMB_DASH_COOLDOWN = 3400;     // un poco más rápido para todos
@@ -3763,7 +3764,8 @@ function gmbApplyMovement(player, side, dt) {
   player.vy += dy * GMB_ACCEL * dt;
   const fr = Math.pow(GMB_FRICTION, dt);
   player.vx *= fr; player.vy *= fr;
-  const cap = dashing ? GMB_DASH_MAXSPEED : GMB_MAX_SPEED;
+  const isKeeper = gmb.phase === "shootout" && side === gmb.defenderSide;
+  const cap = (dashing ? GMB_DASH_MAXSPEED : GMB_MAX_SPEED) * (isKeeper ? GMB_KEEPER_SPEED_MULT : 1);
   const speed = Math.hypot(player.vx, player.vy);
   if (speed > cap) { player.vx = (player.vx / speed) * cap; player.vy = (player.vy / speed) * cap; }
   if (dx || dy) { player.facingX = dx; player.facingY = dy; }
@@ -4202,11 +4204,14 @@ function gmbUpdateHud(ts) {
   if (gmb.phase === "dribble") {
     timerEl.textContent = Math.max(0, gmb.phaseClock / 1000).toFixed(1) + "s";
     timerEl.classList.toggle("gambeta-timer-danger", gmb.phaseClock < 3500);
+  } else if (gmb.phase === "shootout") {
+    const remaining = GMB_SHOOTOUT_TIMEOUT - (now - gmb.shootoutStartedAt);
+    timerEl.textContent = Math.max(0, remaining / 1000).toFixed(1) + "s";
+    timerEl.classList.toggle("gambeta-timer-danger", remaining < 3500);
   } else {
-    timerEl.textContent = gmb.phase === "shootout" ? "⚽" : "";
+    timerEl.textContent = "";
     timerEl.classList.remove("gambeta-timer-danger");
   }
-}
 
 /* ---------- Render ---------- */
 
