@@ -671,10 +671,11 @@
 </div>
 
 <!-- Gambeta 1v1 duel modal -->
-<div id="gambetaModal" class="modal hidden">
-  <div class="modal-card gambeta-card">
+<div id="gambetaModal" class="fight-modal hidden">
+  <div class="fight-shell gambeta-card">
 
-    <div id="gambetaIntro" class="duel-intro">
+    <div id="gambetaIntro" class="duel-intro fight-screen">
+     <div class="fight-screen-inner">
       <p class="modal-eyebrow">1 vs 1 · Físicas de cancha</p>
       <h3 class="rps-title">⚽💨 Gambeta y Definición</h3>
       <p class="modal-body-text">
@@ -706,9 +707,10 @@
         <button id="gambetaStartBtn" class="btn btn-duel btn-small" type="button">¡Arrancar! 🔥</button>
         <button id="backFromGambetaIntro" class="btn btn-ghost btn-small" type="button">← Volver</button>
       </div>
+     </div>
     </div>
 
-    <div id="gambetaPlay" class="hidden gambeta-play">
+    <div id="gambetaPlay" class="hidden gambeta-play fight-screen">
       <div class="gambeta-hud">
         <div class="gambeta-hud-side gambeta-hud-left">
           <span class="gambeta-hud-name" id="gambetaLeftName">Campeón</span>
@@ -745,7 +747,8 @@
       </div>
     </div>
 
-    <div id="gambetaResult" class="hidden duel-intro">
+    <div id="gambetaResult" class="hidden duel-intro fight-screen">
+     <div class="fight-screen-inner">
       <p class="modal-eyebrow">Resultado</p>
       <h3 class="rps-title" id="gambetaResultTitle">🏆 ¡Golazo!</h3>
       <p class="rps-result show" id="gambetaResultText"></p>
@@ -753,6 +756,7 @@
         <button id="gambetaRematchBtn" class="btn btn-duel btn-small" type="button">🔁 Revancha</button>
         <button id="gambetaBackBtn" class="btn btn-ghost btn-small" type="button">← Volver</button>
       </div>
+     </div>
     </div>
 
   </div>
