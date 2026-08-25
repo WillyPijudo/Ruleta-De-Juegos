@@ -3076,7 +3076,7 @@ function openBusBetScreen() {
       const baseCap = busBaseBetCap();
       const effectiveCap = heteroActive ? amount : Math.min(amount, baseCap);
       slider.max = effectiveCap;
-      slider.value = Math.min(parseInt(slider.value, 10) || 10, effectiveCap);
+      slider.value = heteroActive ? amount : Math.min(parseInt(slider.value, 10) || 10, effectiveCap);
       label.textContent = "$" + slider.value;
 
       if (amount > 1000 && baseCap < amount) {
