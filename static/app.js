@@ -3726,6 +3726,8 @@ function gmbTryAction(side) {
       gmbDash(side); // lunge del arquero
     }
   }
+}
+
 function gmbReleaseAction(side) {
   if (!gmb || gmb.phase !== "shootout" || side !== gmb.attackerSide) return;
   if (gmb.shoot.charging) gmbFireShot();
