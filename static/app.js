@@ -3258,7 +3258,7 @@ const GMB_DASH_COOLDOWN = 4000;     // ms — pedido: 3-5s
 const GMB_DASH_DURATION = 150;      // ms de impulso
 const GMB_DASH_POWER = 8.5;
 const GMB_DASH_MAXSPEED = 9.5;      // tope de velocidad SOLO mientras dashea
-const GMB_KICK_POWER = 9.5;         // impulso que recibe la PELOTA cuando el atacante patea (fase 1)
+const GMB_KICK_POWER = 14;         // impulso que recibe la PELOTA cuando el atacante patea (fase 1)
 const GMB_PHASE1_TIME = 30000;      // shot clock fase 1 (ms) - default, lo pisa gmbSelectedDuration
 let gmbSelectedDuration = GMB_PHASE1_TIME;
 const GMB_ATTACK_ZONE_X = GMB_FIELD_W - 70;   // el atacante debe llegar acá con la pelota
@@ -3266,8 +3266,8 @@ const GMB_STEAL_BACK_X = 70;                  // si el defensor se la roba y lle
 const GMB_GOAL_HALF = 62;           // medio ancho del arco (mouth)
 const GMB_GOAL_LINE_X = GMB_FIELD_W - 34;
 const GMB_SHOOT_MAX_CHARGE = 850;   // ms de carga máxima del remate
-const GMB_SHOOT_BASE_SPEED = 6.2;
-const GMB_SHOOT_BONUS_SPEED = 7.5;
+const GMB_SHOOT_BASE_SPEED = 7.4;
+const GMB_SHOOT_BONUS_SPEED = 9;
 const GMB_SHOOTOUT_TIMEOUT = 11000;  // si la pelota queda pinponeando sin definirse
 
 let gmb = null;
@@ -3712,8 +3712,13 @@ function gmbUpdateDribble(dt, ts) {
     const ty = p.y + (p.facingY / fLen) * (p.r + ball.r + 3);
     ball.vx += (tx - ball.x) * 0.05;
     ball.vy += (ty - ball.y) * 0.05;
+    ball.vx *= 0.94; ball.vy *= 0.94;
+  } else {
+    // Pelota libre (recién pateada): frena mucho menos que la pegada,
+    // así un pique fuerte se siente rápido y hay que correrla en serio,
+    // no queda "clavada" al lado tuyo al instante.
+    ball.vx *= 0.985; ball.vy *= 0.985;
   }
-  ball.vx *= 0.94; ball.vy *= 0.94;
   ball.x += ball.vx * dt; ball.y += ball.vy * dt;
   if (ball.x - ball.r < GMB_WALL) { ball.x = GMB_WALL + ball.r; ball.vx = Math.abs(ball.vx) * 0.6; }
   if (ball.x + ball.r > GMB_FIELD_W - GMB_WALL) { ball.x = GMB_FIELD_W - GMB_WALL - ball.r; ball.vx = -Math.abs(ball.vx) * 0.6; }
