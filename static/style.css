@@ -2232,6 +2232,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   background: transparent; color: var(--text-muted); cursor: pointer; margin: 3px 0;
   transition: all 0.2s ease;
 }
+.bus-hetero-btn.hidden, .bus-ticket-btn.hidden { display: none; }
 .bus-hetero-btn:hover, .bus-ticket-btn:hover { border-style: solid; color: var(--text); }
 .bus-hetero-btn.bus-hetero-active {
   border-style: solid; border-color: var(--gold-bright); color: var(--gold-bright);
@@ -2267,7 +2268,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   animation: bus-ticket-float-kf 1.8s ease-in-out infinite;
 }
 .bus-ticket-btn-img {
-  width: 64px; image-rendering: pixelated;
+  width: 88px;
   filter: drop-shadow(0 0 10px rgba(255, 95, 162, 0.55));
 }
 @keyframes bus-ticket-float-kf {
@@ -2284,7 +2285,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 }
 .bus-ticket-overlay.hidden { display: none; }
 .bus-ticket-overlay-img {
-  width: 180px; image-rendering: pixelated;
+  width: min(85vw, 420px);
   filter: drop-shadow(0 0 24px rgba(255, 95, 162, 0.6));
 }
 @keyframes bus-ticket-laugh-kf {
