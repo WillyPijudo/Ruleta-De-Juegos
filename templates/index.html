@@ -688,15 +688,17 @@
         <div class="controls-col">
           <span class="controls-who" id="gambetaLeftKeyName">Campeón</span>
           <div class="key-row"><span class="key-badge">W A S D</span><span class="key-mean">Moverse</span></div>
-          <div class="key-row"><span class="key-badge">Shift</span><span class="key-mean">Dash / Cargar remate</span></div>
+          <div class="key-row"><span class="key-badge" id="gambetaLeftKickBadge">J</span><span class="key-mean">Patear (fase 1)</span></div>
+          <div class="key-row"><span class="key-badge" id="gambetaLeftDashBadge">K</span><span class="key-mean">Dash / Cargar remate</span></div>
         </div>
         <div class="controls-col">
           <span class="controls-who" id="gambetaRightKeyName">Retador</span>
           <div class="key-row"><span class="key-badge">↑ ↓ ← →</span><span class="key-mean">Moverse</span></div>
-          <div class="key-row"><span class="key-badge">Enter</span><span class="key-mean">Dash / Cargar remate</span></div>
+          <div class="key-row"><span class="key-badge" id="gambetaRightKickBadge">Z</span><span class="key-mean">Patear (fase 1)</span></div>
+          <div class="key-row"><span class="key-badge" id="gambetaRightDashBadge">X</span><span class="key-mean">Dash / Cargar remate</span></div>
         </div>
       </div>
-      <p class="modal-body-text">El dash tiene 4s de recarga — usalo para desmarcarte o para cerrarle el ángulo al que remata. En el celular, cada uno controla su joystick y su botón de acción de su lado de la pantalla.</p>
+      <p class="modal-body-text">El dash tiene 4s de recarga — usalo para desmarcarte o para cerrarle el ángulo al que remata. Patear es libre, sin recarga. En el celular, cada uno controla su joystick y sus botones de su lado de la pantalla.</p>
       <p class="modal-body-text" style="margin-bottom:6px;">¿Cuánto dura la gambeta (Fase 1)?</p>
       <div class="bus-rounds-grid" id="gambetaDurationGrid">
         <button type="button" class="bus-rounds-pill gambeta-duration-pill active" data-duration="30">30s</button>
@@ -705,7 +707,24 @@
       </div>
       <div class="modal-actions">
         <button id="gambetaStartBtn" class="btn btn-duel btn-small" type="button">¡Arrancar! 🔥</button>
+        <button id="gambetaControlsBtn" class="btn btn-ghost btn-small" type="button">⌨️ Controles</button>
         <button id="backFromGambetaIntro" class="btn btn-ghost btn-small" type="button">← Volver</button>
+      </div>
+     </div>
+    </div>
+
+    <div id="gambetaControlsScreen" class="duel-intro fight-screen hidden">
+     <div class="fight-screen-inner">
+      <p class="modal-eyebrow">Personalizá</p>
+      <h3 class="rps-title">⌨️ Configurar controles</h3>
+      <p class="modal-body-text">Tocá la tecla que querés cambiar y después apretá la nueva.</p>
+      <div class="controls-legend">
+        <div class="controls-col" id="gambetaRemapLeftCol"></div>
+        <div class="controls-col" id="gambetaRemapRightCol"></div>
+      </div>
+      <div class="modal-actions">
+        <button id="gambetaRemapResetBtn" class="btn btn-ghost btn-small" type="button">↺ Restablecer</button>
+        <button id="gambetaRemapBackBtn" class="btn btn-duel btn-small" type="button">✓ Listo</button>
       </div>
      </div>
     </div>
@@ -734,13 +753,18 @@
       <div class="gambeta-touch-controls" id="gambetaTouchControls">
         <div class="gambeta-touch-zone gambeta-touch-left" id="gambetaTouchLeft">
           <div class="gambeta-joystick" id="gambetaJoyLeft"><div class="gambeta-joystick-knob"></div></div>
-          <button class="gambeta-dash-btn" id="gambetaDashBtnLeft" type="button">⚡</button>
+          <div class="gambeta-touch-btns">
+            <button class="gambeta-kick-btn" id="gambetaKickBtnLeft" type="button">🦵</button>
+            <button class="gambeta-dash-btn" id="gambetaDashBtnLeft" type="button">⚡</button>
+          </div>
         </div>
         <div class="gambeta-touch-zone gambeta-touch-right" id="gambetaTouchRight">
           <div class="gambeta-joystick" id="gambetaJoyRight"><div class="gambeta-joystick-knob"></div></div>
-          <button class="gambeta-dash-btn" id="gambetaDashBtnRight" type="button">⚡</button>
+          <div class="gambeta-touch-btns">
+            <button class="gambeta-kick-btn" id="gambetaKickBtnRight" type="button">🦵</button>
+            <button class="gambeta-dash-btn" id="gambetaDashBtnRight" type="button">⚡</button>
+          </div>
         </div>
-      </div>
 
       <div class="modal-actions">
         <button id="gambetaExitBtn" class="btn btn-ghost btn-small" type="button">✕ Salir del juego</button>
