@@ -515,7 +515,9 @@
             <span class="bus-bet-wallet">Billetera: $<b id="busBetLeftWallet">0</b></span>
             <div class="bus-chip-pile bus-chip-pile-sm" id="busBetPileLeft"></div>
             <button class="bus-hetero-btn hidden" id="busHeteroBtnLeft" type="button">💪 Modo Hetero (apostar todo)</button>
-            <button class="bus-ticket-btn hidden" id="busTicketBtnLeft" type="button">🎫 Usar boleto de repechaje</button>
+            <button class="bus-ticket-btn hidden" id="busTicketBtnLeft" type="button">
+              <img src="/static/img/cards/ticket.png" alt="Boleto de repechaje" class="bus-ticket-btn-img">
+            </button>
             <input type="range" id="busBetLeftSlider" class="bus-bet-slider" min="10" step="10" value="10">
             <div class="bus-bet-amount" id="busBetLeftAmount">$10</div>
             <div class="bus-bet-presets">
@@ -529,7 +531,9 @@
             <span class="bus-bet-wallet">Billetera: $<b id="busBetRightWallet">0</b></span>
             <div class="bus-chip-pile bus-chip-pile-sm" id="busBetPileRight"></div>
             <button class="bus-hetero-btn hidden" id="busHeteroBtnRight" type="button">💪 Modo Hetero (apostar todo)</button>
-            <button class="bus-ticket-btn hidden" id="busTicketBtnRight" type="button">🎫 Usar boleto de repechaje</button>
+            <button class="bus-ticket-btn hidden" id="busTicketBtnRight" type="button">
+              <img src="/static/img/cards/ticket.png" alt="Boleto de repechaje" class="bus-ticket-btn-img">
+            </button>
             <input type="range" id="busBetRightSlider" class="bus-bet-slider" min="10" step="10" value="10">
             <div class="bus-bet-amount" id="busBetRightAmount">$10</div>
             <div class="bus-bet-presets">
@@ -545,6 +549,11 @@
         </div>
       </div>
     </div>
+
+<div id="busTicketOverlay" class="bus-ticket-overlay hidden">
+  <img id="busTicketOverlayImg" class="bus-ticket-overlay-img" src="/static/img/cards/ticket.png" alt="Boleto de repechaje">
+  <div class="bus-ticket-roulette hidden" id="busTicketRouletteNumber">$0</div>
+</div>    
 
 <div id="busGameTable" class="fight-screen hidden">
   <div class="bus-hud">
