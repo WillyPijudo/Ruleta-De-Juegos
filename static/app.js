@@ -3362,7 +3362,7 @@ const GMB_PHASE1_TIME = 30000;      // shot clock fase 1 (ms) - default, lo pisa
 let gmbSelectedDuration = GMB_PHASE1_TIME;
 const GMB_ATTACK_ZONE_X = GMB_FIELD_W - 70;   // el atacante debe llegar acá con la pelota
 const GMB_STEAL_BACK_X = 70;                  // si el defensor se la roba y llega acá, gana él
-const GMB_GOAL_HALF = 62;           // medio ancho del arco (mouth)
+const GMB_GOAL_HALF = 80;           // medio ancho del arco (mouth)
 const GMB_GOAL_LINE_X = GMB_FIELD_W - 34;
 const GMB_SHOOT_MAX_CHARGE = 850;   // ms de carga máxima del remate
 const GMB_SHOOT_BASE_SPEED = 7.4;
@@ -3760,7 +3760,7 @@ function gmbApplyMovement(player, side, dt) {
   const cap = dashing ? GMB_DASH_MAXSPEED : GMB_MAX_SPEED;
   const speed = Math.hypot(player.vx, player.vy);
   if (speed > cap) { player.vx = (player.vx / speed) * cap; player.vy = (player.vy / speed) * cap; }
-  if (dx || dy) { player.facingX = dx || player.facingX; player.facingY = dy || player.facingY; }
+  if (dx || dy) { player.facingX = dx; player.facingY = dy; }
   player.x += player.vx * dt;
   player.y += player.vy * dt;
 
@@ -4008,11 +4008,11 @@ function gmbUpdateShootout(dt, ts) {
       }
     });
 
-    // Atajada: la ÚNICA forma de terminar la ronda a favor del arquero
-    // (aparte del timeout de estancamiento de más abajo) es que su
-    // círculo toque la pelota de verdad.
+    // Atajada: además de tocar la pelota, tiene que ser un contacto DE FRENTE
+    // (si la pelota ya lo pasó camino al gol, un roce de costado/espalda no cuenta).
     const dK = Math.hypot(ball.x - keeper.x, ball.y - keeper.y);
-    if (dK < keeper.r + ball.r) {
+    const frontContact = (ball.x - keeper.x) * dir < keeper.r * 0.6;
+    if (dK < keeper.r + ball.r && frontContact) {
       gmbFinish("keeperWin", "atajada");
       return;
     }
