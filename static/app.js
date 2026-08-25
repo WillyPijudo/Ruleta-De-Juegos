@@ -1524,6 +1524,13 @@ document.addEventListener("DOMContentLoaded", () => {
     openGambetaModal();
   });
 
+  document.querySelectorAll(".gambeta-duration-pill").forEach((pill) => {
+    pill.addEventListener("click", () => {
+      document.querySelectorAll(".gambeta-duration-pill").forEach((p) => p.classList.remove("active"));
+      pill.classList.add("active");
+      gmbSelectedDuration = parseInt(pill.dataset.duration, 10) * 1000;
+    });
+  });
   document.getElementById("gambetaStartBtn").addEventListener("click", startGambetaMatch);
   document.getElementById("backFromGambetaIntro").addEventListener("click", () => {
     document.getElementById("gambetaModal").classList.add("hidden");
@@ -3241,7 +3248,8 @@ const GMB_DASH_COOLDOWN = 4000;     // ms — pedido: 3-5s
 const GMB_DASH_DURATION = 150;      // ms de impulso
 const GMB_DASH_POWER = 8.5;
 const GMB_DASH_MAXSPEED = 9.5;      // tope de velocidad SOLO mientras dashea
-const GMB_PHASE1_TIME = 13000;      // shot clock fase 1 (ms)
+const GMB_PHASE1_TIME = 30000;      // shot clock fase 1 (ms) - default, lo pisa gmbSelectedDuration
+let gmbSelectedDuration = GMB_PHASE1_TIME;
 const GMB_ATTACK_ZONE_X = GMB_FIELD_W - 70;   // el atacante debe llegar acá con la pelota
 const GMB_STEAL_BACK_X = 70;                  // si el defensor se la roba y llega acá, gana él
 const GMB_GOAL_HALF = 62;           // medio ancho del arco (mouth)
@@ -3310,7 +3318,7 @@ function startGambetaMatch() {
     championName, challengerName,
     attackerSide, defenderSide,
     phase: "dribble", // dribble | transition | shootout | done
-    phaseClock: GMB_PHASE1_TIME,
+    phaseClock: gmbSelectedDuration,
     lastTs: null,
     keys: {},
     touch: {
@@ -3461,6 +3469,11 @@ function gmbApplyMovement(player, side, dt) {
   if (dx || dy) { player.facingX = dx || player.facingX; player.facingY = dy || player.facingY; }
   player.x += player.vx * dt;
   player.y += player.vy * dt;
+
+  const now = performance.now();
+  if (!player.trail) player.trail = [];
+  if (dashing) player.trail.push({ x: player.x, y: player.y, t: now });
+  if (player.trail.length) player.trail = player.trail.filter((pt) => now - pt.t < 280);
 }
 
 function gmbClampToField(player, minX, maxX) {
@@ -3492,6 +3505,14 @@ function gmbBounceBallOffWalls(ball, top, bottom) {
   if (ball.y + ball.r > bottom) { ball.y = bottom - ball.r; ball.vy = -Math.abs(ball.vy) * 0.6; }
 }
 
+function gmbTrackBallTrail(ball) {
+  const now = performance.now();
+  if (!ball.trail) ball.trail = [];
+  const speed = Math.hypot(ball.vx, ball.vy);
+  if (speed > 3) ball.trail.push({ x: ball.x, y: ball.y, t: now });
+  if (ball.trail.length) ball.trail = ball.trail.filter((pt) => now - pt.t < 220);
+}
+
 function gmbUpdateDribble(dt, ts) {
   gmb.phaseClock -= (dt * 1000) / 60;
   if (gmb.phaseClock <= 0) { gmbFinish("defenderWin", "tiempo"); return; }
@@ -3511,17 +3532,28 @@ function gmbUpdateDribble(dt, ts) {
   // velocidad que el dueño actual, se la roba.
   ["left", "right"].forEach((side) => {
     const p = gmb[side];
-    const d = Math.hypot(p.x - ball.x, p.y - ball.y);
-    if (d < p.r + ball.r + 3) {
-      if (ball.owner === null) { ball.owner = side; }
-      else if (ball.owner !== side) {
-        const mySpeed = Math.hypot(p.vx, p.vy);
-        const ownerSpeed = Math.hypot(gmb[ball.owner].vx, gmb[ball.owner].vy);
-        if (mySpeed > ownerSpeed + 0.4 || performance.now() < p.dashingUntil) {
-          ball.owner = side;
-          ball.vx += p.vx * 0.4; ball.vy += p.vy * 0.4;
-          playTick();
-        }
+    const dx = ball.x - p.x, dy = ball.y - p.y;
+    const dist = Math.hypot(dx, dy) || 0.001;
+    const minDist = p.r + ball.r;
+    if (dist >= minDist + 3) return;
+
+    if (ball.owner === null) {
+      ball.owner = side;
+    } else if (ball.owner !== side) {
+      const mySpeed = Math.hypot(p.vx, p.vy);
+      const ownerSpeed = Math.hypot(gmb[ball.owner].vx, gmb[ball.owner].vy);
+      const tackling = performance.now() < p.dashingUntil;
+      if (mySpeed > ownerSpeed + 0.4 || tackling) {
+        ball.owner = side;
+        ball.vx += p.vx * 0.4; ball.vy += p.vy * 0.4;
+        playTick();
+      } else if (dist < minDist) {
+        // No alcanza para robarla, pero el cuerpo SÍ la bloquea físicamente:
+        // no puede atravesarlo como un fantasma, rebota un toque.
+        const nx = dx / dist, ny = dy / dist;
+        ball.x = p.x + nx * minDist;
+        ball.y = p.y + ny * minDist;
+        ball.vx += nx * 1.4; ball.vy += ny * 1.4;
       }
     }
   });
@@ -3539,6 +3571,7 @@ function gmbUpdateDribble(dt, ts) {
   if (ball.x - ball.r < GMB_WALL) { ball.x = GMB_WALL + ball.r; ball.vx = Math.abs(ball.vx) * 0.6; }
   if (ball.x + ball.r > GMB_FIELD_W - GMB_WALL) { ball.x = GMB_FIELD_W - GMB_WALL - ball.r; ball.vx = -Math.abs(ball.vx) * 0.6; }
   gmbBounceBallOffWalls(ball, GMB_WALL, GMB_FIELD_H - GMB_WALL);
+  gmbTrackBallTrail(ball);
 
   const attacker = gmb[gmb.attackerSide];
   const defender = gmb[gmb.defenderSide];
@@ -3596,6 +3629,7 @@ function gmbFireShot() {
   gmb.ball.vx = (dir / len) * speed;
   gmb.ball.vy = (angle / len) * speed;
   gmb.ball.x = attacker.x + dir * (attacker.r + gmb.ball.r + 2);
+  gmb.kickBurst = { x: gmb.ball.x, y: gmb.ball.y, t: now };
   playTick();
 }
 
@@ -3626,6 +3660,7 @@ function gmbUpdateShootout(dt, ts) {
     ball.vx *= 0.995; ball.vy *= 0.995;
     ball.x += ball.vx * dt; ball.y += ball.vy * dt;
     gmbBounceBallOffWalls(ball, GMB_WALL, GMB_FIELD_H - GMB_WALL);
+    gmbTrackBallTrail(ball);
 
     // Palos (dos círculos fijos en las puntas del arco)
     [-1, 1].forEach((sgn) => {
@@ -3748,8 +3783,31 @@ function gmbDraw(ts) {
   gmbDrawPlayer(ctx, gmb.left, ts);
   gmbDrawPlayer(ctx, gmb.right, ts);
   gmbDrawBall(ctx);
+  gmbDrawKickBurst(ctx);
 
   if (gmb.phase === "shootout" && gmb.shoot.charging) gmbDrawChargeArrow(ctx, ts);
+}
+
+function gmbDrawKickBurst(ctx) {
+  if (!gmb.kickBurst) return;
+  const age = (performance.now() - gmb.kickBurst.t) / 260;
+  if (age >= 1) { gmb.kickBurst = null; return; }
+  const { x, y } = gmb.kickBurst;
+  ctx.save();
+  ctx.globalAlpha = 1 - age;
+  ctx.strokeStyle = "#f5cd76";
+  ctx.lineWidth = 2.5;
+  const rays = 8;
+  for (let i = 0; i < rays; i++) {
+    const ang = (i / rays) * Math.PI * 2;
+    const inner = 6 + age * 4;
+    const outer = 10 + age * 22;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(ang) * inner, y + Math.sin(ang) * inner);
+    ctx.lineTo(x + Math.cos(ang) * outer, y + Math.sin(ang) * outer);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function gmbDrawPitch(ctx) {
@@ -3842,15 +3900,18 @@ function gmbDrawChargeArrow(ctx, ts) {
 
 function gmbDrawPlayer(ctx, p, ts) {
   const dashing = performance.now() < p.dashingUntil;
-  // Estela del dash
-  if (p.dashTrailAt && performance.now() - p.dashTrailAt < 260) {
-    const age = (performance.now() - p.dashTrailAt) / 260;
+  // Estela del dash: varios "fantasmas" que se van achicando y desvaneciendo.
+  if (p.trail && p.trail.length) {
+    const now = performance.now();
     ctx.save();
-    ctx.globalAlpha = (1 - age) * 0.35;
-    ctx.beginPath();
-    ctx.arc(p.x - p.vx * 2, p.y - p.vy * 2, p.r * (1 + age * 0.4), 0, Math.PI * 2);
-    ctx.fillStyle = gmbResolveColor(p.color);
-    ctx.fill();
+    p.trail.forEach((pt) => {
+      const age = Math.min((now - pt.t) / 280, 1);
+      ctx.globalAlpha = (1 - age) * 0.4;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, p.r * (1 - age * 0.35), 0, Math.PI * 2);
+      ctx.fillStyle = gmbResolveColor(p.color);
+      ctx.fill();
+    });
     ctx.restore();
   }
 
@@ -3876,6 +3937,19 @@ function gmbDrawPlayer(ctx, p, ts) {
 
 function gmbDrawBall(ctx) {
   const b = gmb.ball;
+  if (b.trail && b.trail.length) {
+    const now = performance.now();
+    ctx.save();
+    b.trail.forEach((pt) => {
+      const age = Math.min((now - pt.t) / 220, 1);
+      ctx.globalAlpha = (1 - age) * 0.5;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, b.r * (1 - age * 0.5), 0, Math.PI * 2);
+      ctx.fillStyle = "#f4f1e8";
+      ctx.fill();
+    });
+    ctx.restore();
+  }
   ctx.save();
   ctx.beginPath();
   ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
