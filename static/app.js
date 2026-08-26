@@ -991,9 +991,9 @@ const PENALTY_KEY_TO_DIR = {
 const PENALTY_COMBO_WINDOW_MS = 70; // margen para que 2 teclas cuenten como un solo combo
 
 function penaltyZoneFromDirs(dirs) {
-  const vertical = dirs.has("up") ? "up" : dirs.has("down") ? "down" : null;
-  if (!vertical) return null;
   const horizontal = dirs.has("left") ? "left" : dirs.has("right") ? "right" : null;
+  const vertical = dirs.has("up") ? "up" : dirs.has("down") ? "down" : (horizontal ? "down" : null);
+  if (!vertical) return null;
   if (vertical === "up") return horizontal === "left" ? "tl" : horizontal === "right" ? "tr" : "tc";
   return horizontal === "left" ? "bl" : horizontal === "right" ? "br" : "bc";
 }
@@ -1148,20 +1148,47 @@ function ballSettleIntoNet(ball, x, y) {
   requestAnimationFrame(step);
 }
 
-// En una atajada, el guante la despide hacia el lado contrario y al piso.
-function ballDeflectOff(ball, x, y, kickZone) {
+// En una atajada, el guante la despide con física real: se invierte y
+// amortigua la velocidad que traía la pelota (no una curva prearmada fija),
+// tiene gravedad y fricción de aire propias, y pica una vez contra el piso
+// del área perdiendo energía - se siente un manotazo con peso de verdad.
+function ballDeflectOff(ball, x, y, kickZone, vx, vy) {
   const posX = PENALTY_ZONE_POS[kickZone] ? PENALTY_ZONE_POS[kickZone].x : 0.5;
   const side = posX < 0.5 ? 1 : posX > 0.5 ? -1 : (Math.random() < 0.5 ? -1 : 1);
+  const restitution = 0.4; // cuánta energía "sobrevive" al golpe del guante
+
+  let px = x, py = y;
+  let pvx = side * (80 + Math.abs(vx || 0) * restitution * 0.3);
+  let pvy = -Math.abs(vy || 200) * restitution - 260; // manotazo hacia arriba
+  let spin = (vx || 0) * 0.4;
+  let bounced = false;
+
   const start = performance.now();
-  const dur = 300;
+  let last = start;
+  const ballCore = ball.querySelector(".ball-core");
+
   function step(now) {
-    const t = Math.min(1, (now - start) / dur);
-    const ease = 1 - Math.pow(1 - t, 2);
-    const dx = x + side * 30 * ease;
-    const dy = y + 36 * ease;
-    const scale = 0.95 - ease * 0.3;
-    ball.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), ${dy.toFixed(1)}px) scale(${scale.toFixed(2)})`;
-    if (t < 1) requestAnimationFrame(step);
+    const dt = Math.min((now - last) / 1000, 0.032);
+    last = now;
+
+    pvy += 1600 * dt; // gravedad (más floja que la del tiro: se ve "liviano" en el aire)
+    px += pvx * dt;
+    py += pvy * dt;
+    pvx *= (1 - dt * 0.6); // fricción de aire, va perdiendo velocidad lateral
+    spin += pvx * dt * 0.5;
+
+    if (py > y + 46 && !bounced) {
+      bounced = true; // pica una vez contra el piso del área y pierde energía
+      pvy *= -0.32;
+      pvx *= 0.5;
+    }
+
+    const t = (now - start) / 1000;
+    const scale = Math.max(0.5, 0.95 - t * 0.35);
+    ball.style.transform = `translate(calc(-50% + ${px.toFixed(1)}px), ${py.toFixed(1)}px) scale(${scale.toFixed(2)})`;
+    if (ballCore) ballCore.style.transform = `rotate(${spin.toFixed(0)}deg)`;
+
+    if (t < 0.62) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
 }
@@ -1620,7 +1647,7 @@ function resolvePenaltyShot(kickZone, power, phys) {
       busPlaySound("/static/audio/card-pickup.wav", 0.55);
     }
     spawnImpactBurst(impactX, impactY, "#f2efe6");
-    ballDeflectOff(ball, impactX, impactY, kickZone);
+    ballDeflectOff(ball, impactX, impactY, kickZone, phys.vx, phys.vy);
     flavor = power >= 85
       ? "¡MANO DE DIOS! Le sacó un fierrazo tremendo del ángulo."
       : PENALTY_SAVE_FLAVORS[Math.floor(Math.random() * PENALTY_SAVE_FLAVORS.length)];
