@@ -1207,7 +1207,8 @@ function resetPenaltyUI() {
   const ball = document.getElementById("penaltyBall");
   ball.style.transform = "";
   ball.classList.remove("spinning-ball");
-    
+  
+  document.getElementById("penaltyPowerBar").style.width = "0%";  
   document.getElementById("penaltyKeeper").className = "keeper";
   document.getElementById("penaltyGoal").classList.remove("net-ripple");
   document.getElementById("penaltyStamp").className = "penalty-stamp";
@@ -1244,7 +1245,7 @@ function startPenaltyRound() {
     if (currentPower >= 105) { currentPower = 105; powerDirection = -1; }
     if (currentPower <= 0) { currentPower = 0; powerDirection = 1; }
 
-    updateGaugeNeedle(Math.min(currentPower, 100));
+    document.getElementById("penaltyPowerBar").style.width = Math.min(currentPower, 100) + "%";
     penaltyPowerRAF = requestAnimationFrame(animatePower);
   }
   penaltyPowerRAF = requestAnimationFrame(animatePower);
