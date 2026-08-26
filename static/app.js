@@ -1801,6 +1801,15 @@ function launchPenaltyBall(zone, power) {
   // tira contra ESTO cuando aprieta Espacio, no contra un rincón "de mentira".
   penaltyFinalLanding = { x: target.x + curveOffsetAt(durS), y: target.y };
 
+  // Knuckleball cosmético: cada tiro vibra distinto (semilla random propia)
+  // mientras vuela - hace más difícil leer el palo de entrada. Se
+  // amortigua a 0 antes del 70% del vuelo, así el aterrizaje real (y por
+  // lo tanto penaltyFinalLanding, lo que usa el arquero para su salto)
+  // NUNCA cambia - la dificultad es de lectura, no un tiro trucho.
+  const knuckleSeed = Math.random() * Math.PI * 2;
+  const knuckleAmp = 9 + Math.random() * 12;
+  const knuckleFreq = 7 + Math.random() * 4;
+
   const startTime = performance.now();
   penaltyFlightStartTime = startTime;
   let lastT = startTime;
@@ -1820,7 +1829,10 @@ function launchPenaltyBall(zone, power) {
     phys.y += phys.vy * dt;
 
     const curveNow = curveOffsetAt(elapsedS);
-    const apparentDx = (phys.x - start.x) + curveNow;
+    const knuckleT = elapsedS / durS;
+    const knuckleEnvelope = Math.max(0, 1 - knuckleT / 0.7);
+    const knuckleNow = Math.sin(knuckleSeed + elapsedS * knuckleFreq) * knuckleAmp * knuckleEnvelope;
+    const apparentDx = (phys.x - start.x) + curveNow + knuckleNow;
     const apparentDy = phys.y - start.y;
     penaltyBallLiveRef = { x: start.x + apparentDx, y: start.y + apparentDy };
 
