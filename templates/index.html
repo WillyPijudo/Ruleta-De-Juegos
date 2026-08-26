@@ -281,14 +281,11 @@
 <p class="penalty-status" id="penaltyStatus">Pateador, elegí tu rincón…</p>
 
 <div class="penalty-power-wrap">
-  <svg class="power-gauge" viewBox="0 0 200 110" aria-hidden="true">
-    <path class="gauge-track" d="M10,100 A90,90 0 0 1 190,100"></path>
-    <path class="gauge-zone-safe" d="M10,100 A90,90 0 0 1 84.4,11.4"></path>
-    <path class="gauge-zone-strong" d="M84.4,11.4 A90,90 0 0 1 168.9,42.1"></path>
-    <path class="gauge-zone-risk" d="M168.9,42.1 A90,90 0 0 1 190,100"></path>
-    <line id="penaltyPowerNeedle" class="gauge-needle" x1="100" y1="100" x2="100" y2="22"></line>
-    <circle class="gauge-hub" cx="100" cy="100" r="7"></circle>
-  </svg>
+  <div class="penalty-power-bg">
+    <div class="penalty-power-fill" id="penaltyPowerBar"></div>
+    <div class="power-zone-perfect"></div>
+    <div class="power-zone-risk-start"></div>
+  </div>
   <div class="gauge-label">POTENCIA</div>
 </div>
 
