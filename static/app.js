@@ -1127,15 +1127,22 @@ function spawnNetBulge(x, y) {
 }
 
 // La pelota "se frena" y se asienta en la red en vez de atravesarla.
+// Ahora con peso: se hunde, la red la frena con un pequeño rebote elástico
+// que se va amortiguando (no es un fundido plano) - y la malla (net-ripple,
+// ver CSS) queda por encima en z-index, así se ve que entra DETRÁS de ella.
 function ballSettleIntoNet(ball, x, y) {
   const start = performance.now();
-  const dur = 260;
+  const dur = 420;
   ball.style.opacity = "1";
   function step(now) {
     const t = Math.min(1, (now - start) / dur);
-    const scale = 0.62 - t * 0.22;
-    ball.style.transform = `translate(calc(-50% + ${x.toFixed(1)}px), ${(y + t * 8).toFixed(1)}px) scale(${scale.toFixed(2)})`;
-    ball.style.opacity = `${(1 - t).toFixed(2)}`;
+    const settle = t < 0.55
+      ? (t / 0.55)
+      : 1 + Math.sin((t - 0.55) / 0.45 * Math.PI) * 0.12 * (1 - (t - 0.55) / 0.45);
+    const push = 10 + settle * 6;
+    const scale = 0.62 - settle * 0.24;
+    ball.style.transform = `translate(calc(-50% + ${x.toFixed(1)}px), ${(y + push).toFixed(1)}px) scale(${Math.max(0.3, scale).toFixed(2)})`;
+    ball.style.opacity = `${Math.max(0, 1 - t * 1.15).toFixed(2)}`;
     if (t < 1) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
@@ -1509,6 +1516,14 @@ function launchPenaltyBall(zone, power) {
   }
   aimAt(decoy, Math.max(0.05, revealAtS));
 
+  // Física dinámica: cada tiro tiene su propio "baile" lateral aleatorio en
+  // el tramo señuelo. Es puramente cosmético - el re-apuntado post-reveal
+  // (aimAt hacia el target real) recalcula todo desde la posición real,
+  // así que esto nunca cambia a dónde termina yendo la pelota.
+  const wobbleSeed = Math.random() * Math.PI * 2;
+  const wobbleAmp = 40 + Math.random() * 55;
+  const wobbleFreq = 5 + Math.random() * 3;
+
   let reAimed = false;
   let blendFrom = null, blendTo = null, blendStartS = 0;
   const startTime = performance.now();
@@ -1538,6 +1553,9 @@ function launchPenaltyBall(zone, power) {
       phys.vy = blendFrom.vy + (blendTo.vy - blendFrom.vy) * eased;
     }
 
+    if (!reAimed) {
+      phys.vx += Math.sin(wobbleSeed + elapsedS * wobbleFreq) * wobbleAmp * dt;
+    }
     phys.vy += PENALTY_GRAVITY * dt;
     phys.x += phys.vx * dt;
     phys.y += phys.vy * dt;
