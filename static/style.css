@@ -1445,17 +1445,6 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   to { transform: translateY(110vh) rotate(540deg); opacity: 0.9; }
 }
 
-/* ---------- Barra de Potencia PES 6 ---------- */
-.penalty-power-wrap {
-  width: 80%;
-  height: 22px;
-  margin: 0 auto 12px;
-  background: var(--bg-deep);
-  border: 2px solid var(--border-bright);
-  border-radius: 12px;
-  padding: 2px;
-  position: relative;
-}
 
 /* ---------- NUEVAS COSAS---------- */
 
