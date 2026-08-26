@@ -1004,6 +1004,11 @@ const PENALTY_DIVE_VECTORS = {
 };
 const PENALTY_GRAVITY = 2200; // px/s^2, tuneado a ojo para que el arco se vea bien
 
+// Comba lateral: hacia dónde "abre" el tiro antes de cerrar al palo según
+// el rincón, y tope de comba según la potencia (ver launchPenaltyBall).
+const PENALTY_CURVE_SIDE = { bl: -1, bc: 0, br: 1, tl: -1, tc: 0, tr: 1 };
+const PENALTY_CURVE_MAX_ACCEL = 950; // px/s^2, tope para un tiro bien colocado
+
 let penaltyState = "idle";
 let penaltyKeyHandler = null;
 let penaltyFlightRAF = null;
@@ -1093,15 +1098,6 @@ function spawnImpactBurst(x, y, color) {
   }
 }
 
-function updateGaugeNeedle(power) {
-  const needle = document.getElementById("penaltyPowerNeedle");
-  if (!needle) return;
-  const angleDeg = 180 - Math.max(0, Math.min(100, power)) * 1.8;
-  const rad = (angleDeg * Math.PI) / 180;
-  const len = 78;
-  needle.setAttribute("x2", (100 + len * Math.cos(rad)).toFixed(1));
-  needle.setAttribute("y2", (100 - len * Math.sin(rad)).toFixed(1));
-}
 
 function diveKeeper(zone, stretch) {
   const keeper = document.getElementById("penaltyKeeper");
@@ -1110,7 +1106,7 @@ function diveKeeper(zone, stretch) {
   keeper.style.setProperty("--dive-x", `${v.x}px`);
   keeper.style.setProperty("--dive-y", `${v.y}px`);
   keeper.style.setProperty("--dive-rot", `${v.rot}deg`);
-  keeper.classList.remove("keeper-urgent");
+  keeper.classList.remove("keeper-urgent", "keeper-tic");
   keeper.classList.add("diving", stretch ? "diving-stretch" : "diving-clean");
   shadow.classList.add("diving");
   penaltyKeeperStretch = stretch;
@@ -1372,10 +1368,22 @@ function launchPenaltyBall(zone, power) {
   // Estado físico real: posición + velocidad, integrados con gravedad
   // frame a frame (no interpolación de "% recorrido"). curveAccel/curveMax
   // quedan listos para la comba lateral que se va a sumar más adelante.
-  const phys = { x: start.x, y: start.y, vx: 0, vy: 0, curveAccel: 0, curveMax: 260 };
+  // Comba: fuerza lateral constante durante todo el vuelo. Se define acá
+  // (una vez por tiro) según rincón + potencia, con un poco de variación.
+  const curveSide = PENALTY_CURVE_SIDE[zone];
+  const curvePowerT = Math.max(0, Math.min(1, power / 84));
+  const curveFactor = 1 - curvePowerT * 0.7; // fierrazo: ~30% de la comba máxima
+  const curveMax = PENALTY_CURVE_MAX_ACCEL * curveFactor;
+  const curveAccel = curveSide * curveMax * (0.75 + Math.random() * 0.5);
+
+  // Estado físico real: posición + velocidad, integradas con gravedad
+  // frame a frame (no interpolación de "% recorrido").
+  const phys = { x: start.x, y: start.y, vx: 0, vy: 0, curveAccel, curveMax };
 
   function aimAt(dest, timeLeft) {
-    phys.vx = (dest.x - phys.x) / timeLeft;
+    // La comba se compensa igual que la gravedad: si no, el tiro
+    // terminaría lejos del señuelo/target por el empuje lateral acumulado.
+    phys.vx = ((dest.x - phys.x) - 0.5 * phys.curveAccel * timeLeft * timeLeft) / timeLeft;
     phys.vy = ((dest.y - phys.y) - 0.5 * PENALTY_GRAVITY * timeLeft * timeLeft) / timeLeft;
   }
   aimAt(decoy, Math.max(0.05, revealAtS));
@@ -1397,9 +1405,9 @@ function launchPenaltyBall(zone, power) {
       aimAt(target, Math.max(0.05, durS - elapsedS));
     }
 
-    // Paso de física real: gravedad + velocidad.
+    // Paso de física real: gravedad + comba lateral + velocidad.
     phys.vy += PENALTY_GRAVITY * dt;
-    // Acá en el futuro: phys.vx += clamp(phys.curveAccel * dt, -curveMax, curveMax);
+    phys.vx += phys.curveAccel * dt; // se acumula de a poco, no es instantánea
     phys.x += phys.vx * dt;
     phys.y += phys.vy * dt;
 
