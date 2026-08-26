@@ -1532,6 +1532,22 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 @keyframes impact-spark-fly { to { transform: translate(var(--sx), var(--sy)) scale(0); opacity: 0; } }
 
 
+.net-bulge {
+  position: absolute;
+  width: 46px; height: 46px;
+  margin-left: -23px; margin-top: -23px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,0,0,0.45), rgba(0,0,0,0) 70%);
+  z-index: 5;
+  pointer-events: none;
+  animation: net-bulge-pop 0.4s ease-out forwards;
+}
+@keyframes net-bulge-pop {
+  0%   { transform: scale(0.3); opacity: 0; }
+  35%  { transform: scale(1.15); opacity: 0.9; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
 
 /* ===================== La Velada (boxeo) ===================== */
 .fight-modal {
