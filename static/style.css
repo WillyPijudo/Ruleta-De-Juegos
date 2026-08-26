@@ -1191,8 +1191,8 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   position: absolute;
   left: 50%;
   bottom: 4%;
-  width: 46px;
-  height: 64px;
+  width: 66px;
+  height: 92px;
   transform: translate(-50%, 0);
   --dive-x: 0px; --dive-y: 0px; --dive-rot: 0deg;
   z-index: 3;
@@ -1240,46 +1240,45 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 
 .keeper-body {
   position: absolute;
-  left: 50%; bottom: 14px;
+  left: 50%; bottom: 20px;
   transform: translateX(-50%);
-  width: 26px; height: 30px;
-  border-radius: 9px 9px 4px 4px;
+  width: 36px; height: 42px;
+  border-radius: 13px 13px 5px 5px;
   background: linear-gradient(180deg, var(--pink), #8a1c46);
   box-shadow: 0 4px 10px rgba(0,0,0,0.45), inset 0 -6px 0 rgba(0,0,0,0.18);
 }
 .keeper-body::before {
-  /* cabeza, separada por sombra propia */
   content: "";
   position: absolute;
-  left: 50%; top: -16px;
+  left: 50%; top: -23px;
   transform: translateX(-50%);
-  width: 18px; height: 18px;
+  width: 26px; height: 26px;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #f2c99a, #c98f5c 80%);
   box-shadow: 0 2px 3px rgba(0,0,0,0.4);
 }
 .keeper-leg {
   position: absolute;
-  bottom: 0; width: 8px; height: 16px;
-  border-radius: 3px;
+  bottom: 0; width: 11px; height: 22px;
+  border-radius: 4px;
   background: linear-gradient(180deg, #d8d3c8, #a8a196);
   box-shadow: 0 2px 3px rgba(0,0,0,0.4);
 }
-.keeper-leg-l { left: 12px; }
-.keeper-leg-r { right: 12px; }
+.keeper-leg-l { left: 17px; }
+.keeper-leg-r { right: 17px; }
 
 .glove {
   position: absolute;
-  top: 12px;
-  width: 14px; height: 16px;
-  border-radius: 6px 6px 8px 8px;
+  top: 17px;
+  width: 20px; height: 23px;
+  border-radius: 8px 8px 11px 11px;
   background: linear-gradient(180deg, #fdfdfd, #d8d3c8);
   border: 2px solid #2b2530;
   box-shadow: 0 3px 4px rgba(0,0,0,0.5);
   transition: transform 0.2s ease;
 }
-.glove-left { left: -8px; transform: rotate(-14deg); }
-.glove-right { right: -8px; transform: rotate(14deg) scaleX(-1); }
+.glove-left { left: -11px; transform: rotate(-14deg); }
+.glove-right { right: -11px; transform: rotate(14deg) scaleX(-1); }
 .keeper.diving .glove-left,
 .keeper.diving .glove-right { transform: scale(1.25); }
 .keeper.diving-stretch .glove-left,
@@ -1288,7 +1287,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 .keeper-shadow {
   position: absolute;
   left: 50%; bottom: 2%;
-  width: 40px; height: 12px;
+  width: 58px; height: 18px;
   transform: translate(-50%, 0) scale(1, 1);
   border-radius: 50%;
   background: radial-gradient(ellipse, rgba(0,0,0,0.55), rgba(0,0,0,0) 72%);
