@@ -1328,21 +1328,6 @@ function watchKeeperReaction() {
   penaltyReactRAF = requestAnimationFrame(tick);
 }
 
-  penaltyKeyHandler = (e) => {
-    if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
-    if (e.repeat) return;
-    const zone = PENALTY_ZONES[e.key.toLowerCase()];
-    if (!zone) return;
-
-    if (penaltyState === "aiming") {
-      doKick(zone);
-    } else if ((penaltyState === "reacting" || penaltyState === "flight") && !penaltyKeeperZone) {
-      penaltyKeeperZone = zone;
-      document.getElementById("penaltyKeeper").className = `keeper diving dive-${zone}`;
-    }
-  };
-  window.addEventListener("keydown", penaltyKeyHandler);
-}
 function beginPenaltyMatch() {
   document.getElementById("penaltyIntro").classList.add("hidden");
   document.getElementById("penaltyPlay").classList.remove("hidden");
