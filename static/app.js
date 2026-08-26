@@ -1070,7 +1070,8 @@ let penaltyKeeperLateFrac = 0;
 let shootout = null;
 
 // ---------- Estado nuevo: arquero con posición y física propias ----------
-let penaltyKeeperMoveKeys = { left: false, right: false };
+let penaltyKeeperMoveKeys = { left: false, right: false, up: false };
+let penaltyKeeperGuessedWrong = false; // para el flavor text: se tiró para el lado que no era
 let penaltyKeeperStandX = 0;       // offset actual del arquero, px desde el centro del arco
 let penaltyKeeperVX = 0;
 let penaltyKeeperBoundsPx = 150;   // hasta dónde puede caminar - se recalcula por ronda
@@ -1167,18 +1168,46 @@ function spawnNetBulge(x, y) {
 // ver CSS) queda por encima en z-index, así se ve que entra DETRÁS de ella.
 function ballSettleIntoNet(ball, x, y) {
   const start = performance.now();
-  const dur = 420;
+  const dur = 480;
   ball.style.opacity = "1";
+  // FIX: antes se desvanecía a opacity 0 - "desaparecía". Ahora se queda
+  // visible, hamacando adentro del arco (la red pasa por encima en
+  // z-index mientras dura el net-ripple, así se ve "atrapada" adentro).
   function step(now) {
     const t = Math.min(1, (now - start) / dur);
-    const settle = t < 0.55
-      ? (t / 0.55)
-      : 1 + Math.sin((t - 0.55) / 0.45 * Math.PI) * 0.12 * (1 - (t - 0.55) / 0.45);
-    const push = 10 + settle * 6;
-    const scale = 0.62 - settle * 0.24;
-    ball.style.transform = `translate(calc(-50% + ${x.toFixed(1)}px), ${(y + push).toFixed(1)}px) scale(${Math.max(0.3, scale).toFixed(2)})`;
-    ball.style.opacity = `${Math.max(0, 1 - t * 1.15).toFixed(2)}`;
+    const settle = t < 0.5
+      ? (t / 0.5)
+      : 1 + Math.sin((t - 0.5) / 0.5 * Math.PI) * 0.16 * (1 - (t - 0.5) / 0.5);
+    const push = 8 + settle * 10;
+    const scale = 0.66 - settle * 0.18;
+    ball.style.transform = `translate(calc(-50% + ${x.toFixed(1)}px), ${(y + push).toFixed(1)}px) scale(${Math.max(0.42, scale).toFixed(2)})`;
     if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// Tiro a la tribuna: en vez de perderse de cuadro sin ningún efecto, se
+// clava arriba del travesaño y cae con gravedad real antes de perderse.
+function ballFlyOut(ball, x, y, vx, vy) {
+  let px = x, py = Math.min(y, -4);
+  let pvx = (vx || 0) * 0.4;
+  let pvy = -Math.abs(vy || 260) * 0.5;
+  const start = performance.now();
+  let last = start;
+  const ballCore = ball.querySelector(".ball-core");
+  function step(now) {
+    const dt = Math.min((now - last) / 1000, 0.032);
+    last = now;
+    pvy += 1400 * dt;
+    px += pvx * dt;
+    py += pvy * dt;
+    pvx *= (1 - dt * 0.4);
+    const t = (now - start) / 1000;
+    const scale = Math.max(0.35, 0.85 - t * 0.5);
+    ball.style.transform = `translate(calc(-50% + ${px.toFixed(1)}px), ${py.toFixed(1)}px) scale(${scale.toFixed(2)})`;
+    ball.style.opacity = `${Math.max(0, 1 - t * 0.85).toFixed(2)}`;
+    if (ballCore) ballCore.style.transform = `rotate(${(t * 900).toFixed(0)}deg)`;
+    if (t < 0.7) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
 }
@@ -1247,25 +1276,70 @@ function attemptKeeperDive() {
   const keeper = document.getElementById("penaltyKeeper");
   const shadow = document.getElementById("penaltyKeeperShadow");
   const pitch = document.querySelector(".penalty-pitch");
+  const goal = document.getElementById("penaltyGoal");
   const pitchRect = pitch.getBoundingClientRect();
+  const goalRect = goal.getBoundingClientRect();
   const keeperRect = keeper.getBoundingClientRect();
   const fromX = keeperRect.left + keeperRect.width / 2 - pitchRect.left;
   const fromY = keeperRect.top + keeperRect.height / 2 - pitchRect.top;
 
+  // Zona a la que el arquero ELIGIÓ tirarse (combo A/D + W sostenidos al
+  // apretar Espacio) - mismo vocabulario que usa el pateador con flechas.
+  const wantsUp = penaltyKeeperMoveKeys.up;
+  const wantsLeft = penaltyKeeperMoveKeys.left;
+  const wantsRight = penaltyKeeperMoveKeys.right;
+  const chosenZone = wantsUp
+    ? (wantsLeft ? "tl" : wantsRight ? "tr" : "tc")
+    : (wantsLeft ? "bl" : wantsRight ? "br" : "bc");
+
+  // Zona a la que fue REALMENTE la pelota (con la comba ya adentro).
+  let actualZone = "bc", bestD = Infinity;
+  Object.keys(PENALTY_ZONE_POS).forEach((z) => {
+    const p = PENALTY_ZONE_POS[z];
+    const zx = goalRect.left - pitchRect.left + goalRect.width * p.x;
+    const zy = goalRect.top - pitchRect.top + goalRect.height * p.y;
+    const d = Math.hypot(penaltyFinalLanding.x - zx, penaltyFinalLanding.y - zy);
+    if (d < bestD) { bestD = d; actualZone = z; }
+  });
+
+  const guessedRight = chosenZone === actualZone;
+  const guessedAdjacent = !guessedRight &&
+    (chosenZone[0] === actualZone[0] || chosenZone.slice(1) === actualZone.slice(1));
+  penaltyKeeperGuessedWrong = !guessedRight && !guessedAdjacent;
+
+  // Si adivinó (bien o a medias) salta contra el punto real - el guante
+  // llega exacto. Si se tiró para el lado que no era, salta contra SU
+  // propia zona elegida: se tira para el lado incorrecto, como en la vida real.
+  const jumpTarget = (guessedRight || guessedAdjacent)
+    ? penaltyFinalLanding
+    : {
+        x: goalRect.left - pitchRect.left + goalRect.width * PENALTY_ZONE_POS[chosenZone].x,
+        y: goalRect.top - pitchRect.top + goalRect.height * PENALTY_ZONE_POS[chosenZone].y,
+      };
+
   const elapsedS = (performance.now() - penaltyFlightStartTime) / 1000;
   const timeLeftS = Math.max(0.03, penaltyFlightDurationMs / 1000 - elapsedS);
+  const lateFrac = 1 - Math.min(1, timeLeftS / (penaltyFlightDurationMs / 1000 || 1));
 
-  const dist = Math.hypot(penaltyFinalLanding.x - fromX, penaltyFinalLanding.y - fromY);
+  const dist = Math.hypot(jumpTarget.x - fromX, jumpTarget.y - fromY);
   const travelBudget = KEEPER_DIVE_TRAVEL_SPEED * Math.min(timeLeftS, KEEPER_DIVE_MAX_MS / 1000);
   const reach = KEEPER_STANDING_REACH + travelBudget;
   const stretch = dist > reach * 0.55;
 
-  penaltyKeeperSaveResult = dist <= reach;
-  penaltyKeeperStretch = stretch;
-  penaltyKeeperLateFrac = 1 - Math.min(1, timeLeftS / (penaltyFlightDurationMs / 1000 || 1));
+  let saveChance = 0;
+  if (guessedRight || guessedAdjacent) {
+    const distFactor = Math.max(0, 1 - dist / reach);
+    saveChance = (guessedRight ? 0.94 : 0.55) * distFactor * (1 - lateFrac * 0.5);
+  }
+  const madeIt = dist <= reach && penaltyKeeperGuessedWrong === false && Math.random() < Math.max(0.05, saveChance);
 
-  const dx = penaltyFinalLanding.x - fromX;
-  const dy = penaltyFinalLanding.y - fromY;
+  penaltyKeeperSaveResult = madeIt;
+  // Llegó, pero sobre la hora -> la rechaza afuera en vez de atraparla limpio.
+  penaltyKeeperStretch = madeIt && (stretch || lateFrac > 0.72);
+  penaltyKeeperLateFrac = lateFrac;
+
+  const dx = jumpTarget.x - fromX;
+  const dy = jumpTarget.y - fromY;
   keeper.style.setProperty("--dive-x", `${dx.toFixed(1)}px`);
   keeper.style.setProperty("--dive-y", `${dy.toFixed(1)}px`);
   keeper.style.setProperty("--dive-rot", `${Math.max(-18, Math.min(18, dx * 0.12)).toFixed(1)}deg`);
@@ -1286,6 +1360,8 @@ function attemptKeeperDive() {
 // un arquero no necesita volar para un tiro que le sale directo.
 function checkPassiveKeeperSave() {
   if (penaltyState !== "flight" || penaltyKeeperDiveUsed || !penaltyBallLiveRef) return;
+  const elapsedFrac = (performance.now() - penaltyFlightStartTime) / (penaltyFlightDurationMs || 1);
+  if (elapsedFrac < 0.78) return;
   const keeper = document.getElementById("penaltyKeeper");
   const pitch = document.querySelector(".penalty-pitch");
   const pitchRect = pitch.getBoundingClientRect();
@@ -1443,6 +1519,7 @@ function teardownPenaltyRound() {
   }
   penaltyKeeperMoveKeys.left = false;
   penaltyKeeperMoveKeys.right = false;
+  penaltyKeeperMoveKeys.up = false;
 }
 
 function resetPenaltyUI() {
@@ -1476,6 +1553,7 @@ function resetPenaltyUI() {
   penaltyKeeperVX = 0;
   penaltyKeeperDiveUsed = false;
   penaltyKeeperSaveResult = false;
+  penaltyKeeperGuessedWrong = false;
   penaltyBallIntercepted = false;
   penaltyFinalLanding = null;
   penaltyBallLiveRef = null;
@@ -1607,6 +1685,7 @@ function startPenaltyRound() {
     const key = e.key.toLowerCase();
     if (key === "a") { penaltyKeeperMoveKeys.left = true; return; }
     if (key === "d") { penaltyKeeperMoveKeys.right = true; return; }
+    if (key === "w") { penaltyKeeperMoveKeys.up = true; return; }
     if (key === " ") {
       e.preventDefault();
       if (!e.repeat) attemptKeeperDive();
@@ -1616,6 +1695,7 @@ function startPenaltyRound() {
     const key = e.key.toLowerCase();
     if (key === "a") penaltyKeeperMoveKeys.left = false;
     if (key === "d") penaltyKeeperMoveKeys.right = false;
+    if (key === "w") penaltyKeeperMoveKeys.up = false;
   };
   window.addEventListener("keydown", penaltyKeeperKeyHandler);
   window.addEventListener("keyup", penaltyKeeperKeyUpHandler);
@@ -1775,6 +1855,7 @@ function resolvePenaltyShot(kickZone, power, phys) {
   if (power > 95) {
     document.getElementById("penaltyStatus").textContent = "¡Afuera!";
     showPenaltyStamp("¡A LA TRIBUNA!", "stamp-out");
+    ballFlyOut(ball, impactX, impactY, phys ? phys.vx : 0, phys ? phys.vy : -300);
     scored = false;
     flavor = "¡Se llenó de pelota y la mandó a la calle!";
   } else if (saved) {
@@ -1798,6 +1879,14 @@ function resolvePenaltyShot(kickZone, power, phys) {
       ? "¡MANO DE DIOS! Le sacó un fierrazo tremendo del ángulo."
       : PENALTY_SAVE_FLAVORS[Math.floor(Math.random() * PENALTY_SAVE_FLAVORS.length)];
   } else {
+    // El punto exacto de impacto, para que la red se hunda AHÍ y no de
+    // forma pareja en todo el rectángulo (eso era lo que se veía plano).
+    const goalRectNow = goal.getBoundingClientRect();
+    const pitchRectNow = pitch.getBoundingClientRect();
+    const impactXPct = Math.max(5, Math.min(95, ((impactX - (goalRectNow.left - pitchRectNow.left)) / goalRectNow.width) * 100));
+    const impactYPct = Math.max(5, Math.min(95, ((impactY - (goalRectNow.top - pitchRectNow.top)) / goalRectNow.height) * 100));
+    goal.style.setProperty("--impact-x", impactXPct.toFixed(1) + "%");
+    goal.style.setProperty("--impact-y", impactYPct.toFixed(1) + "%");
     goal.classList.add("net-ripple");
     setTimeout(() => goal.classList.remove("net-ripple"), 450);
     spawnImpactBurst(impactX, impactY, "#f2efe6");
@@ -1815,7 +1904,9 @@ function resolvePenaltyShot(kickZone, power, phys) {
       showPenaltyStamp("¡GOL!", "stamp-goal");
       flavor = penaltyKeeperTooSlow
         ? "¡Se quedó clavado, ni llegó a tirarse!"
-        : PENALTY_GOAL_FLAVORS[Math.floor(Math.random() * PENALTY_GOAL_FLAVORS.length)];
+        : penaltyKeeperGuessedWrong
+          ? "¡Se tiró para el lado que no era!"
+          : PENALTY_GOAL_FLAVORS[Math.floor(Math.random() * PENALTY_GOAL_FLAVORS.length)];
     }
     scored = true;
   }
