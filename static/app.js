@@ -1544,7 +1544,7 @@ document.addEventListener("DOMContentLoaded", () => {
     e.target.classList.remove("challenger-input-bump");
     void e.target.offsetWidth;
     e.target.classList.add("challenger-input-bump");
-    playTick();
+    busPlaySound("/static/audio/key_typing.wav", 0.5);
   });
   document.getElementById("challengerNameInput").addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); confirmChallengerName(); }
