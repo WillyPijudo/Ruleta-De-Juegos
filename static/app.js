@@ -982,13 +982,31 @@ function finishRps() {
 // Controles por combos: 4 teclas lógicas (no 6), funcionan WASD o flechas
 // indistintamente. Vertical = fila (obligatoria), horizontal = modificador
 // opcional que apunta al palo. Solo vertical = al medio.
+// El pateador SOLO usa flechas (elegir rincón + combarla). El arquero
+// tiene su propio esquema aparte más abajo (A/D moverse, Espacio tirarse) -
+// antes compartían el mismo mapa y por eso no había control independiente.
 const PENALTY_KEY_TO_DIR = {
-  arrowup: "up", w: "up",
-  arrowdown: "down", s: "down",
-  arrowleft: "left", a: "left",
-  arrowright: "right", d: "right",
+  arrowup: "up",
+  arrowdown: "down",
+  arrowleft: "left",
+  arrowright: "right",
 };
 const PENALTY_COMBO_WINDOW_MS = 70; // margen para que 2 teclas cuenten como un solo combo
+
+// ---------- Arquero: movimiento libre + salto real ----------
+const KEEPER_MOVE_ACCEL = 1500;      // px/s² al mantener A/D
+const KEEPER_MOVE_MAXSPEED = 340;    // px/s tope caminando
+const KEEPER_STANDING_REACH = 32;    // px - alcanza sin tirarse (remate al cuerpo)
+const KEEPER_DIVE_TRAVEL_SPEED = 900; // px/s "presupuesto" de alcance al tirarse
+const KEEPER_DIVE_MAX_MS = 480;      // tope de duración del salto, no es un teletransporte
+
+// Comba por rincón: los tiros a los ángulos se cierran MÁS hacia esa
+// esquina (like un tiro real con efecto); al medio casi no comba.
+const PENALTY_CURVE_BY_ZONE = {
+  bl: { sign: -1, mag: 42 }, tl: { sign: -1, mag: 42 },
+  br: { sign: 1, mag: 42 },  tr: { sign: 1, mag: 42 },
+  bc: { sign: 0, mag: 8 },   tc: { sign: 0, mag: 8 },
+};
 
 function penaltyZoneFromDirs(dirs) {
   const horizontal = dirs.has("left") ? "left" : dirs.has("right") ? "right" : null;
@@ -1024,20 +1042,23 @@ const PENALTY_CURVE_REDIRECT = { bl: "tl", tl: "bl", bc: "tc", tc: "bc", br: "tr
 
 let penaltyState = "idle";
 let penaltyKeyHandler = null;
+let penaltyKeeperKeyHandler = null;
+let penaltyKeeperKeyUpHandler = null;
 let penaltyFlightRAF = null;
 let penaltyPowerRAF = null;
 let penaltyReactRAF = null;
+let penaltyKeeperMoveRAF = null;
 let penaltyIdleTimer = null;
 let penaltyKickZone = null;
-let penaltyKeeperZone = null;
 let penaltyKeeperStretch = false;
 let penaltyKeeperTooSlow = false;
 let penaltyFlightStartTime = 0;
 let currentPower = 0;
 let powerDirection = 1;
 let capturedPower = 0;
-let penaltyCurveZone = null;      // rincón final real (puede cambiar si se toca la comba)
-let penaltyCurveApplied = false;  // si ya se usó el toque de comba en este tiro
+let penaltyCurveApplied = false;  // si ya se usó el toque de "cargar" la comba en este tiro
+let penaltyCurveSign = 0;         // hacia dónde comba el tiro actual
+let penaltyCurveMag = 0;          // cuánto comba (px de desvío final)
 let penaltyFlightDurationMs = 0;  // duración total del vuelo actual (para sincronizar el salto)
 let penaltyReactionCutoffMs = 700;
 let penaltyAimStartTime = 0;
@@ -1045,6 +1066,18 @@ let penaltyReactTimer = null;
 let penaltyRoundTimeout = null;
 let penaltyKeeperLateFrac = 0;
 let shootout = null;
+
+// ---------- Estado nuevo: arquero con posición y física propias ----------
+let penaltyKeeperMoveKeys = { left: false, right: false };
+let penaltyKeeperStandX = 0;       // offset actual del arquero, px desde el centro del arco
+let penaltyKeeperVX = 0;
+let penaltyKeeperBoundsPx = 150;   // hasta dónde puede caminar - se recalcula por ronda
+let penaltyKeeperDiveUsed = false;
+let penaltyKeeperSaveResult = false;
+let penaltyFinalLanding = null;    // {x, y} relativo al pitch - dónde termina la pelota YA con la comba
+let penaltyBallLiveRef = null;     // posición real de la pelota en este instante (para el reflejo)
+let penaltyBallIntercepted = false;
+let penaltyLastKeeperMoveT = 0;
 
 /**
  * REWORK "estilo PES 6": antes el arquero podía mirar el dibujo de la
@@ -1159,13 +1192,17 @@ function ballDeflectOff(ball, x, y, kickZone, vx, vy) {
 
   let px = x, py = y;
   let pvx = side * (80 + Math.abs(vx || 0) * restitution * 0.3);
-  let pvy = -Math.abs(vy || 200) * restitution - 260; // manotazo hacia arriba
+  // FIX: antes esto podía mandar la pelota MUY por arriba del área visible
+  // (el .penalty-pitch tiene overflow:hidden) y "desaparecía" en tiros a
+  // los ángulos altos. Ahora el manotazo está topeado.
+  let pvy = -Math.min(340, Math.abs(vy || 200) * restitution * 0.5 + 140);
   let spin = (vx || 0) * 0.4;
   let bounced = false;
 
   const start = performance.now();
   let last = start;
   const ballCore = ball.querySelector(".ball-core");
+  const minY = -6; // FIX: nunca sube más arriba del borde visible del área
 
   function step(now) {
     const dt = Math.min((now - last) / 1000, 0.032);
@@ -1176,6 +1213,8 @@ function ballDeflectOff(ball, x, y, kickZone, vx, vy) {
     py += pvy * dt;
     pvx *= (1 - dt * 0.6); // fricción de aire, va perdiendo velocidad lateral
     spin += pvx * dt * 0.5;
+
+    if (py < minY) { py = minY; pvy = Math.abs(pvy) * 0.3; } // FIX: clamp de seguridad, nunca se va del cuadro
 
     if (py > y + 46 && !bounced) {
       bounced = true; // pica una vez contra el piso del área y pierde energía
@@ -1194,39 +1233,111 @@ function ballDeflectOff(ball, x, y, kickZone, vx, vy) {
 }
 
 
-function diveKeeper(zone, stretch, travelMs) {
+// Ahora el salto NO se elige por zona: apunta al punto real donde va a
+// terminar la pelota (penaltyFinalLanding, ya calculado con la comba
+// incluida cuando se pateó). Si le alcanza depende de la distancia real
+// desde donde estaba parado y de cuánto tiempo de vuelo le quedaba -
+// colisión/física de verdad, no un "adiviná la zona".
+function attemptKeeperDive() {
+  if (penaltyState !== "flight" || penaltyKeeperDiveUsed || !penaltyFinalLanding) return;
+  penaltyKeeperDiveUsed = true;
+
   const keeper = document.getElementById("penaltyKeeper");
   const shadow = document.getElementById("penaltyKeeperShadow");
-  const goal = document.getElementById("penaltyGoal");
-
-  // Colisión real: el vector de salto se calcula contra el punto real del
-  // rincón en el arco (mismo PENALTY_ZONE_POS que usa la pelota), no un
-  // número mágico — así el arquero SIEMPRE llega físicamente al lugar
-  // donde termina la pelota cuando el rincón coincide.
-  const goalRect = goal.getBoundingClientRect();
+  const pitch = document.querySelector(".penalty-pitch");
+  const pitchRect = pitch.getBoundingClientRect();
   const keeperRect = keeper.getBoundingClientRect();
-  const fromX = keeperRect.left + keeperRect.width / 2;
-  const fromY = keeperRect.top + keeperRect.height / 2;
-  const pos = PENALTY_ZONE_POS[zone];
-  const toX = goalRect.left + goalRect.width * pos.x;
-  const toY = goalRect.top + goalRect.height * pos.y;
+  const fromX = keeperRect.left + keeperRect.width / 2 - pitchRect.left;
+  const fromY = keeperRect.top + keeperRect.height / 2 - pitchRect.top;
 
-  keeper.style.setProperty("--dive-x", `${(toX - fromX).toFixed(1)}px`);
-  keeper.style.setProperty("--dive-y", `${(toY - fromY).toFixed(1)}px`);
-  keeper.style.setProperty("--dive-rot", `${PENALTY_DIVE_ROT[zone]}deg`);
+  const elapsedS = (performance.now() - penaltyFlightStartTime) / 1000;
+  const timeLeftS = Math.max(0.03, penaltyFlightDurationMs / 1000 - elapsedS);
 
-  // Sincroniza la duración del salto con lo que le queda de vuelo a la
-  // pelota: el arquero llega a la extensión completa justo cuando se
-  // resuelve el tiro, ni antes ni después — así una atajada "in extremis"
-  // se ve apurada de verdad, y una reacción rápida se ve un salto pleno.
-  const dur = travelMs ? `${Math.round(travelMs)}ms` : "";
-  keeper.style.animationDuration = dur;
-  shadow.style.animationDuration = dur;
+  const dist = Math.hypot(penaltyFinalLanding.x - fromX, penaltyFinalLanding.y - fromY);
+  const travelBudget = KEEPER_DIVE_TRAVEL_SPEED * Math.min(timeLeftS, KEEPER_DIVE_MAX_MS / 1000);
+  const reach = KEEPER_STANDING_REACH + travelBudget;
+  const stretch = dist > reach * 0.55;
+
+  penaltyKeeperSaveResult = dist <= reach;
+  penaltyKeeperStretch = stretch;
+  penaltyKeeperLateFrac = 1 - Math.min(1, timeLeftS / (penaltyFlightDurationMs / 1000 || 1));
+
+  const dx = penaltyFinalLanding.x - fromX;
+  const dy = penaltyFinalLanding.y - fromY;
+  keeper.style.setProperty("--dive-x", `${dx.toFixed(1)}px`);
+  keeper.style.setProperty("--dive-y", `${dy.toFixed(1)}px`);
+  keeper.style.setProperty("--dive-rot", `${Math.max(-18, Math.min(18, dx * 0.12)).toFixed(1)}deg`);
+  shadow.style.setProperty("--dive-x", `${dx.toFixed(1)}px`);
+  shadow.style.setProperty("--dive-y", `${dy.toFixed(1)}px`);
+
+  const dur = Math.max(160, Math.min(KEEPER_DIVE_MAX_MS, timeLeftS * 1000));
+  keeper.style.animationDuration = `${Math.round(dur)}ms`;
+  shadow.style.animationDuration = `${Math.round(dur)}ms`;
 
   keeper.classList.remove("keeper-urgent", "keeper-tic");
   keeper.classList.add("diving", stretch ? "diving-stretch" : "diving-clean");
   shadow.classList.add("diving");
-  penaltyKeeperStretch = stretch;
+}
+
+// Reflejo sin tirarse: si la pelota real pasa muy cerca del cuerpo del
+// arquero (remate seco al medio de su radio de alcance), la ataja sola -
+// un arquero no necesita volar para un tiro que le sale directo.
+function checkPassiveKeeperSave() {
+  if (penaltyState !== "flight" || penaltyKeeperDiveUsed || !penaltyBallLiveRef) return;
+  const keeper = document.getElementById("penaltyKeeper");
+  const pitch = document.querySelector(".penalty-pitch");
+  const pitchRect = pitch.getBoundingClientRect();
+  const keeperRect = keeper.getBoundingClientRect();
+  const kx = keeperRect.left + keeperRect.width / 2 - pitchRect.left;
+  const ky = keeperRect.top + keeperRect.height / 2 - pitchRect.top;
+  const dist = Math.hypot(penaltyBallLiveRef.x - kx, penaltyBallLiveRef.y - ky);
+  if (dist > KEEPER_STANDING_REACH) return;
+
+  penaltyKeeperDiveUsed = true;
+  penaltyKeeperSaveResult = true;
+  penaltyKeeperStretch = false;
+  penaltyKeeperLateFrac = 0.05;
+  penaltyBallIntercepted = true;
+  keeper.classList.add("keeper-reflex");
+  busPlaySound("/static/audio/card-pickup.wav", 0.45);
+  resolvePenaltyShot(penaltyKickZone, capturedPower, { x: penaltyBallLiveRef.x, y: penaltyBallLiveRef.y, vx: 0, vy: 0 });
+}
+
+// Loop de física del arquero: corre solo mientras hay una ronda viva y
+// no se está tirando (la animación de dive maneja el transform sola en
+// ese momento - así nunca compiten por la misma propiedad).
+function keeperMovementTick(now) {
+  const keeper = document.getElementById("penaltyKeeper");
+  if (!keeper || !["aiming", "kicking", "flight"].includes(penaltyState)) {
+    penaltyKeeperMoveRAF = null;
+    return;
+  }
+  if (keeper.classList.contains("diving")) {
+    penaltyLastKeeperMoveT = now;
+    penaltyKeeperMoveRAF = requestAnimationFrame(keeperMovementTick);
+    return;
+  }
+  const dt = Math.min((now - (penaltyLastKeeperMoveT || now)) / 1000, 0.032);
+  penaltyLastKeeperMoveT = now;
+
+  const dir = (penaltyKeeperMoveKeys.right ? 1 : 0) - (penaltyKeeperMoveKeys.left ? 1 : 0);
+  if (dir !== 0) {
+    penaltyKeeperVX += dir * KEEPER_MOVE_ACCEL * dt;
+    penaltyKeeperVX = Math.max(-KEEPER_MOVE_MAXSPEED, Math.min(KEEPER_MOVE_MAXSPEED, penaltyKeeperVX));
+  } else {
+    penaltyKeeperVX *= Math.max(0, 1 - dt * 9);
+  }
+  penaltyKeeperStandX += penaltyKeeperVX * dt;
+  penaltyKeeperStandX = Math.max(-penaltyKeeperBoundsPx, Math.min(penaltyKeeperBoundsPx, penaltyKeeperStandX));
+  if (Math.abs(penaltyKeeperStandX) === penaltyKeeperBoundsPx) penaltyKeeperVX = 0;
+
+  keeper.style.setProperty("--stand-x", `${penaltyKeeperStandX.toFixed(1)}px`);
+  document.getElementById("penaltyKeeperShadow").style.setProperty("--stand-x", `${penaltyKeeperStandX.toFixed(1)}px`);
+  keeper.classList.toggle("keeper-walking", Math.abs(penaltyKeeperVX) > 20);
+
+  if (penaltyState === "flight") checkPassiveKeeperSave();
+
+  penaltyKeeperMoveRAF = requestAnimationFrame(keeperMovementTick);
 }
 
 function scheduleKeeperIdleTic() {
@@ -1234,6 +1345,8 @@ function scheduleKeeperIdleTic() {
   penaltyIdleTimer = setTimeout(() => {
     if (penaltyState !== "aiming") return;
     const keeper = document.getElementById("penaltyKeeper");
+    // FIX: el tic ahora respeta --stand-x en el CSS, así no vuelve a
+    // "teletransportarse" al centro si el arquero ya se movió con A/D.
     keeper.classList.remove("keeper-tic");
     void keeper.offsetWidth;
     keeper.classList.add("keeper-tic");
@@ -1290,9 +1403,21 @@ function teardownPenaltyRound() {
     window.removeEventListener("keydown", penaltyKeyHandler);
     penaltyKeyHandler = null;
   }
+  if (penaltyKeeperKeyHandler) {
+    window.removeEventListener("keydown", penaltyKeeperKeyHandler);
+    penaltyKeeperKeyHandler = null;
+  }
+  if (penaltyKeeperKeyUpHandler) {
+    window.removeEventListener("keyup", penaltyKeeperKeyUpHandler);
+    penaltyKeeperKeyUpHandler = null;
+  }
   if (penaltyFlightRAF) {
     cancelAnimationFrame(penaltyFlightRAF);
     penaltyFlightRAF = null;
+  }
+  if (penaltyKeeperMoveRAF) {
+    cancelAnimationFrame(penaltyKeeperMoveRAF);
+    penaltyKeeperMoveRAF = null;
   }
   if (penaltyIdleTimer) {
     clearTimeout(penaltyIdleTimer);
@@ -1314,6 +1439,8 @@ function teardownPenaltyRound() {
     clearTimeout(penaltyRoundTimeout);
     penaltyRoundTimeout = null;
   }
+  penaltyKeeperMoveKeys.left = false;
+  penaltyKeeperMoveKeys.right = false;
 }
 
 function resetPenaltyUI() {
@@ -1341,6 +1468,19 @@ function resetPenaltyUI() {
   const shadowEl = document.getElementById("penaltyKeeperShadow");
   shadowEl.className = "keeper-shadow"; // FIX: sin esto, desde la ronda 2 la sombra no reinicia su animación
   shadowEl.style.animationDuration = "";
+  // FIX: --stand-x/--dive-x/y quedaban pegados de la ronda anterior porque
+  // className solo resetea clases, no custom properties seteadas por JS.
+  penaltyKeeperStandX = 0;
+  penaltyKeeperVX = 0;
+  penaltyKeeperDiveUsed = false;
+  penaltyKeeperSaveResult = false;
+  penaltyBallIntercepted = false;
+  penaltyFinalLanding = null;
+  penaltyBallLiveRef = null;
+  ["--stand-x", "--dive-x", "--dive-y", "--dive-rot"].forEach((prop) => {
+    keeperEl.style.setProperty(prop, prop === "--dive-rot" ? "0deg" : "0px");
+    shadowEl.style.setProperty(prop, prop === "--dive-rot" ? "0deg" : "0px");
+  });
   document.getElementById("penaltyGoal").classList.remove("net-ripple");
   document.getElementById("penaltyStamp").className = "penalty-stamp";
   const trophy = document.getElementById("trophyBurst");
@@ -1361,6 +1501,14 @@ function startPenaltyRound() {
   penaltyAimStartTime = performance.now();
   scheduleKeeperIdleTic();
   updateTurnBanner();
+
+  // Cuánto puede caminar el arquero: hasta casi los palos, calculado
+  // contra el ancho real del arco (responsive, no un número fijo).
+  const goalRectNow = document.getElementById("penaltyGoal").getBoundingClientRect();
+  const keeperRectNow = document.getElementById("penaltyKeeper").getBoundingClientRect();
+  penaltyKeeperBoundsPx = Math.max(40, goalRectNow.width / 2 - keeperRectNow.width / 2 - 6);
+  penaltyLastKeeperMoveT = performance.now();
+  penaltyKeeperMoveRAF = requestAnimationFrame(keeperMovementTick);
 
   // Motor de la barra de potencia: se acelera cuanto más tiempo pasa
   // sin patear, para que clavar el punto justo sea un desafío de timing.
@@ -1384,26 +1532,20 @@ function startPenaltyRound() {
   const doKick = (zone) => {
     capturedPower = currentPower;
     penaltyKickZone = zone;
-    penaltyCurveZone = zone; // rincón final real: puede cambiar con el toque de comba
     penaltyCurveApplied = false;
-    // El cutoff de reacción nunca puede superar la duración real del tiro
-    // (si no, quedaba una ventana "de mentira" más larga que el propio vuelo).
-    penaltyReactionCutoffMs = Math.min(
-      penaltyReactionWindow(capturedPower),
-      penaltyShotTiming(capturedPower).duration - 40
-    );
+    const curveInfo = PENALTY_CURVE_BY_ZONE[zone] || { sign: 0, mag: 8 };
+    penaltyCurveSign = curveInfo.sign;
+    penaltyCurveMag = curveInfo.mag * (0.75 + Math.random() * 0.5); // variación entre tiros
     penaltyState = "kicking";
     clearTimeout(penaltyIdleTimer);
     document.getElementById("penaltyBall").classList.add("ball-waiting");
-    document.getElementById("penaltyStatus").textContent = "¡Tocala de nuevo para combarla al palo vecino!";
+    document.getElementById("penaltyStatus").textContent = "¡Tocala de nuevo para cargarle más comba!";
 
-    // Ventana de contacto: además del gesto de pateo, ahora sirve como
-    // ventana corta tipo parry para combar el tiro al palo vecino del
-    // mismo lado (ver PENALTY_CURVE_REDIRECT, manejado en penaltyKeyHandler).
+    // Ventana de contacto: además del gesto de pateo, sirve como ventana
+    // corta tipo parry para cargar más comba al mismo lado del tiro.
     penaltyReactTimer = setTimeout(() => {
       penaltyReactTimer = null;
       penaltyState = "flight";
-      penaltyKickZone = penaltyCurveZone; // ya no se puede combar más: esto es lo que se tira
       document.getElementById("penaltyBall").classList.remove("ball-waiting");
       busPlaySound("/static/audio/kickball.wav", 0.6);
 
@@ -1432,50 +1574,65 @@ function startPenaltyRound() {
     if (penaltyState === "aiming") {
       doKick(zone);
     } else if (penaltyState === "kicking" && !penaltyCurveApplied) {
-      // Ventana corta tipo parry: solo al palo vecino del MISMO lado.
+      // Toque de "cargar": mismo palo vecino de siempre, pero ahora suma
+      // magnitud a la comba real en vez de teletransportar el rincón.
       if (zone === PENALTY_CURVE_REDIRECT[penaltyKickZone]) {
         penaltyCurveApplied = true;
-        penaltyCurveZone = zone;
+        penaltyCurveMag *= 1.6;
         flashCurveTouch();
       }
-    } else if (penaltyState === "flight" && !penaltyKeeperZone) {
-      const elapsed = performance.now() - penaltyFlightStartTime;
-      if (elapsed > penaltyReactionCutoffMs) {
-        penaltyKeeperTooSlow = true;
-        return; // se durmió, ya no llega
-      }
-      penaltyKeeperZone = zone;
-      penaltyKeeperLateFrac = elapsed / penaltyReactionCutoffMs; // 0 (reflejo) -> 1 (al límite)
-      const remainingMs = Math.max(140, penaltyFlightDurationMs - elapsed);
-      diveKeeper(zone, penaltyKeeperLateFrac > 0.72, remainingMs);
     }
   };
 
+  // Pateador: SOLO flechas.
   penaltyKeyHandler = (e) => {
     if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
     if (e.repeat) return;
     const dir = PENALTY_KEY_TO_DIR[e.key.toLowerCase()];
     if (!dir) return;
-    if (penaltyState !== "aiming" && penaltyState !== "kicking" &&
-        !(penaltyState === "flight" && !penaltyKeeperZone)) return;
+    if (penaltyState !== "aiming" && penaltyState !== "kicking") return;
 
     penaltyHeldDirs.add(dir);
     clearTimeout(penaltyComboTimer);
     penaltyComboTimer = setTimeout(resolvePenaltyCombo, PENALTY_COMBO_WINDOW_MS);
   };
   window.addEventListener("keydown", penaltyKeyHandler);
+
+  // Arquero: SOLO A/D (moverse, siempre activo) + Espacio (tirarse, solo
+  // durante el vuelo) - totalmente independiente del pateador.
+  penaltyKeeperKeyHandler = (e) => {
+    if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
+    const key = e.key.toLowerCase();
+    if (key === "a") { penaltyKeeperMoveKeys.left = true; return; }
+    if (key === "d") { penaltyKeeperMoveKeys.right = true; return; }
+    if (key === " ") {
+      e.preventDefault();
+      if (!e.repeat) attemptKeeperDive();
+    }
+  };
+  penaltyKeeperKeyUpHandler = (e) => {
+    const key = e.key.toLowerCase();
+    if (key === "a") penaltyKeeperMoveKeys.left = false;
+    if (key === "d") penaltyKeeperMoveKeys.right = false;
+  };
+  window.addEventListener("keydown", penaltyKeeperKeyHandler);
+  window.addEventListener("keyup", penaltyKeeperKeyUpHandler);
 }
 
+// Ya no decide si la atajada cuenta (eso ahora es distancia/tiempo real
+// en attemptKeeperDive) - queda como el cartel de presión de tiempo:
+// cuánto le queda de vuelo a la pelota antes de llegar al arco.
 function watchKeeperReaction() {
   function tick(now) {
-    if (penaltyState !== "flight" || penaltyKeeperZone) {
-      if (penaltyState === "flight") document.getElementById("penaltyReactionTimer").classList.remove("show");
+    if (penaltyState !== "flight" || penaltyKeeperDiveUsed) {
+      document.getElementById("penaltyReactionTimer").classList.remove("show");
+      document.getElementById("penaltyKeeper").classList.remove("keeper-urgent");
       penaltyReactRAF = null;
       return;
     }
     const elapsed = now - penaltyFlightStartTime;
-    const remaining = Math.max(0, penaltyReactionCutoffMs - elapsed);
-    const frac = remaining / penaltyReactionCutoffMs;
+    const remaining = Math.max(0, penaltyFlightDurationMs - elapsed);
+    const frac = remaining / penaltyFlightDurationMs;
 
     const timer = document.getElementById("penaltyReactionTimer");
     timer.classList.add("show");
@@ -1488,7 +1645,6 @@ function watchKeeperReaction() {
       penaltyReactRAF = null;
       document.getElementById("penaltyKeeper").classList.remove("keeper-urgent");
       timer.classList.remove("show");
-      penaltyKeeperTooSlow = true;
     }
   }
   penaltyReactRAF = requestAnimationFrame(tick);
@@ -1505,8 +1661,6 @@ function penaltyCenterOf(el) {
   const r = el.getBoundingClientRect();
   return { x: r.left + r.width / 2 - pitchRect.left, y: r.top + r.height / 2 - pitchRect.top };
 }
-
-const PENALTY_REVEAL_BLEND_S = 0.1; // el quiebre visual ahora es un blend, no un salto de golpe
 
 function launchPenaltyBall(zone, power) {
   const ball = document.getElementById("penaltyBall");
@@ -1525,76 +1679,65 @@ function launchPenaltyBall(zone, power) {
     y: goalRect.top - pitchRect.top + goalRect.height * pos.y,
   };
 
-  const decoy = {
-    x: start.x + (target.x - start.x) * 0.22,
-    y: start.y + (target.y - start.y) * 0.55 - 30,
-  };
-
-  const { duration, revealFrac } = penaltyShotTiming(power);
+  const { duration } = penaltyShotTiming(power);
   const durS = duration / 1000;
-  const revealAtS = durS * revealFrac;
   penaltyFlightDurationMs = duration;
 
+  // Apunta DERECHO al target real desde el frame 1 - nada de señuelo ni
+  // bamboleo falso. Lo que hace difícil leerlo temprano ahora es la comba
+  // real de abajo, que recién se nota fuerte sobre el final del vuelo.
   const phys = { x: start.x, y: start.y, vx: 0, vy: 0 };
-
   function aimAt(dest, timeLeft) {
     phys.vx = (dest.x - phys.x) / timeLeft;
     phys.vy = ((dest.y - phys.y) - 0.5 * PENALTY_GRAVITY * timeLeft * timeLeft) / timeLeft;
   }
-  aimAt(decoy, Math.max(0.05, revealAtS));
+  aimAt(target, durS);
 
-  // Física dinámica: cada tiro tiene su propio "baile" lateral aleatorio en
-  // el tramo señuelo. Es puramente cosmético - el re-apuntado post-reveal
-  // (aimAt hacia el target real) recalcula todo desde la posición real,
-  // así que esto nunca cambia a dónde termina yendo la pelota.
-  const wobbleSeed = Math.random() * Math.PI * 2;
-  const wobbleAmp = 40 + Math.random() * 55;
-  const wobbleFreq = 5 + Math.random() * 3;
+  // Comba real: crece en cúbica (casi nada al principio, fuerte al final) -
+  // esto SÍ es lo que dificulta leerlo temprano, y es física de verdad,
+  // no una trampa visual. penaltyCurveSign/Mag vienen de doKick.
+  const curveSign = penaltyCurveSign;
+  const curveMag = penaltyCurveMag;
+  function curveOffsetAt(elapsedS) {
+    const p = Math.min(1, elapsedS / durS);
+    return curveSign * curveMag * p * p * p;
+  }
+  // Punto real donde termina (con la comba ya sumada) - el arquero se
+  // tira contra ESTO cuando aprieta Espacio, no contra un rincón "de mentira".
+  penaltyFinalLanding = { x: target.x + curveOffsetAt(durS), y: target.y };
 
-  let reAimed = false;
-  let blendFrom = null, blendTo = null, blendStartS = 0;
   const startTime = performance.now();
   penaltyFlightStartTime = startTime;
   let lastT = startTime;
   let trailAccum = 0;
   let spin = 0;
+  penaltyBallIntercepted = false;
 
   function frame(now) {
+    if (penaltyBallIntercepted) { penaltyFlightRAF = null; return; } // el arquero la atajó de reflejo antes de tiempo
+
     const dt = Math.min((now - lastT) / 1000, 0.032);
     lastT = now;
     const elapsedS = (now - startTime) / 1000;
 
-    if (!reAimed && elapsedS >= revealAtS) {
-      reAimed = true;
-      blendFrom = { vx: phys.vx, vy: phys.vy };
-      aimAt(target, Math.max(0.05, durS - elapsedS));
-      blendTo = { vx: phys.vx, vy: phys.vy };
-      phys.vx = blendFrom.vx; phys.vy = blendFrom.vy;
-      blendStartS = elapsedS;
-    }
-
-    if (reAimed) {
-      const bt = Math.min(1, (elapsedS - blendStartS) / PENALTY_REVEAL_BLEND_S);
-      const eased = bt * (2 - bt); // ease-out corto: quiebre real, no un salto
-      phys.vx = blendFrom.vx + (blendTo.vx - blendFrom.vx) * eased;
-      phys.vy = blendFrom.vy + (blendTo.vy - blendFrom.vy) * eased;
-    }
-
-    if (!reAimed) {
-      phys.vx += Math.sin(wobbleSeed + elapsedS * wobbleFreq) * wobbleAmp * dt;
-    }
     phys.vy += PENALTY_GRAVITY * dt;
     phys.x += phys.vx * dt;
     phys.y += phys.vy * dt;
 
-    const dxNow = phys.x - start.x;
-    const dyNow = phys.y - start.y;
-    const speed = Math.hypot(phys.vx, phys.vy);
-    const scale = Math.max(0.55, 1 - (elapsedS / durS) * 0.4);
+    const curveNow = curveOffsetAt(elapsedS);
+    const apparentDx = (phys.x - start.x) + curveNow;
+    const apparentDy = phys.y - start.y;
+    penaltyBallLiveRef = { x: start.x + apparentDx, y: start.y + apparentDy };
+
+    // Profundidad: se va achicando de a poco a medida que "se aleja" -
+    // sin bamboleo compitiendo, ahora se nota como un efecto 3D real.
+    const depthT = Math.min(1, elapsedS / durS);
+    const scale = 1 - depthT * 0.42;
 
     ball.style.transform =
-      `translate(calc(-50% + ${dxNow.toFixed(1)}px), ${dyNow.toFixed(1)}px) scale(${scale.toFixed(2)})`;
+      `translate(calc(-50% + ${apparentDx.toFixed(1)}px), ${apparentDy.toFixed(1)}px) scale(${scale.toFixed(2)})`;
 
+    const speed = Math.hypot(phys.vx, phys.vy);
     spin += speed * dt * 0.6;
     ballCore.style.transform = `rotate(${(spin % 360).toFixed(0)}deg)`;
 
@@ -1608,7 +1751,7 @@ function launchPenaltyBall(zone, power) {
       penaltyFlightRAF = requestAnimationFrame(frame);
     } else {
       penaltyFlightRAF = null;
-      resolvePenaltyShot(zone, power, phys);
+      resolvePenaltyShot(zone, power, { x: penaltyBallLiveRef.x, y: penaltyBallLiveRef.y, vx: phys.vx, vy: phys.vy });
     }
   }
   penaltyFlightRAF = requestAnimationFrame(frame);
@@ -1624,7 +1767,8 @@ function resolvePenaltyShot(kickZone, power, phys) {
   const impactY = phys ? phys.y : 0;
   let scored, flavor;
 
-  const saved = penaltyKeeperZone === kickZone;
+  const saved = penaltyKeeperSaveResult === true;
+  penaltyKeeperTooSlow = !penaltyKeeperDiveUsed; // para el flavor text de abajo, nada más
 
   if (power > 95) {
     document.getElementById("penaltyStatus").textContent = "¡Afuera!";
