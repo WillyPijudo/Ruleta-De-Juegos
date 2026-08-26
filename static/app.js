@@ -1004,10 +1004,9 @@ const PENALTY_SAVE_FLAVORS = [
 const PENALTY_DIVE_ROT = { bl: -18, bc: 0, br: 18, tl: -14, tc: 0, tr: 14 };
 const PENALTY_GRAVITY = 2200; // px/s^2, tuneado a ojo para que el arco se vea bien
 
-// Comba lateral: hacia dónde "abre" el tiro antes de cerrar al palo según
-// el rincón, y tope de comba según la potencia (ver launchPenaltyBall).
-const PENALTY_CURVE_SIDE = { bl: -1, bc: 0, br: 1, tl: -1, tc: 0, tr: 1 };
-const PENALTY_CURVE_MAX_ACCEL = 950; // px/s^2, tope para un tiro bien colocado
+// Comba interactiva: solo se puede combar al palo vecino del MISMO lado
+// (arriba<->abajo), nunca al lado opuesto — un toque, no un tironeo random.
+const PENALTY_CURVE_REDIRECT = { bl: "tl", tl: "bl", bc: "tc", tc: "bc", br: "tr", tr: "br" };
 
 let penaltyState = "idle";
 let penaltyKeyHandler = null;
@@ -1023,6 +1022,9 @@ let penaltyFlightStartTime = 0;
 let currentPower = 0;
 let powerDirection = 1;
 let capturedPower = 0;
+let penaltyCurveZone = null;      // rincón final real (puede cambiar si se toca la comba)
+let penaltyCurveApplied = false;  // si ya se usó el toque de comba en este tiro
+let penaltyFlightDurationMs = 0;  // duración total del vuelo actual (para sincronizar el salto)
 let penaltyReactionCutoffMs = 700;
 let penaltyAimStartTime = 0;
 let penaltyReactTimer = null;
@@ -1155,6 +1157,15 @@ function showPenaltyStamp(text, kind) {
   stamp.classList.add("show");
 }
 
+function flashCurveTouch() {
+  const ball = document.getElementById("penaltyBall");
+  if (!ball) return;
+  ball.classList.remove("curve-touch");
+  void ball.offsetWidth;
+  ball.classList.add("curve-touch");
+  busPlaySound("/static/audio/dash.wav", 0.25);
+}
+
 function launchTrophyBurst() {
   const el = document.getElementById("trophyBurst");
   if (!el) return;
@@ -1271,16 +1282,26 @@ function startPenaltyRound() {
   const doKick = (zone) => {
     capturedPower = currentPower;
     penaltyKickZone = zone;
-    penaltyReactionCutoffMs = penaltyReactionWindow(capturedPower);
+    penaltyCurveZone = zone; // rincón final real: puede cambiar con el toque de comba
+    penaltyCurveApplied = false;
+    // El cutoff de reacción nunca puede superar la duración real del tiro
+    // (si no, quedaba una ventana "de mentira" más larga que el propio vuelo).
+    penaltyReactionCutoffMs = Math.min(
+      penaltyReactionWindow(capturedPower),
+      penaltyShotTiming(capturedPower).duration - 40
+    );
     penaltyState = "kicking";
     clearTimeout(penaltyIdleTimer);
     document.getElementById("penaltyBall").classList.add("ball-waiting");
+    document.getElementById("penaltyStatus").textContent = "¡Tocala de nuevo para combarla al palo vecino!";
 
-    // Pequeño delay de contacto (gesto de pateo) — no es la ventana de
-    // reacción, es solo el tiempo que tarda la pierna en llegar a la pelota.
+    // Ventana de contacto: además del gesto de pateo, ahora sirve como
+    // ventana corta tipo parry para combar el tiro al palo vecino del
+    // mismo lado (ver PENALTY_CURVE_REDIRECT, manejado en penaltyKeyHandler).
     penaltyReactTimer = setTimeout(() => {
       penaltyReactTimer = null;
       penaltyState = "flight";
+      penaltyKickZone = penaltyCurveZone; // ya no se puede combar más: esto es lo que se tira
       document.getElementById("penaltyBall").classList.remove("ball-waiting");
       busPlaySound("/static/audio/kickball.wav", 0.6);
 
@@ -1292,9 +1313,9 @@ function startPenaltyRound() {
         document.getElementById("penaltyStatus").textContent = "¡Va la pelota!";
       }
 
-      launchPenaltyBall(zone, capturedPower);
+      launchPenaltyBall(penaltyKickZone, capturedPower);
       watchKeeperReaction();
-    }, 130);
+    }, 260);
   };
 
   penaltyKeyHandler = (e) => {
@@ -1305,6 +1326,13 @@ function startPenaltyRound() {
 
     if (penaltyState === "aiming") {
       doKick(zone);
+    } else if (penaltyState === "kicking" && !penaltyCurveApplied) {
+      // Ventana corta tipo parry: solo al palo vecino del MISMO lado.
+      if (zone === PENALTY_CURVE_REDIRECT[penaltyKickZone]) {
+        penaltyCurveApplied = true;
+        penaltyCurveZone = zone;
+        flashCurveTouch();
+      }
     } else if (penaltyState === "flight" && !penaltyKeeperZone) {
       const elapsed = performance.now() - penaltyFlightStartTime;
       if (elapsed > penaltyReactionCutoffMs) {
@@ -1312,8 +1340,9 @@ function startPenaltyRound() {
         return; // se durmió, ya no llega
       }
       penaltyKeeperZone = zone;
-      const lateFrac = elapsed / penaltyReactionCutoffMs; // 0 (reflejo) -> 1 (al límite)
-      diveKeeper(zone, lateFrac > 0.72);
+      penaltyKeeperLateFrac = elapsed / penaltyReactionCutoffMs; // 0 (reflejo) -> 1 (al límite)
+      const remainingMs = Math.max(140, penaltyFlightDurationMs - elapsed);
+      diveKeeper(zone, penaltyKeeperLateFrac > 0.72, remainingMs);
     }
   };
   window.addEventListener("keydown", penaltyKeyHandler);
