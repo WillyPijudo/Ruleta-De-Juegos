@@ -1181,6 +1181,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 .goal.net-ripple .net {
   transform: scaleY(1.06) translateY(3px);
   animation: net-shake 0.4s ease;
+  z-index: 5; /* FIX profundidad: la malla ahora tapa a la pelota mientras se hunde adentro */
 }
 @keyframes net-shake {
   0%, 100% { filter: brightness(1); }
