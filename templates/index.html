@@ -278,27 +278,41 @@
 
       <p class="penalty-turn-banner" id="penaltyTurnBanner"></p>
 
-      <p class="penalty-status" id="penaltyStatus">Pateador, elegí tu rincón…</p>
-      <div class="penalty-power-wrap">
-        <div class="penalty-power-bg">
-          <div id="penaltyPowerBar" class="penalty-power-fill"></div>
-          <div class="power-zone-perfect"></div>
-          <div class="power-zone-over"></div>
-        </div>
-      </div>
-      <div class="penalty-pitch">
-        <div class="goal" id="penaltyGoal">
-          <div class="net"></div>
-          <div class="keeper" id="penaltyKeeper">
-            <div class="keeper-body"></div>
-            <div class="glove glove-left">🧤</div>
-            <div class="glove glove-right">🧤</div>
-          </div>
-        </div>
-        <div class="ball" id="penaltyBall">⚽</div>
-        <div class="penalty-stamp" id="penaltyStamp"></div>
-        <div class="trophy-burst hidden" id="trophyBurst">🏆</div>
-      </div>
+<p class="penalty-status" id="penaltyStatus">Pateador, elegí tu rincón…</p>
+
+<div class="penalty-power-wrap">
+  <svg class="power-gauge" viewBox="0 0 200 110" aria-hidden="true">
+    <path class="gauge-track" d="M10,100 A90,90 0 0 1 190,100"></path>
+    <path class="gauge-zone-safe" d="M10,100 A90,90 0 0 1 84.4,11.4"></path>
+    <path class="gauge-zone-strong" d="M84.4,11.4 A90,90 0 0 1 168.9,42.1"></path>
+    <path class="gauge-zone-risk" d="M168.9,42.1 A90,90 0 0 1 190,100"></path>
+    <line id="penaltyPowerNeedle" class="gauge-needle" x1="100" y1="100" x2="100" y2="22"></line>
+    <circle class="gauge-hub" cx="100" cy="100" r="7"></circle>
+  </svg>
+  <div class="gauge-label">POTENCIA</div>
+</div>
+
+<div class="penalty-pitch">
+  <div class="reaction-timer" id="penaltyReactionTimer">
+    <div class="reaction-timer-fill" id="penaltyReactionFill"></div>
+  </div>
+  <div class="goal" id="penaltyGoal">
+    <div class="net"></div>
+    <div class="keeper-shadow" id="penaltyKeeperShadow"></div>
+    <div class="keeper" id="penaltyKeeper">
+      <div class="keeper-leg keeper-leg-l"></div>
+      <div class="keeper-leg keeper-leg-r"></div>
+      <div class="keeper-body"></div>
+      <div class="glove glove-left"></div>
+      <div class="glove glove-right"></div>
+    </div>
+  </div>
+  <div class="ball" id="penaltyBall">
+    <div class="ball-core"></div>
+  </div>
+  <div class="penalty-stamp" id="penaltyStamp"></div>
+  <div class="trophy-burst hidden" id="trophyBurst">🏆</div>
+</div>
       <p class="penalty-result" id="penaltyResult"></p>
       <div class="modal-actions">
         <button id="penaltyRematchBtn" class="btn btn-primary btn-small hidden" type="button">🔁 Otra vez</button>
