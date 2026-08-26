@@ -5230,7 +5230,7 @@ function gmbSetupTouchZone(zoneId, joyId, dashBtnId, kickBtnId, side) {
 
 
 
-/* ===================== Cabezazos (Head Soccer) — FASE 1 ===================== */
+/* ===================== Cabezones (Head Soccer) ===================== */
 
 const HS_CANVAS_W = 900;
 const HS_CANVAS_H = 420;
@@ -5246,7 +5246,7 @@ const HS_JUMP_VY = -680;
 const HS_GOAL_W = 44;
 const HS_GOAL_H = 150;
 const HS_WALL_RESTITUTION = 0.7;
-const HS_GROUND_RESTITUTION = 0.58;
+const HS_GROUND_RESTITUTION = 0.6;
 const HS_CEIL_RESTITUTION = 0.6;
 const HS_AIR_DRAG = 0.999;
 const HS_BOOT_W = 42;
@@ -5255,6 +5255,7 @@ const HS_KICK_POWER = 760;
 const HS_HEAD_POWER = 620;
 const HS_GOALS_TO_WIN = 5;
 const HS_TIME_SECONDS = 60;
+const HS_MAX_BALL_SPEED = 1450; // FIX crash: tope de velocidad, nunca deja que explote a Infinity/NaN
 
 let hsState = null;
 let hsRAF = null;
@@ -5266,6 +5267,8 @@ let hsSelectedMode = "goals";
 let hsHeadImages = {};
 let hsCanvas = null;
 let hsCtx = null;
+let hsShakeState = { time: 0, mag: 0 };
+let hsPickState = { step: 1, leftHead: null };
 
 function hsSetTimeout(fn, ms) {
   const id = setTimeout(() => {
@@ -5277,7 +5280,7 @@ function hsSetTimeout(fn, ms) {
 }
 
 function hsLoadHeadImages() {
-  ["head1", "head2"].forEach((key) => {
+  ["head1", "head2", "head3", "head4"].forEach((key) => {
     if (hsHeadImages[key]) return;
     const img = new Image();
     img.src = `/static/img/heads/${key}.png`;
@@ -5320,12 +5323,36 @@ function hsMakePlayer(side, headKey, name) {
     facing: side === "left" ? 1 : -1,
     score: 0,
     kickFlash: 0,
+    headFlash: 0,
   };
 }
 
-function hsPickHead(headKey) {
-  const otherKey = headKey === "head1" ? "head2" : "head1";
-  hsStartMatch(headKey, otherKey);
+/* --------- Selector de cabezón: 2 pasos, uno para cada jugador --------- */
+function hsOpenPickScreen() {
+  hsPickState = { step: 1, leftHead: null };
+  hsRenderPickScreen();
+  hsShowScreen("headPick");
+}
+
+function hsRenderPickScreen() {
+  const { championName, challengerName } = hsNames();
+  document.getElementById("headPickerName").textContent =
+    hsPickState.step === 1 ? championName : challengerName;
+  document.querySelectorAll("#headPick .fight-pick-card").forEach((card) => {
+    const taken = hsPickState.step === 2 && card.dataset.head === hsPickState.leftHead;
+    card.classList.toggle("hs-head-taken", taken);
+    card.disabled = taken;
+  });
+}
+
+function hsHandlePickClick(headKey) {
+  if (hsPickState.step === 1) {
+    hsPickState.leftHead = headKey;
+    hsPickState.step = 2;
+    hsRenderPickScreen();
+    return;
+  }
+  hsStartMatch(hsPickState.leftHead, headKey);
 }
 
 function hsFormatTime(s) {
@@ -5337,6 +5364,7 @@ function hsFormatTime(s) {
 function hsStartMatch(leftHead, rightHead) {
   hsTeardown();
   const { championName, challengerName } = hsNames();
+  hsShakeState = { time: 0, mag: 0 };
 
   hsState = {
     mode: hsSelectedMode,
@@ -5415,6 +5443,8 @@ function hsLoop(now) {
   const dt = Math.min((now - hsState.lastTime) / 1000, 0.032);
   hsState.lastTime = now;
 
+  if (hsShakeState.time > 0) hsShakeState.time = Math.max(0, hsShakeState.time - dt);
+
   hsUpdatePlayer(hsState.left, dt, { left: "a", right: "d", jump: "w" });
   hsUpdatePlayer(hsState.right, dt, { left: "arrowleft", right: "arrowright", jump: "arrowup" });
   hsUpdateBall(dt);
@@ -5448,6 +5478,20 @@ function hsUpdatePlayer(p, dt, keys) {
     p.onGround = true;
   }
   if (p.kickFlash > 0) p.kickFlash -= 1;
+  if (p.headFlash > 0) p.headFlash -= 1;
+}
+
+function hsClampBallVelocity(b) {
+  if (!Number.isFinite(b.x) || !Number.isFinite(b.y) || !Number.isFinite(b.vx) || !Number.isFinite(b.vy)) {
+    // FIX crash: si algo dio un valor inválido (NaN/Infinity), reseteamos la pelota al centro en vez de romper el canvas
+    b.x = HS_CANVAS_W / 2; b.y = HS_CANVAS_H / 2; b.vx = 0; b.vy = 0;
+    return;
+  }
+  const speed = Math.hypot(b.vx, b.vy);
+  if (speed > HS_MAX_BALL_SPEED) {
+    const k = HS_MAX_BALL_SPEED / speed;
+    b.vx *= k; b.vy *= k;
+  }
 }
 
 function hsUpdateBall(dt) {
@@ -5474,6 +5518,7 @@ function hsUpdateBall(dt) {
       b.vx *= 0.85;
     } else {
       b.vy = 0;
+      b.vx *= 0.98; // rozamiento leve rodando por el piso
     }
   }
 
@@ -5485,6 +5530,8 @@ function hsUpdateBall(dt) {
     b.x = HS_CANVAS_W - HS_GOAL_W - HS_BALL_R;
     b.vx = -Math.abs(b.vx) * HS_WALL_RESTITUTION;
   }
+
+  hsClampBallVelocity(b);
 }
 
 function hsResolveCollisions(now) {
@@ -5503,11 +5550,13 @@ function hsResolveCollisions(now) {
       b.x = headCX + nx * minDist;
       b.y = headCY + ny * minDist;
       const speedIn = Math.hypot(b.vx, b.vy);
-      const power = Math.max(HS_HEAD_POWER, speedIn * 1.1);
+      const power = Math.max(HS_HEAD_POWER, Math.min(speedIn * 1.1, HS_HEAD_POWER * 1.6)); // FIX: tope, ya no escala sin límite
       b.vx = nx * power + p.vx * 0.5;
       b.vy = ny * power - 60;
+      hsClampBallVelocity(b);
       if (!p.headCoolUntil || now > p.headCoolUntil) {
         p.headCoolUntil = now + 180;
+        p.headFlash = 10;
         playHonk();
       }
     }
@@ -5525,6 +5574,7 @@ function hsResolveCollisions(now) {
       b.y = closestY + ny * HS_BALL_R;
       b.vx = p.facing * HS_KICK_POWER + p.vx * 0.4;
       b.vy = -260 + ny * 120;
+      hsClampBallVelocity(b);
       p.kickFlash = 8;
       if (!p.bootCoolUntil || now > p.bootCoolUntil) {
         p.bootCoolUntil = now + 180;
@@ -5548,6 +5598,10 @@ function hsCheckGoal() {
   }
 }
 
+function hsTriggerShake(mag) {
+  hsShakeState = { time: 0.28, mag };
+}
+
 function hsScoreGoal(scorerSide) {
   const scorer = hsState[scorerSide];
   scorer.score += 1;
@@ -5560,6 +5614,7 @@ function hsScoreGoal(scorerSide) {
   flash.classList.remove("pop");
   void flash.offsetWidth;
   flash.classList.add("pop");
+  hsTriggerShake(14);
   playFanfare();
 
   if (hsState.suddenDeath) {
@@ -5590,12 +5645,89 @@ function hsResetPositions() {
   hsState.right.vx = 0; hsState.right.vy = 0; hsState.right.onGround = true;
 }
 
-function hsDrawHeadImage(key, cx, cy) {
+function hsDrawHeadImage(key, cx, cy, facing) {
   const img = hsHeadImages[key];
   if (!img || !img.complete || !img.naturalWidth) return false;
   const size = HS_HEAD_R * 2.3;
-  hsCtx.drawImage(img, cx - size / 2, cy - size / 2, size, size);
+  hsCtx.save();
+  hsCtx.translate(cx, cy);
+  if (facing < 0) hsCtx.scale(-1, 1); // el sprite mira a la derecha por defecto; si mira a la izquierda, lo espejamos
+  hsCtx.drawImage(img, -size / 2, -size / 2, size, size);
+  hsCtx.restore();
   return true;
+}
+
+function hsDrawField() {
+  const ctx = hsCtx;
+  ctx.clearRect(0, 0, HS_CANVAS_W, HS_CANVAS_H);
+
+  // Cielo / fondo de estadio
+  const sky = ctx.createLinearGradient(0, 0, 0, HS_PITCH_Y);
+  sky.addColorStop(0, "#0d0b18");
+  sky.addColorStop(0.55, "#1c1730");
+  sky.addColorStop(1, "#2a2438");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, HS_CANVAS_W, HS_PITCH_Y);
+
+  // Luces de estadio (glow difuso arriba)
+  [HS_CANVAS_W * 0.18, HS_CANVAS_W * 0.82].forEach((lx) => {
+    const glow = ctx.createRadialGradient(lx, 20, 4, lx, 20, 140);
+    glow.addColorStop(0, "rgba(255,244,214,0.22)");
+    glow.addColorStop(1, "rgba(255,244,214,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(lx - 140, -50, 280, 220);
+  });
+
+  // Silueta de tribuna al fondo
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.fillRect(0, HS_PITCH_Y - 42, HS_CANVAS_W, 42);
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  for (let i = 0; i < 34; i++) {
+    ctx.fillRect(i * (HS_CANVAS_W / 34), HS_PITCH_Y - 42 + (i % 2 === 0 ? 5 : 0), HS_CANVAS_W / 34 - 2, 10);
+  }
+
+  // Pasto a rayas
+  const stripeW = 56;
+  let stripeI = 0;
+  for (let x = 0; x < HS_CANVAS_W; x += stripeW) {
+    ctx.fillStyle = stripeI % 2 === 0 ? "#2d6a38" : "#296032";
+    ctx.fillRect(x, HS_PITCH_Y, stripeW, HS_CANVAS_H - HS_PITCH_Y);
+    stripeI++;
+  }
+  const grassShade = ctx.createLinearGradient(0, HS_PITCH_Y, 0, HS_CANVAS_H);
+  grassShade.addColorStop(0, "rgba(0,0,0,0)");
+  grassShade.addColorStop(1, "rgba(0,0,0,0.35)");
+  ctx.fillStyle = grassShade;
+  ctx.fillRect(0, HS_PITCH_Y, HS_CANVAS_W, HS_CANVAS_H - HS_PITCH_Y);
+
+  // Línea de mitad de cancha + círculo central
+  ctx.strokeStyle = "rgba(255,255,255,0.4)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(HS_CANVAS_W / 2, HS_PITCH_Y);
+  ctx.lineTo(HS_CANVAS_W / 2, HS_CANVAS_H);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(HS_CANVAS_W / 2, HS_CANVAS_H - 4, 50, Math.PI, 0);
+  ctx.stroke();
+
+  // Arcos con red de verdad (crosshatch), no un rectángulo traslúcido
+  [0, HS_CANVAS_W - HS_GOAL_W].forEach((gx, i) => {
+    const isLeft = i === 0;
+    ctx.fillStyle = "rgba(255,255,255,0.05)";
+    ctx.fillRect(gx, HS_PITCH_Y - HS_GOAL_H, HS_GOAL_W, HS_GOAL_H);
+    ctx.strokeStyle = "rgba(255,255,255,0.26)";
+    ctx.lineWidth = 1;
+    for (let ny = HS_PITCH_Y - HS_GOAL_H + 8; ny < HS_PITCH_Y; ny += 10) {
+      ctx.beginPath(); ctx.moveTo(gx + 2, ny); ctx.lineTo(gx + HS_GOAL_W - 2, ny); ctx.stroke();
+    }
+    for (let nx = gx + 6; nx < gx + HS_GOAL_W; nx += 10) {
+      ctx.beginPath(); ctx.moveTo(nx, HS_PITCH_Y - HS_GOAL_H + 2); ctx.lineTo(nx, HS_PITCH_Y - 2); ctx.stroke();
+    }
+    ctx.strokeStyle = "#f0ece2";
+    ctx.lineWidth = 5;
+    ctx.strokeRect(gx + (isLeft ? 2 : 0), HS_PITCH_Y - HS_GOAL_H, HS_GOAL_W - 2, HS_GOAL_H);
+  });
 }
 
 function hsDrawPlayer(p) {
@@ -5603,39 +5735,146 @@ function hsDrawPlayer(p) {
   const headCX = p.x;
   const headCY = p.y - HS_HEAD_OFFSET;
   const color = p.side === "left" ? "#f5cd76" : "#2f8fb0";
+  const dark = p.side === "left" ? "#b98f3f" : "#1c5f77";
   const kicking = p.kickFlash > 0;
+  const jumpT = Math.max(0, Math.min(1, (HS_PITCH_Y - p.y) / 140));
 
-  const bootX = p.x + p.facing * (HS_BOOT_W * (kicking ? 0.55 : 0.35));
+  // Sombra en el piso, se achica con la altura del salto (sensación de profundidad)
+  ctx.save();
+  ctx.globalAlpha = 0.35 - jumpT * 0.18;
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.ellipse(p.x, HS_PITCH_Y + 2, 26 - jumpT * 8, 7 - jumpT * 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Torso/pierna: trapecio angosto en vez de una línea sola
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.ellipse(bootX, HS_PITCH_Y - HS_BOOT_H * 0.4, HS_BOOT_W / 2, HS_BOOT_H / 2, 0, 0, Math.PI * 2);
+  ctx.moveTo(p.x - 9, HS_PITCH_Y - 4);
+  ctx.lineTo(p.x + 9, HS_PITCH_Y - 4);
+  ctx.lineTo(headCX + 6, headCY + HS_HEAD_R * 0.55);
+  ctx.lineTo(headCX - 6, headCY + HS_HEAD_R * 0.55);
+  ctx.closePath();
   ctx.fill();
-
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 8;
-  ctx.beginPath();
-  ctx.moveTo(p.x, HS_PITCH_Y - 6);
-  ctx.lineTo(headCX, headCY + HS_HEAD_R * 0.6);
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = 2;
   ctx.stroke();
 
-  const drawn = hsDrawHeadImage(p.headKey, headCX, headCY);
+  // Franja de media
+  ctx.fillStyle = dark;
+  ctx.fillRect(p.x - 8, HS_PITCH_Y - 16, 16, 8);
+
+  // Botín con forma real (no un óvalo genérico)
+  const bootX = p.x + p.facing * (HS_BOOT_W * (kicking ? 0.55 : 0.35));
+  const bootY = HS_PITCH_Y - HS_BOOT_H * 0.4;
+  ctx.save();
+  ctx.translate(bootX, bootY);
+  const f = p.facing;
+  ctx.fillStyle = "#efe9dd";
+  ctx.beginPath();
+  ctx.moveTo(-HS_BOOT_W * 0.42, -3);
+  ctx.quadraticCurveTo(-HS_BOOT_W * 0.5, 6, -HS_BOOT_W * 0.3, 8);
+  ctx.lineTo(HS_BOOT_W * (f === 1 ? 0.5 : 0.32), 8);
+  ctx.quadraticCurveTo(HS_BOOT_W * (f === 1 ? 0.58 : 0.4), 2, HS_BOOT_W * (f === 1 ? 0.4 : 0.22), -6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "#2a2530";
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  ctx.fillStyle = dark;
+  ctx.fillRect(-HS_BOOT_W * 0.42, -3, HS_BOOT_W * 0.22, 5);
+  ctx.restore();
+
+  if (kicking) {
+    const burstAlpha = p.kickFlash / 8;
+    ctx.save();
+    ctx.globalAlpha = burstAlpha * 0.7;
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(bootX + p.facing * 10, bootY, 10 + (1 - burstAlpha) * 14, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Cuello
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = 10;
+  ctx.beginPath();
+  ctx.moveTo(headCX, headCY + HS_HEAD_R * 0.65);
+  ctx.lineTo(headCX, headCY + HS_HEAD_R * 0.3);
+  ctx.stroke();
+
+  // Sombra bajo la cabeza (le da volumen)
+  ctx.save();
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.ellipse(headCX, headCY + HS_HEAD_R * 0.75, HS_HEAD_R * 0.6, HS_HEAD_R * 0.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  const drawn = hsDrawHeadImage(p.headKey, headCX, headCY, p.facing);
   if (!drawn) {
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(headCX, headCY, HS_HEAD_R, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  if (p.headFlash > 0) {
+    const a = p.headFlash / 10;
+    ctx.save();
+    ctx.globalAlpha = a * 0.6;
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(headCX, headCY, HS_HEAD_R + (1 - a) * 16, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
 function hsDrawBall() {
   const ctx = hsCtx;
   const b = hsState.ball;
+
+  const heightT = Math.max(0, Math.min(1, (HS_PITCH_Y - b.y) / 220));
+  ctx.save();
+  ctx.globalAlpha = 0.3 - heightT * 0.18;
+  ctx.fillStyle = "#000";
+  ctx.beginPath();
+  ctx.ellipse(b.x, HS_PITCH_Y + 2, HS_BALL_R * (1 - heightT * 0.35), HS_BALL_R * 0.36 * (1 - heightT * 0.35), 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  const speed = Math.hypot(b.vx, b.vy);
+  if (speed > 220) {
+    const trailLen = Math.min(4, Math.floor(speed / 220));
+    for (let i = 1; i <= trailLen; i++) {
+      ctx.save();
+      ctx.globalAlpha = 0.14 * (1 - i / (trailLen + 1));
+      ctx.beginPath();
+      ctx.arc(b.x - (b.vx / speed) * i * 9, b.y - (b.vy / speed) * i * 9, HS_BALL_R * 0.85, 0, Math.PI * 2);
+      ctx.fillStyle = "#f2efe6";
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
   ctx.save();
   ctx.translate(b.x, b.y);
   ctx.rotate((b.spin || 0) % (Math.PI * 2));
+  const ballShade = ctx.createRadialGradient(-HS_BALL_R * 0.3, -HS_BALL_R * 0.3, 1, 0, 0, HS_BALL_R);
+  ballShade.addColorStop(0, "#ffffff");
+  ballShade.addColorStop(1, "#d8d2c3");
   ctx.beginPath();
   ctx.arc(0, 0, HS_BALL_R, 0, Math.PI * 2);
-  ctx.fillStyle = "#f2efe6";
+  ctx.fillStyle = ballShade;
   ctx.fill();
   ctx.strokeStyle = "#2b2530";
   ctx.lineWidth = 1.4;
@@ -5647,45 +5886,23 @@ function hsDrawBall() {
     ctx.arc(Math.cos(a) * HS_BALL_R * 0.55, Math.sin(a) * HS_BALL_R * 0.55, HS_BALL_R * 0.22, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.beginPath();
+  ctx.arc(0, 0, HS_BALL_R * 0.22, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 
 function hsDraw() {
   const ctx = hsCtx;
-  ctx.clearRect(0, 0, HS_CANVAS_W, HS_CANVAS_H);
-
-  const sky = ctx.createLinearGradient(0, 0, 0, HS_PITCH_Y);
-  sky.addColorStop(0, "#141022");
-  sky.addColorStop(1, "#2a2438");
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, HS_CANVAS_W, HS_PITCH_Y);
-
-  const grass = ctx.createLinearGradient(0, HS_PITCH_Y, 0, HS_CANVAS_H);
-  grass.addColorStop(0, "#2f6e3a");
-  grass.addColorStop(1, "#1c3a24");
-  ctx.fillStyle = grass;
-  ctx.fillRect(0, HS_PITCH_Y, HS_CANVAS_W, HS_CANVAS_H - HS_PITCH_Y);
-
-  ctx.strokeStyle = "rgba(255,255,255,0.35)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(HS_CANVAS_W / 2, HS_PITCH_Y);
-  ctx.lineTo(HS_CANVAS_W / 2, HS_CANVAS_H);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(HS_CANVAS_W / 2, HS_CANVAS_H - 8, 46, Math.PI, 0);
-  ctx.stroke();
-
-  [0, HS_CANVAS_W - HS_GOAL_W].forEach((gx) => {
-    ctx.fillStyle = "rgba(255,255,255,0.12)";
-    ctx.fillRect(gx, HS_PITCH_Y - HS_GOAL_H, HS_GOAL_W, HS_GOAL_H);
-    ctx.strokeStyle = "#f0ece2";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(gx, HS_PITCH_Y - HS_GOAL_H, HS_GOAL_W, HS_GOAL_H);
-  });
-
+  ctx.save();
+  if (hsShakeState.time > 0) {
+    const s = hsShakeState.mag * (hsShakeState.time / 0.28);
+    ctx.translate((Math.random() - 0.5) * s, (Math.random() - 0.5) * s);
+  }
+  hsDrawField();
   [hsState.left, hsState.right].forEach((p) => hsDrawPlayer(p));
   hsDrawBall();
+  ctx.restore();
 }
 
 function hsEndMatch(winnerSide, reason) {
@@ -5712,6 +5929,7 @@ function hsTeardown() {
   if (hsState && hsState.timerInterval) clearInterval(hsState.timerInterval);
   hsDetachKeys();
   hsState = null;
+  hsShakeState = { time: 0, mag: 0 };
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -5727,13 +5945,15 @@ document.addEventListener("DOMContentLoaded", () => {
   document.querySelectorAll("#headModeSelect .duel-mode-card").forEach((card) => {
     card.addEventListener("click", () => {
       hsSelectedMode = card.dataset.hsMode;
-      document.getElementById("headPickerName").textContent = hsNames().championName;
-      hsShowScreen("headPick");
+      hsOpenPickScreen();
     });
   });
   document.getElementById("headPickBackBtn").addEventListener("click", () => hsShowScreen("headModeSelect"));
   document.querySelectorAll("#headPick .fight-pick-card").forEach((card) => {
-    card.addEventListener("click", () => hsPickHead(card.dataset.head));
+    card.addEventListener("click", () => {
+      if (card.disabled) return;
+      hsHandlePickClick(card.dataset.head);
+    });
   });
   document.getElementById("headRematchBtn").addEventListener("click", () => {
     if (hsState) hsStartMatch(hsState.left.headKey, hsState.right.headKey);
@@ -5741,6 +5961,6 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("headBackToPickBtn").addEventListener("click", () => {
     hsTeardown();
     document.getElementById("headResultOverlay").classList.add("hidden");
-    hsShowScreen("headPick");
+    hsOpenPickScreen();
   });
 });
