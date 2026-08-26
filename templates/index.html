@@ -6,7 +6,7 @@
 <title>Ruleta de Juegos</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Luckiest+Guy&family=Permanent+Marker&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Luckiest+Guy&family=Permanent+Marker&family=Fredoka:wght@500;600;700&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -800,6 +800,31 @@
   </div>
 </div>
 
+<!-- Challenger name modal (reemplaza al prompt() nativo) -->
+<div id="challengerNameModal" class="modal hidden">
+  <div class="modal-card challenger-card">
+    <span class="challenger-decor challenger-decor-1">🎉</span>
+    <span class="challenger-decor challenger-decor-2">🔥</span>
+    <span class="challenger-decor challenger-decor-3">⚡</span>
+    <p class="modal-eyebrow">Nuevo desafío</p>
+    <h3 class="rps-title">¿Quién se anima a retar a <span id="challengerChampionName">-</span>?</h3>
+
+    <div class="challenger-input-wrap">
+      <input id="challengerNameInput" class="challenger-input" type="text" maxlength="18"
+             placeholder="Escribí tu nombre..." autocomplete="off" />
+    </div>
+
+    <p class="challenger-preview" id="challengerPreview">🙋 Retador</p>
+
+    <div class="modal-actions">
+      <button id="challengerConfirmBtn" class="btn btn-duel btn-small" type="button">¡Acepto el desafío! 🔥</button>
+      <button id="challengerCancelBtn" class="btn btn-ghost btn-small" type="button">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+
+  
 <!-- Share modal -->
 <div id="shareModal" class="modal hidden">
   <div class="modal-card">
