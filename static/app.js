@@ -998,10 +998,10 @@ const PENALTY_SAVE_FLAVORS = [
   "¡Leyó el tiro perfecto! Atajada de figura.",
 ];
 
-const PENALTY_DIVE_VECTORS = {
-  bl: { x: -62, y: 6,   rot: -18 }, bc: { x: 0, y: 4,   rot: 0 },  br: { x: 62, y: 6,   rot: 18 },
-  tl: { x: -58, y: -38, rot: -14 }, tc: { x: 0, y: -42, rot: 0 },  tr: { x: 58, y: -38, rot: 14 },
-};
+// Ya no son vectores fijos: el salto se calcula en vivo en diveKeeper()
+// contra el punto real del rincón en el arco, así el arquero siempre
+// llega exactamente adonde va la pelota. Solo queda la rotación.
+const PENALTY_DIVE_ROT = { bl: -18, bc: 0, br: 18, tl: -14, tc: 0, tr: 14 };
 const PENALTY_GRAVITY = 2200; // px/s^2, tuneado a ojo para que el arco se vea bien
 
 // Comba lateral: hacia dónde "abre" el tiro antes de cerrar al palo según
@@ -1099,13 +1099,35 @@ function spawnImpactBurst(x, y, color) {
 }
 
 
-function diveKeeper(zone, stretch) {
+function diveKeeper(zone, stretch, travelMs) {
   const keeper = document.getElementById("penaltyKeeper");
   const shadow = document.getElementById("penaltyKeeperShadow");
-  const v = PENALTY_DIVE_VECTORS[zone];
-  keeper.style.setProperty("--dive-x", `${v.x}px`);
-  keeper.style.setProperty("--dive-y", `${v.y}px`);
-  keeper.style.setProperty("--dive-rot", `${v.rot}deg`);
+  const goal = document.getElementById("penaltyGoal");
+
+  // Colisión real: el vector de salto se calcula contra el punto real del
+  // rincón en el arco (mismo PENALTY_ZONE_POS que usa la pelota), no un
+  // número mágico — así el arquero SIEMPRE llega físicamente al lugar
+  // donde termina la pelota cuando el rincón coincide.
+  const goalRect = goal.getBoundingClientRect();
+  const keeperRect = keeper.getBoundingClientRect();
+  const fromX = keeperRect.left + keeperRect.width / 2;
+  const fromY = keeperRect.top + keeperRect.height / 2;
+  const pos = PENALTY_ZONE_POS[zone];
+  const toX = goalRect.left + goalRect.width * pos.x;
+  const toY = goalRect.top + goalRect.height * pos.y;
+
+  keeper.style.setProperty("--dive-x", `${(toX - fromX).toFixed(1)}px`);
+  keeper.style.setProperty("--dive-y", `${(toY - fromY).toFixed(1)}px`);
+  keeper.style.setProperty("--dive-rot", `${PENALTY_DIVE_ROT[zone]}deg`);
+
+  // Sincroniza la duración del salto con lo que le queda de vuelo a la
+  // pelota: el arquero llega a la extensión completa justo cuando se
+  // resuelve el tiro, ni antes ni después — así una atajada "in extremis"
+  // se ve apurada de verdad, y una reacción rápida se ve un salto pleno.
+  const dur = travelMs ? `${Math.round(travelMs)}ms` : "";
+  keeper.style.animationDuration = dur;
+  shadow.style.animationDuration = dur;
+
   keeper.classList.remove("keeper-urgent", "keeper-tic");
   keeper.classList.add("diving", stretch ? "diving-stretch" : "diving-clean");
   shadow.classList.add("diving");
