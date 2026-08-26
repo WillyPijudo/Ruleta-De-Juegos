@@ -1194,93 +1194,167 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   width: 46px;
   height: 64px;
   transform: translate(-50%, 0);
-  transition: transform 0.32s cubic-bezier(0.22, 1.1, 0.4, 1);
+  --dive-x: 0px; --dive-y: 0px; --dive-rot: 0deg;
   z-index: 3;
 }
-.keeper-body {
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  transform: translateX(-50%);
-  width: 26px;
-  height: 44px;
-  border-radius: 10px 10px 6px 6px;
-  background: linear-gradient(180deg, var(--pink), #8a1c46);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.45);
-}
-.keeper-body::before {
-  /* head */
+.keeper::after {
+  /* aura de urgencia: elemento propio, jamás toca el transform del arquero */
   content: "";
   position: absolute;
-  left: 50%;
-  top: -14px;
-  transform: translateX(-50%);
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #e8b98a;
+  inset: -6px;
+  border-radius: 14px;
+  opacity: 0;
+  pointer-events: none;
 }
+.keeper.keeper-urgent::after {
+  opacity: 1;
+  animation: keeper-urgent-pulse 0.4s ease-in-out infinite;
+}
+@keyframes keeper-urgent-pulse {
+  0%, 100% { box-shadow: 0 0 10px 2px var(--danger); filter: brightness(1); }
+  50%      { box-shadow: 0 0 18px 6px var(--danger); filter: brightness(1.18); }
+}
+
+/* Tic de "vivo pero no repetitivo": un solo gesto suelto, no un loop */
+.keeper.keeper-tic { animation: keeper-tic 0.4s ease-out; }
+@keyframes keeper-tic {
+  0%   { transform: translate(-50%, 0) rotate(0deg); }
+  35%  { transform: translate(calc(-50% + 3px), -2px) rotate(1.5deg); }
+  100% { transform: translate(-50%, 0) rotate(0deg); }
+}
+
+/* Salto real en 3 tiempos: (1) micro-flexión de prep, (2) impulso con
+   overshoot, (3) asentamiento — todo en una sola animación parametrizada
+   por --dive-x/y/rot, así nunca compite por "transform" con otra clase */
+.keeper.diving {
+  animation: keeper-dive-sequence 0.6s cubic-bezier(.28,.68,.32,1) forwards;
+}
+.keeper.diving-stretch { animation-duration: 0.48s; } /* la estirada es más brusca */
+@keyframes keeper-dive-sequence {
+  0%   { transform: translate(-50%, 0) rotate(0deg) scale(1, 1); }
+  16%  { transform: translate(-50%, 4px) rotate(0deg) scale(1.1, 0.88); }        /* prep: flexiona */
+  55%  { transform: translate(calc(-50% + var(--dive-x) * 0.94), calc(var(--dive-y) * 0.94)) rotate(var(--dive-rot)) scale(0.95, 1.05); } /* impulso */
+  78%  { transform: translate(calc(-50% + var(--dive-x) * 1.08), calc(var(--dive-y) * 1.08)) rotate(calc(var(--dive-rot) * 1.1)) scale(1.04, 0.96); } /* overshoot */
+  100% { transform: translate(calc(-50% + var(--dive-x)), var(--dive-y)) rotate(var(--dive-rot)) scale(1, 1); } /* asienta */
+}
+
+.keeper-body {
+  position: absolute;
+  left: 50%; bottom: 14px;
+  transform: translateX(-50%);
+  width: 26px; height: 30px;
+  border-radius: 9px 9px 4px 4px;
+  background: linear-gradient(180deg, var(--pink), #8a1c46);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.45), inset 0 -6px 0 rgba(0,0,0,0.18);
+}
+.keeper-body::before {
+  /* cabeza, separada por sombra propia */
+  content: "";
+  position: absolute;
+  left: 50%; top: -16px;
+  transform: translateX(-50%);
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f2c99a, #c98f5c 80%);
+  box-shadow: 0 2px 3px rgba(0,0,0,0.4);
+}
+.keeper-leg {
+  position: absolute;
+  bottom: 0; width: 8px; height: 16px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #d8d3c8, #a8a196);
+  box-shadow: 0 2px 3px rgba(0,0,0,0.4);
+}
+.keeper-leg-l { left: 12px; }
+.keeper-leg-r { right: 12px; }
+
 .glove {
   position: absolute;
-  top: 6px;
-  font-size: 18px;
-  filter: drop-shadow(0 3px 4px rgba(0,0,0,0.5));
-  transition: transform 0.32s cubic-bezier(0.22, 1.1, 0.4, 1);
+  top: 12px;
+  width: 14px; height: 16px;
+  border-radius: 6px 6px 8px 8px;
+  background: linear-gradient(180deg, #fdfdfd, #d8d3c8);
+  border: 2px solid #2b2530;
+  box-shadow: 0 3px 4px rgba(0,0,0,0.5);
+  transition: transform 0.2s ease;
 }
-.glove-left { left: -6px; transform: rotate(-10deg); }
-.glove-right { right: -6px; transform: rotate(10deg) scaleX(-1); }
-
-/* keeper dive states - 3 columns x 2 rows, matching the kick zones */
-.keeper.dive-bl { transform: translate(calc(-50% - 62px), 6px) rotate(-18deg); }
-.keeper.dive-bc { transform: translate(-50%, 4px); }
-.keeper.dive-br { transform: translate(calc(-50% + 62px), 6px) rotate(18deg); }
-.keeper.dive-tl { transform: translate(calc(-50% - 58px), -38px) rotate(-14deg); }
-.keeper.dive-tc { transform: translate(-50%, -42px); }
-.keeper.dive-tr { transform: translate(calc(-50% + 58px), -38px) rotate(14deg); }
+.glove-left { left: -8px; transform: rotate(-14deg); }
+.glove-right { right: -8px; transform: rotate(14deg) scaleX(-1); }
 .keeper.diving .glove-left,
 .keeper.diving .glove-right { transform: scale(1.25); }
+.keeper.diving-stretch .glove-left,
+.keeper.diving-stretch .glove-right { transform: scale(1.55) translateY(-3px); }
+
+.keeper-shadow {
+  position: absolute;
+  left: 50%; bottom: 2%;
+  width: 40px; height: 12px;
+  transform: translate(-50%, 0) scale(1, 1);
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(0,0,0,0.55), rgba(0,0,0,0) 72%);
+  z-index: 2;
+}
+.keeper-shadow.diving { animation: keeper-shadow-sequence 0.6s cubic-bezier(.3,.7,.3,1) forwards; }
+@keyframes keeper-shadow-sequence {
+  0%   { transform: translate(-50%, 0) scale(1, 1); opacity: 1; }
+  16%  { transform: translate(-50%, 0) scale(1.15, 0.85); }
+  55%  { transform: translate(-50%, 0) scale(0.5, 0.5); opacity: 0.45; }  /* arquero "en el aire" */
+  78%  { transform: translate(-50%, 0) scale(0.9, 0.9); opacity: 0.85; }
+  100% { transform: translate(-50%, 0) scale(1, 1); opacity: 1; }
+}
 
 /* leve balanceo mientras espera el remate - solo estética, no delata nada */
-.keeper.idle-shimmy { animation: keeper-shimmy 1.1s ease-in-out infinite; }
-@keyframes keeper-shimmy {
-  0%, 100% { transform: translate(-50%, 0) rotate(0deg); }
-  50% { transform: translate(calc(-50% + 5px), 0) rotate(2deg); }
-}
 
-.keeper-urgent { animation: keeper-panic 0.15s ease-in-out infinite; filter: drop-shadow(0 0 10px var(--danger)); }
-@keyframes keeper-panic {
-  0%, 100% { transform: translate(-50%, 0) scale(1); }
-  50% { transform: translate(-50%, 0) scale(1.06); }
-}
+
 
 .ball {
   position: absolute;
-  left: 50%;
-  bottom: 3%;
+  left: 50%; bottom: 3%;
+  width: 22px; height: 22px;
   transform: translate(-50%, 0) scale(1);
-  font-size: 26px;
-  line-height: 1;
   z-index: 4;
   filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
   will-change: transform;
 }
-.ball.spinning-ball { animation: ball-spin 0.35s linear infinite; }
-@keyframes ball-spin {
-  to { filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5)) hue-rotate(20deg); }
+.ball-core {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255,255,255,0.9), rgba(255,255,255,0.12) 40%, transparent 55%),
+    repeating-conic-gradient(from 0deg, rgba(20,18,24,0.92) 0deg 8deg, transparent 8deg 66deg);
+  background-color: #f2efe6;
+  box-shadow: inset 0 0 4px rgba(0,0,0,0.35);
+  will-change: transform;
 }
+.ball-core::before,
+.ball-core::after {
+  content: "";
+  position: absolute;
+  width: 34%; height: 34%;
+  background: #16141a;
+  clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+}
+.ball-core::before { top: 6%; left: 33%; }
+.ball-core::after  { top: 46%; left: 6%; transform: scale(0.85) rotate(18deg); }
 
 .ball-trail {
   position: absolute;
-  font-size: 22px;
-  transform: translate(-50%, -50%);
-  opacity: 0.32;
-  filter: blur(1px) saturate(0.5);
+  width: 16px; height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgba(240,236,226,0.8), rgba(240,236,226,0));
+  transform-origin: left center;
   pointer-events: none;
   z-index: 3;
-  animation: trail-fade 0.28s ease forwards;
+  animation: trail-fade 0.26s ease forwards;
 }
 @keyframes trail-fade {
-  to { opacity: 0; transform: translate(-50%, -50%) scale(0.55); }
+  to { opacity: 0; transform: scale(0.7) translateX(-4px) rotate(var(--tr-angle, 0deg)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .keeper, .glove, .goal .net, .keeper-shadow { transition: none; animation-duration: 0.01ms !important; }
+  .ball-trail, .trophy-burst.burst, .impact-spark, .penalty-pitch.shake { animation: none; }
 }
 
 /* Sello de resultado, tipo videojuego de fútbol clásico */
@@ -1323,14 +1397,6 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   filter: drop-shadow(0 0 16px var(--gold-bright));
 }
 .trophy-burst.hidden { display: none; }
-.trophy-burst.burst { animation: trophy-pop 1.3s cubic-bezier(0.2, 1.6, 0.3, 1) forwards; }
-@keyframes trophy-pop {
-  0% { transform: translate(-50%, -50%) scale(0) rotate(-25deg); opacity: 0; }
-  30% { transform: translate(-50%, -50%) scale(1.3) rotate(8deg); opacity: 1; }
-  50% { transform: translate(-50%, -50%) scale(1) rotate(-4deg); }
-  85% { transform: translate(-50%, -50%) scale(1.05) rotate(0deg); opacity: 1; }
-  100% { transform: translate(-50%, -50%) scale(0.9) rotate(0deg); opacity: 0; }
-}
 
 .penalty-result {
   font-family: var(--font-marker);
@@ -1345,10 +1411,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 .penalty-result.result-goal { color: var(--win-green); }
 .penalty-result.result-save { color: var(--pink); }
 
-@media (prefers-reduced-motion: reduce) {
-  .keeper, .glove, .goal .net { transition: none; }
-  .keeper.idle-shimmy, .ball-trail, .trophy-burst.burst { animation: none; }
-}
+
 
 /* ---------- Toast ---------- */
 .toast {
@@ -1393,35 +1456,61 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   padding: 2px;
   position: relative;
 }
-.penalty-power-bg {
-  width: 100%;
-  height: 100%;
-  position: relative;
-  border-radius: 8px;
-  overflow: hidden;
+
+/* ---------- NUEVAS COSAS---------- */
+
+.reaction-timer {
+  position: absolute;
+  top: 6px; left: 8%; right: 8%;
+  height: 5px;
+  border-radius: 3px;
   background: rgba(0,0,0,0.4);
+  overflow: hidden;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
-.penalty-power-fill {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, var(--win-green) 50%, var(--gold-bright) 85%, var(--danger) 95%);
-  box-shadow: 0 0 10px rgba(255,255,255,0.2);
-  will-change: width;
+.reaction-timer.show { opacity: 1; }
+.reaction-timer-fill {
+  height: 100%; width: 100%;
+  transform-origin: left center;
+  background: linear-gradient(90deg, var(--win-green), var(--gold-bright), var(--danger));
 }
-.power-zone-perfect {
+
+.penalty-power-wrap {
+  width: 100%; max-width: 260px;
+  margin: 0 auto 10px;
+  position: relative;
+}
+.power-gauge { width: 100%; height: auto; display: block; overflow: visible; }
+.gauge-track { fill: none; stroke: rgba(0,0,0,0.45); stroke-width: 14; stroke-linecap: round; }
+.gauge-zone-safe   { fill: none; stroke: var(--win-green);  stroke-width: 10; stroke-linecap: round; opacity: 0.85; }
+.gauge-zone-strong { fill: none; stroke: var(--gold-bright); stroke-width: 10; stroke-linecap: round; opacity: 0.9; }
+.gauge-zone-risk   { fill: none; stroke: var(--danger);      stroke-width: 10; stroke-linecap: round; opacity: 0.9; }
+.gauge-needle { stroke: #f5f2e8; stroke-width: 4; stroke-linecap: round; filter: drop-shadow(0 0 3px rgba(0,0,0,0.6)); }
+.gauge-hub { fill: #2b2530; stroke: #f5f2e8; stroke-width: 2; }
+.gauge-label {
+  position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%);
+  font-family: var(--font-marker); font-size: 11px; letter-spacing: 1px; color: var(--text-muted);
+}
+
+.penalty-pitch.shake { animation: pitch-shake 0.35s ease; }
+@keyframes pitch-shake {
+  10% { transform: translate(-3px, 1px); } 30% { transform: translate(3px, -2px); }
+  50% { transform: translate(-2px, 2px); } 70% { transform: translate(2px, -1px); }
+  100% { transform: translate(0, 0); }
+}
+.impact-spark {
   position: absolute;
-  left: 85%; top: 0; bottom: 0; width: 2px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
   background: #fff;
-  box-shadow: 0 0 5px #fff;
-  z-index: 2;
+  pointer-events: none;
+  z-index: 6;
+  animation: impact-spark-fly 0.4s ease-out forwards;
 }
-.power-zone-over {
-  position: absolute;
-  left: 95%; top: 0; bottom: 0; width: 2px;
-  background: #fff;
-  box-shadow: 0 0 5px #fff;
-  z-index: 2;
-}
+@keyframes impact-spark-fly { to { transform: translate(var(--sx), var(--sy)) scale(0); opacity: 0; } }
+
 
 
 /* ===================== La Velada (boxeo) ===================== */
