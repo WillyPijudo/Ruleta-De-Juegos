@@ -994,14 +994,16 @@ const PENALTY_KEY_TO_DIR = {
 const PENALTY_COMBO_WINDOW_MS = 70; // margen para que 2 teclas cuenten como un solo combo
 
 // ---------- Arquero: movimiento libre + salto real ----------
-const KEEPER_MOVE_ACCEL = 1500;      // px/s² al mantener A/D
-const KEEPER_MOVE_MAXSPEED = 340;    // px/s tope caminando
-// FIX: 32px de alcance "parado" era MENOS que el radio del propio cuerpo
-// del arquero (sprite de 66px de ancho = 33px de radio) - un tiro que iba
-// derecho a las manos podía no contar como "al alcance". Ahora cubre bien
-// el cuerpo + un poco de guante.
-const KEEPER_STANDING_REACH = 58;    // px - alcanza sin tirarse (remate al cuerpo)
-const KEEPER_DIVE_TRAVEL_SPEED = 980; // px/s "presupuesto" de alcance al tirarse
+// Bajado a pedido (se sentía injustamente rápido: reposicionarse a
+// cualquier lado del arco costaba casi nada). Ahora moverse de punta a
+// punta lleva su tiempo real - hay que anticipar, no corregir a último
+// momento.
+const KEEPER_MOVE_ACCEL = 950;       // px/s² al mantener A/D (antes 1500)
+const KEEPER_MOVE_MAXSPEED = 215;    // px/s tope caminando (antes 340)
+// Alcance parado: apenas por encima del propio radio del cuerpo (33px) -
+// cubre el remate al cuerpo sin regalar nada de más.
+const KEEPER_STANDING_REACH = 44;    // px (antes 32, que era MENOS que su propio cuerpo)
+const KEEPER_DIVE_TRAVEL_SPEED = 740; // px/s "presupuesto" de alcance al tirarse (antes 900)
 const KEEPER_DIVE_MAX_MS = 480;      // tope de duración del salto, no es un teletransporte
 
 // Comba por rincón: los tiros a los ángulos se cierran MÁS hacia esa
@@ -1071,6 +1073,7 @@ let penaltyAimStartTime = 0;
 let penaltyReactTimer = null;
 let penaltyRoundTimeout = null;
 let penaltyKeeperLateFrac = 0;
+let penaltyBallStart = { x: 0, y: 0 }; // FIX: punto de arranque del vuelo, para poder convertir coordenadas absolutas -> relativas al resolver el tiro
 let shootout = null;
 
 // ---------- Estado nuevo: arquero con posición y física propias ----------
@@ -1227,17 +1230,15 @@ function ballDeflectOff(ball, x, y, kickZone, vx, vy) {
 
   let px = x, py = y;
   let pvx = side * (80 + Math.abs(vx || 0) * restitution * 0.3);
-  // FIX: antes esto podía mandar la pelota MUY por arriba del área visible
-  // (el .penalty-pitch tiene overflow:hidden) y "desaparecía" en tiros a
-  // los ángulos altos. Ahora el manotazo está topeado.
   let pvy = -Math.min(340, Math.abs(vy || 200) * restitution * 0.5 + 140);
   let spin = (vx || 0) * 0.4;
-  let bounced = false;
+  let bounceCount = 0; // FIX: peso real - ahora pica VARIAS veces perdiendo energía y termina rodando, no un solo pique y fade
+  const groundY = y + 46;
 
   const start = performance.now();
   let last = start;
   const ballCore = ball.querySelector(".ball-core");
-  const minY = -6; // FIX: nunca sube más arriba del borde visible del área
+  const minY = -6; // nunca sube más arriba del borde visible del área
 
   function step(now) {
     const dt = Math.min((now - last) / 1000, 0.032);
@@ -1246,23 +1247,33 @@ function ballDeflectOff(ball, x, y, kickZone, vx, vy) {
     pvy += 1600 * dt; // gravedad (más floja que la del tiro: se ve "liviano" en el aire)
     px += pvx * dt;
     py += pvy * dt;
-    pvx *= (1 - dt * 0.6); // fricción de aire, va perdiendo velocidad lateral
+    pvx *= (1 - dt * 0.6); // fricción de aire mientras está en el aire
+
+    if (py < minY) { py = minY; pvy = Math.abs(pvy) * 0.3; }
+
+    if (py > groundY) {
+      py = groundY;
+      if (bounceCount < 3 && Math.abs(pvy) > 30) {
+        // cada pique pierde más energía que el anterior (fricción real
+        // contra el pasto) - dos o tres piques cada vez más chicos y
+        // después rueda, no "desaparece" de golpe.
+        pvy = -Math.abs(pvy) * (0.34 - bounceCount * 0.08);
+        pvx *= 0.55;
+        bounceCount++;
+      } else {
+        // se quedó sin salto: ahora rueda por el piso con fricción hasta frenar
+        pvy = 0;
+        pvx *= (1 - dt * 3.2);
+      }
+    }
     spin += pvx * dt * 0.5;
 
-    if (py < minY) { py = minY; pvy = Math.abs(pvy) * 0.3; } // FIX: clamp de seguridad, nunca se va del cuadro
-
-    if (py > y + 46 && !bounced) {
-      bounced = true; // pica una vez contra el piso del área y pierde energía
-      pvy *= -0.32;
-      pvx *= 0.5;
-    }
-
     const t = (now - start) / 1000;
-    const scale = Math.max(0.5, 0.95 - t * 0.35);
+    const scale = Math.max(0.48, 0.95 - t * 0.3);
     ball.style.transform = `translate(calc(-50% + ${px.toFixed(1)}px), ${py.toFixed(1)}px) scale(${scale.toFixed(2)})`;
     if (ballCore) ballCore.style.transform = `rotate(${spin.toFixed(0)}deg)`;
 
-    if (t < 0.62) requestAnimationFrame(step);
+    if (t < 0.95 && (bounceCount < 3 || Math.abs(pvx) > 8)) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
 }
@@ -1753,6 +1764,7 @@ function launchPenaltyBall(zone, power) {
   const pitchRect = pitch.getBoundingClientRect();
   const goalRect = goal.getBoundingClientRect();
   const start = penaltyCenterOf(ball);
+  penaltyBallStart = start; // FIX desaparición: se necesita para des-absolutizar el impacto al resolver
 
   let pos = { ...PENALTY_ZONE_POS[zone] };
   if (power > 95) pos.y = -0.5; // a la tribuna
@@ -1852,8 +1864,19 @@ function resolvePenaltyShot(kickZone, power, phys) {
   const goal = document.getElementById("penaltyGoal");
   const pitch = document.querySelector(".penalty-pitch");
   const ball = document.getElementById("penaltyBall");
+  // impactX/Y son ABSOLUTOS (relativos a la cancha) - los usan spawnImpactBurst
+  // / spawnNetBulge / el % de impacto en la red, que necesitan esas coordenadas.
   const impactX = phys ? phys.x : 0;
   const impactY = phys ? phys.y : 0;
+  // FIX EL BUG DE LA DESAPARICIÓN: ballDeflectOff/ballSettleIntoNet/ballFlyOut
+  // dibujan la pelota con un offset RELATIVO a su punto de arranque (así es
+  // como la venía dibujando launchPenaltyBall todo el vuelo). Pasarles la
+  // posición absoluta directamente hacía que la pelota saltara de golpe a
+  // una posición gigante fuera de cuadro justo en el instante del impacto -
+  // eso era la "desaparición". Acá se convierte a relativo antes de usarla
+  // para DIBUJAR la pelota.
+  const localImpactX = impactX - penaltyBallStart.x;
+  const localImpactY = impactY - penaltyBallStart.y;
   let scored, flavor;
 
   const saved = penaltyKeeperSaveResult === true;
@@ -1862,7 +1885,7 @@ function resolvePenaltyShot(kickZone, power, phys) {
   if (power > 95) {
     document.getElementById("penaltyStatus").textContent = "¡Afuera!";
     showPenaltyStamp("¡A LA TRIBUNA!", "stamp-out");
-    ballFlyOut(ball, impactX, impactY, phys ? phys.vx : 0, phys ? phys.vy : -300);
+    ballFlyOut(ball, localImpactX, localImpactY, phys ? phys.vx : 0, phys ? phys.vy : -300);
     scored = false;
     flavor = "¡Se llenó de pelota y la mandó a la calle!";
   } else if (saved) {
@@ -1881,7 +1904,7 @@ function resolvePenaltyShot(kickZone, power, phys) {
       busPlaySound("/static/audio/card-pickup.wav", 0.55);
     }
     spawnImpactBurst(impactX, impactY, "#f2efe6");
-    ballDeflectOff(ball, impactX, impactY, kickZone, phys.vx, phys.vy);
+    ballDeflectOff(ball, localImpactX, localImpactY, kickZone, phys.vx, phys.vy);
     flavor = power >= 85
       ? "¡MANO DE DIOS! Le sacó un fierrazo tremendo del ángulo."
       : PENALTY_SAVE_FLAVORS[Math.floor(Math.random() * PENALTY_SAVE_FLAVORS.length)];
@@ -1898,7 +1921,7 @@ function resolvePenaltyShot(kickZone, power, phys) {
     setTimeout(() => goal.classList.remove("net-ripple"), 450);
     spawnImpactBurst(impactX, impactY, "#f2efe6");
     spawnNetBulge(impactX, impactY);
-    ballSettleIntoNet(ball, impactX, impactY);
+    ballSettleIntoNet(ball, localImpactX, localImpactY);
     pitch.classList.add("shake");
     setTimeout(() => pitch.classList.remove("shake"), power >= 85 ? 350 : 220);
 
