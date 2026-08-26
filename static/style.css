@@ -1351,6 +1351,12 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   to { opacity: 0; transform: scale(0.7) translateX(-4px) rotate(var(--tr-angle, 0deg)); }
 }
 
+.ball.curve-touch { animation: curve-touch-flash 0.3s ease; }
+@keyframes curve-touch-flash {
+  0%, 100% { filter: none; }
+  50% { filter: drop-shadow(0 0 10px var(--gold-bright)) brightness(1.4); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .keeper, .glove, .goal .net, .keeper-shadow { transition: none; animation-duration: 0.01ms !important; }
   .ball-trail, .trophy-burst.burst, .impact-spark, .penalty-pitch.shake { animation: none; }
