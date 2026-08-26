@@ -1279,10 +1279,17 @@ function resetPenaltyUI() {
 
   const ball = document.getElementById("penaltyBall");
   ball.style.transform = "";
-  ball.classList.remove("spinning-ball");
-  
-  document.getElementById("penaltyPowerBar").style.width = "0%";  
-  document.getElementById("penaltyKeeper").className = "keeper";
+  ball.style.opacity = "";
+  ball.classList.remove("spinning-ball", "curve-touch");
+
+  penaltyCurveZone = null;
+  penaltyCurveApplied = false;
+
+  document.getElementById("penaltyPowerBar").style.width = "0%";
+  const keeperEl = document.getElementById("penaltyKeeper");
+  keeperEl.className = "keeper";
+  keeperEl.style.animationDuration = "";
+  document.getElementById("penaltyKeeperShadow").style.animationDuration = "";
   document.getElementById("penaltyGoal").classList.remove("net-ripple");
   document.getElementById("penaltyStamp").className = "penalty-stamp";
   const trophy = document.getElementById("trophyBurst");
