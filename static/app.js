@@ -1058,8 +1058,8 @@ function penaltyShotTiming(power) {
 }
 
 function penaltyReactionWindow(power) {
-  const minWindow = 550;
-  const maxWindow = 900;
+  const minWindow = 700;  // antes 550 — más margen para reflejos normales
+  const maxWindow = 1250; // antes 900
   const t = Math.max(0, Math.min(1, power / 84)); // 0 (flojo) -> 1 (al borde del fierrazo)
   let win = maxWindow - t * (maxWindow - minWindow);
   if (prefersReducedMotion) win += 150;
@@ -1098,6 +1098,50 @@ function spawnImpactBurst(x, y, color) {
     pitch.appendChild(p);
     setTimeout(() => p.remove(), 400);
   }
+}
+
+function spawnNetBulge(x, y) {
+  const pitch = document.querySelector(".penalty-pitch");
+  if (!pitch || prefersReducedMotion) return;
+  const bulge = document.createElement("span");
+  bulge.className = "net-bulge";
+  bulge.style.left = x + "px";
+  bulge.style.top = y + "px";
+  pitch.appendChild(bulge);
+  setTimeout(() => bulge.remove(), 420);
+}
+
+// La pelota "se frena" y se asienta en la red en vez de atravesarla.
+function ballSettleIntoNet(ball, x, y) {
+  const start = performance.now();
+  const dur = 260;
+  ball.style.opacity = "1";
+  function step(now) {
+    const t = Math.min(1, (now - start) / dur);
+    const scale = 0.62 - t * 0.22;
+    ball.style.transform = `translate(calc(-50% + ${x.toFixed(1)}px), ${(y + t * 8).toFixed(1)}px) scale(${scale.toFixed(2)})`;
+    ball.style.opacity = `${(1 - t).toFixed(2)}`;
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// En una atajada, el guante la despide hacia el lado contrario y al piso.
+function ballDeflectOff(ball, x, y, kickZone) {
+  const posX = PENALTY_ZONE_POS[kickZone] ? PENALTY_ZONE_POS[kickZone].x : 0.5;
+  const side = posX < 0.5 ? 1 : posX > 0.5 ? -1 : (Math.random() < 0.5 ? -1 : 1);
+  const start = performance.now();
+  const dur = 300;
+  function step(now) {
+    const t = Math.min(1, (now - start) / dur);
+    const ease = 1 - Math.pow(1 - t, 2);
+    const dx = x + side * 30 * ease;
+    const dy = y + 36 * ease;
+    const scale = 0.95 - ease * 0.3;
+    ball.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), ${dy.toFixed(1)}px) scale(${scale.toFixed(2)})`;
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 }
 
 
@@ -1388,6 +1432,8 @@ function penaltyCenterOf(el) {
   return { x: r.left + r.width / 2 - pitchRect.left, y: r.top + r.height / 2 - pitchRect.top };
 }
 
+const PENALTY_REVEAL_BLEND_S = 0.1; // el quiebre visual ahora es un blend, no un salto de golpe
+
 function launchPenaltyBall(zone, power) {
   const ball = document.getElementById("penaltyBall");
   const ballCore = ball.querySelector(".ball-core");
@@ -1405,8 +1451,6 @@ function launchPenaltyBall(zone, power) {
     y: goalRect.top - pitchRect.top + goalRect.height * pos.y,
   };
 
-  // Punto señuelo: la pelota apunta primero acá, no al rincón real,
-  // para que mirar la pantalla no delate el tiro antes de tiempo.
   const decoy = {
     x: start.x + (target.x - start.x) * 0.22,
     y: start.y + (target.y - start.y) * 0.55 - 30,
@@ -1415,31 +1459,18 @@ function launchPenaltyBall(zone, power) {
   const { duration, revealFrac } = penaltyShotTiming(power);
   const durS = duration / 1000;
   const revealAtS = durS * revealFrac;
+  penaltyFlightDurationMs = duration;
 
-  // Estado físico real: posición + velocidad, integrados con gravedad
-  // frame a frame (no interpolación de "% recorrido"). curveAccel/curveMax
-  // quedan listos para la comba lateral que se va a sumar más adelante.
-  // Comba: fuerza lateral constante durante todo el vuelo. Se define acá
-  // (una vez por tiro) según rincón + potencia, con un poco de variación.
-  const curveSide = PENALTY_CURVE_SIDE[zone];
-  const curvePowerT = Math.max(0, Math.min(1, power / 84));
-  const curveFactor = 1 - curvePowerT * 0.7; // fierrazo: ~30% de la comba máxima
-  const curveMax = PENALTY_CURVE_MAX_ACCEL * curveFactor;
-  const curveAccel = curveSide * curveMax * (0.75 + Math.random() * 0.5);
-
-  // Estado físico real: posición + velocidad, integradas con gravedad
-  // frame a frame (no interpolación de "% recorrido").
-  const phys = { x: start.x, y: start.y, vx: 0, vy: 0, curveAccel, curveMax };
+  const phys = { x: start.x, y: start.y, vx: 0, vy: 0 };
 
   function aimAt(dest, timeLeft) {
-    // La comba se compensa igual que la gravedad: si no, el tiro
-    // terminaría lejos del señuelo/target por el empuje lateral acumulado.
-    phys.vx = ((dest.x - phys.x) - 0.5 * phys.curveAccel * timeLeft * timeLeft) / timeLeft;
+    phys.vx = (dest.x - phys.x) / timeLeft;
     phys.vy = ((dest.y - phys.y) - 0.5 * PENALTY_GRAVITY * timeLeft * timeLeft) / timeLeft;
   }
   aimAt(decoy, Math.max(0.05, revealAtS));
 
   let reAimed = false;
+  let blendFrom = null, blendTo = null, blendStartS = 0;
   const startTime = performance.now();
   penaltyFlightStartTime = startTime;
   let lastT = startTime;
@@ -1453,12 +1484,21 @@ function launchPenaltyBall(zone, power) {
 
     if (!reAimed && elapsedS >= revealAtS) {
       reAimed = true;
+      blendFrom = { vx: phys.vx, vy: phys.vy };
       aimAt(target, Math.max(0.05, durS - elapsedS));
+      blendTo = { vx: phys.vx, vy: phys.vy };
+      phys.vx = blendFrom.vx; phys.vy = blendFrom.vy;
+      blendStartS = elapsedS;
     }
 
-    // Paso de física real: gravedad + comba lateral + velocidad.
+    if (reAimed) {
+      const bt = Math.min(1, (elapsedS - blendStartS) / PENALTY_REVEAL_BLEND_S);
+      const eased = bt * (2 - bt); // ease-out corto: quiebre real, no un salto
+      phys.vx = blendFrom.vx + (blendTo.vx - blendFrom.vx) * eased;
+      phys.vy = blendFrom.vy + (blendTo.vy - blendFrom.vy) * eased;
+    }
+
     phys.vy += PENALTY_GRAVITY * dt;
-    phys.vx += phys.curveAccel * dt; // se acumula de a poco, no es instantánea
     phys.x += phys.vx * dt;
     phys.y += phys.vy * dt;
 
@@ -1470,8 +1510,6 @@ function launchPenaltyBall(zone, power) {
     ball.style.transform =
       `translate(calc(-50% + ${dxNow.toFixed(1)}px), ${dyNow.toFixed(1)}px) scale(${scale.toFixed(2)})`;
 
-    // Giro sobre su propio eje, coherente con la velocidad — en un
-    // elemento hijo aparte, para que nunca compita con la posición.
     spin += speed * dt * 0.6;
     ballCore.style.transform = `rotate(${(spin % 360).toFixed(0)}deg)`;
 
@@ -1496,6 +1534,7 @@ function resolvePenaltyShot(kickZone, power, phys) {
   teardownPenaltyRound();
   const goal = document.getElementById("penaltyGoal");
   const pitch = document.querySelector(".penalty-pitch");
+  const ball = document.getElementById("penaltyBall");
   const impactX = phys ? phys.x : 0;
   const impactY = phys ? phys.y : 0;
   let scored, flavor;
@@ -1515,31 +1554,37 @@ function resolvePenaltyShot(kickZone, power, phys) {
       busPlaySound("/static/audio/dash.wav", 0.6);
       pitch.classList.add("shake");
       setTimeout(() => pitch.classList.remove("shake"), 350);
+    } else if (penaltyKeeperLateFrac < 0.22) {
+      showPenaltyStamp("¡LA LEYÓ ENTERA!", "stamp-save stamp-early");
+      busPlaySound("/static/audio/card-pickup.wav", 0.55);
     } else {
       showPenaltyStamp("¡ATAJADA!", "stamp-save");
       busPlaySound("/static/audio/card-pickup.wav", 0.55);
     }
     spawnImpactBurst(impactX, impactY, "#f2efe6");
-    if (power >= 85) {
-      flavor = "¡MANO DE DIOS! Le sacó un fierrazo tremendo del ángulo.";
-    } else {
-      flavor = PENALTY_SAVE_FLAVORS[Math.floor(Math.random() * PENALTY_SAVE_FLAVORS.length)];
-    }
+    ballDeflectOff(ball, impactX, impactY, kickZone);
+    flavor = power >= 85
+      ? "¡MANO DE DIOS! Le sacó un fierrazo tremendo del ángulo."
+      : PENALTY_SAVE_FLAVORS[Math.floor(Math.random() * PENALTY_SAVE_FLAVORS.length)];
   } else {
     goal.classList.add("net-ripple");
     setTimeout(() => goal.classList.remove("net-ripple"), 450);
     spawnImpactBurst(impactX, impactY, "#f2efe6");
+    spawnNetBulge(impactX, impactY);
+    ballSettleIntoNet(ball, impactX, impactY);
+    pitch.classList.add("shake");
+    setTimeout(() => pitch.classList.remove("shake"), power >= 85 ? 350 : 220);
 
     if (power >= 85) {
       document.getElementById("penaltyStatus").textContent = "¡GOLAZO!";
       showPenaltyStamp("¡GOLAZO!", "stamp-goal");
       flavor = "¡Le rompió el arco! Fierrazo inatajable.";
-      pitch.classList.add("shake");
-      setTimeout(() => pitch.classList.remove("shake"), 350);
     } else {
       document.getElementById("penaltyStatus").textContent = "¡GOL!";
       showPenaltyStamp("¡GOL!", "stamp-goal");
-      flavor = PENALTY_GOAL_FLAVORS[Math.floor(Math.random() * PENALTY_GOAL_FLAVORS.length)];
+      flavor = penaltyKeeperTooSlow
+        ? "¡Se quedó clavado, ni llegó a tirarse!"
+        : PENALTY_GOAL_FLAVORS[Math.floor(Math.random() * PENALTY_GOAL_FLAVORS.length)];
     }
     scored = true;
   }
