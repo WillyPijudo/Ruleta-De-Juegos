@@ -996,8 +996,12 @@ const PENALTY_COMBO_WINDOW_MS = 70; // margen para que 2 teclas cuenten como un 
 // ---------- Arquero: movimiento libre + salto real ----------
 const KEEPER_MOVE_ACCEL = 1500;      // px/s² al mantener A/D
 const KEEPER_MOVE_MAXSPEED = 340;    // px/s tope caminando
-const KEEPER_STANDING_REACH = 32;    // px - alcanza sin tirarse (remate al cuerpo)
-const KEEPER_DIVE_TRAVEL_SPEED = 900; // px/s "presupuesto" de alcance al tirarse
+// FIX: 32px de alcance "parado" era MENOS que el radio del propio cuerpo
+// del arquero (sprite de 66px de ancho = 33px de radio) - un tiro que iba
+// derecho a las manos podía no contar como "al alcance". Ahora cubre bien
+// el cuerpo + un poco de guante.
+const KEEPER_STANDING_REACH = 58;    // px - alcanza sin tirarse (remate al cuerpo)
+const KEEPER_DIVE_TRAVEL_SPEED = 980; // px/s "presupuesto" de alcance al tirarse
 const KEEPER_DIVE_MAX_MS = 480;      // tope de duración del salto, no es un teletransporte
 
 // Comba por rincón: los tiros a los ángulos se cierran MÁS hacia esa
@@ -1326,16 +1330,13 @@ function attemptKeeperDive() {
   const reach = KEEPER_STANDING_REACH + travelBudget;
   const stretch = dist > reach * 0.55;
 
-  let saveChance = 0;
-  if (guessedRight || guessedAdjacent) {
-    const distFactor = Math.max(0, 1 - dist / reach);
-    saveChance = (guessedRight ? 0.94 : 0.55) * distFactor * (1 - lateFrac * 0.5);
-  }
-  const madeIt = dist <= reach && penaltyKeeperGuessedWrong === false && Math.random() < Math.max(0.05, saveChance);
+
+  const madeIt = dist <= reach && (guessedRight || guessedAdjacent);
 
   penaltyKeeperSaveResult = madeIt;
-  // Llegó, pero sobre la hora -> la rechaza afuera en vez de atraparla limpio.
-  penaltyKeeperStretch = madeIt && (stretch || lateFrac > 0.72);
+  // Llegó, pero sobre la hora, o leyó solo a medias -> se ve como una
+  // atajada sufrida (estirada) en vez de una limpia.
+  penaltyKeeperStretch = madeIt && (stretch || lateFrac > 0.68 || !guessedRight);
   penaltyKeeperLateFrac = lateFrac;
 
   const dx = jumpTarget.x - fromX;
@@ -1811,11 +1812,17 @@ function launchPenaltyBall(zone, power) {
     const apparentDy = phys.y - start.y;
     penaltyBallLiveRef = { x: start.x + apparentDx, y: start.y + apparentDy };
 
-    // Profundidad: se va achicando de a poco a medida que "se aleja" -
-    // sin bamboleo compitiendo, ahora se nota como un efecto 3D real.
+    // Profundidad 3D: "pop" breve al salir del pie (como si pasara cerca
+    // de cámara, primeros 8% del vuelo) y de ahí se achica en curva que
+    // ACELERA hacia el final (ease-in: un objeto que se aleja de verdad
+    // se ve chico cada vez más rápido, no en línea recta) - se siente
+    // mucho más la distancia real que le falta para llegar al arco.
     const depthT = Math.min(1, elapsedS / durS);
-    const scale = 1 - depthT * 0.42;
-
+    const popT = Math.min(1, elapsedS / (durS * 0.08));
+    const pop = popT < 1 ? 1 + Math.sin(popT * Math.PI) * 0.1 : 1;
+    const shrink = depthT * depthT;
+    const scale = pop * (1 - shrink * 0.55);
+      
     ball.style.transform =
       `translate(calc(-50% + ${apparentDx.toFixed(1)}px), ${apparentDy.toFixed(1)}px) scale(${scale.toFixed(2)})`;
 
