@@ -169,6 +169,11 @@
         <span class="duel-mode-icon">⚽💨</span>
         <span class="duel-mode-title">Gambeta y Definición</span>
         <span class="duel-mode-sub">Físicas + reflejos</span>
+      </button>
+      <button id="pickHeadBtn" class="duel-mode-card" type="button">
+        <span class="duel-mode-icon">🤕⚽</span>
+        <span class="duel-mode-title">Cabezazos</span>
+        <span class="duel-mode-sub">Cabezazo + patada</span>
       </button>      
     </div>
     <div class="modal-actions">
@@ -835,7 +840,91 @@
   </div>
 </div>
 
+<!-- Head Soccer duel modal -->
+<div id="headModal" class="fight-modal hidden">
+  <div class="fight-shell head-shell">
 
+    <div class="fight-topbar">
+      <div class="fight-brand">
+        <span class="fight-brand-fallback">🤕⚽ CABEZAZOS</span>
+      </div>
+      <button id="closeHeadModal" class="btn btn-ghost btn-small" type="button">✕ Cerrar</button>
+    </div>
+
+    <div id="headModeSelect" class="fight-screen">
+      <div class="fight-screen-inner">
+        <p class="modal-eyebrow">Antes de arrancar</p>
+        <h3 class="rps-title">¿Cómo se juega?</h3>
+        <div class="duel-mode-grid hs-mode-grid">
+          <button type="button" class="duel-mode-card" data-hs-mode="goals">
+            <span class="duel-mode-icon">🥅</span>
+            <span class="duel-mode-title">A 5 goles</span>
+            <span class="duel-mode-sub">Sin límite de tiempo</span>
+          </button>
+          <button type="button" class="duel-mode-card" data-hs-mode="time">
+            <span class="duel-mode-icon">⏱️</span>
+            <span class="duel-mode-title">Por tiempo</span>
+            <span class="duel-mode-sub">60s — empate: muerte súbita</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="headPick" class="fight-screen hidden">
+      <div class="fight-screen-inner">
+        <p class="modal-eyebrow">Elegir cabezón</p>
+        <h3 class="rps-title">¿A quién elige <span id="headPickerName">-</span>?</h3>
+        <div class="fight-pick-grid">
+          <button type="button" class="fight-pick-card" data-head="head1">
+            <img src="{{ url_for('static', filename='img/heads/head1.png') }}" alt="Cabezón 1" onerror="this.remove()">
+            <span>Cabezón 1</span>
+          </button>
+          <button type="button" class="fight-pick-card" data-head="head2">
+            <img src="{{ url_for('static', filename='img/heads/head2.png') }}" alt="Cabezón 2" onerror="this.remove()">
+            <span>Cabezón 2</span>
+          </button>
+        </div>
+        <div class="modal-actions">
+          <button id="headPickBackBtn" class="btn btn-ghost btn-small" type="button">← Volver</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="headPlay" class="fight-screen hidden">
+      <div class="fight-hud">
+        <div class="fight-hud-side" id="headHudLeft">
+          <span class="fight-hud-name" id="headLeftName">-</span>
+          <span class="hs-score" id="headLeftScore">0</span>
+        </div>
+        <div class="fight-hud-center" id="headHudCenter">
+          <span class="fight-round" id="headModeLabel">A 5 goles</span>
+          <span class="fight-timer" id="headTimerLabel">—</span>
+        </div>
+        <div class="fight-hud-side fight-hud-side-right" id="headHudRight">
+          <span class="fight-hud-name" id="headRightName">-</span>
+          <span class="hs-score" id="headRightScore">0</span>
+        </div>
+      </div>
+
+      <div class="hs-canvas-wrap">
+        <canvas id="headCanvas" width="900" height="420"></canvas>
+        <p class="hs-goal-flash" id="headGoalFlash">¡GOL!</p>
+      </div>
+
+      <p class="fight-status" id="headStatus"></p>
+
+      <div class="fight-result hidden" id="headResultOverlay">
+        <p class="fight-result-title" id="headResultTitle"></p>
+        <p class="fight-result-sub" id="headResultSub"></p>
+        <div class="modal-actions">
+          <button id="headRematchBtn" class="btn btn-primary btn-small" type="button">🔁 Revancha</button>
+          <button id="headBackToPickBtn" class="btn btn-ghost btn-small" type="button">🔁 Elegir de nuevo</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
   
 <!-- Share modal -->
 <div id="shareModal" class="modal hidden">
