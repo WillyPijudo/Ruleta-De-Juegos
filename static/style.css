@@ -1343,10 +1343,19 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   inset: 0;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 32% 26%, rgba(255,255,255,0.9), rgba(255,255,255,0.12) 40%, transparent 55%),
-    repeating-conic-gradient(from 0deg, rgba(20,18,24,0.92) 0deg 8deg, transparent 8deg 66deg);
-  background-color: #f2efe6;
-  box-shadow: inset 0 0 4px rgba(0,0,0,0.35);
+    radial-gradient(circle at 30% 24%, rgba(255,255,255,0.95), rgba(255,255,255,0.18) 42%, transparent 60%),
+    radial-gradient(circle 3.1px at 50% 19%, #17141a, transparent 72%),
+    radial-gradient(circle 3px at 80% 39%, #17141a, transparent 72%),
+    radial-gradient(circle 3px at 69% 77%, #17141a, transparent 72%),
+    radial-gradient(circle 3px at 31% 77%, #17141a, transparent 72%),
+    radial-gradient(circle 3px at 20% 39%, #17141a, transparent 72%),
+    radial-gradient(circle 2.7px at 50% 51%, #17141a, transparent 75%),
+    radial-gradient(circle at 68% 82%, rgba(0,0,0,0.18), transparent 60%);
+  background-color: #f5f1e7;
+  box-shadow:
+    inset -3px -3px 5px rgba(0,0,0,0.32),
+    inset 2px 2px 3px rgba(255,255,255,0.6),
+    inset 0 0 3px rgba(0,0,0,0.2);
   will-change: transform;
 }
 .ball-core::before,
