@@ -998,20 +998,29 @@ const PENALTY_SAVE_FLAVORS = [
   "¡Leyó el tiro perfecto! Atajada de figura.",
 ];
 
+const PENALTY_DIVE_VECTORS = {
+  bl: { x: -62, y: 6,   rot: -18 }, bc: { x: 0, y: 4,   rot: 0 },  br: { x: 62, y: 6,   rot: 18 },
+  tl: { x: -58, y: -38, rot: -14 }, tc: { x: 0, y: -42, rot: 0 },  tr: { x: 58, y: -38, rot: 14 },
+};
+const PENALTY_GRAVITY = 2200; // px/s^2, tuneado a ojo para que el arco se vea bien
+
 let penaltyState = "idle";
 let penaltyKeyHandler = null;
 let penaltyFlightRAF = null;
 let penaltyPowerRAF = null;
+let penaltyReactRAF = null;
+let penaltyIdleTimer = null;
 let penaltyKickZone = null;
 let penaltyKeeperZone = null;
+let penaltyKeeperStretch = false;
 let penaltyKeeperTooSlow = false;
 let penaltyFlightStartTime = 0;
 let currentPower = 0;
 let powerDirection = 1;
 let capturedPower = 0;
-let penaltyReactionCutoffMs = 300;
+let penaltyReactionCutoffMs = 700;
+let penaltyAimStartTime = 0;
 let penaltyReactTimer = null;
-let penaltyReactRAF = null;
 let penaltyRoundTimeout = null;
 let shootout = null;
 
@@ -1050,18 +1059,73 @@ function penaltyReactionWindow(power) {
   return Math.round(win);
 }
 
-function spawnBallTrail(ball) {
+function spawnBallTrail(ball, vx, vy) {
   const pitch = document.querySelector(".penalty-pitch");
   if (!pitch) return;
   const rect = ball.getBoundingClientRect();
   const pitchRect = pitch.getBoundingClientRect();
+  const angle = (Math.atan2(vy, vx) * 180) / Math.PI;
   const dot = document.createElement("span");
   dot.className = "ball-trail";
-  dot.textContent = "⚽";
   dot.style.left = (rect.left - pitchRect.left + rect.width / 2) + "px";
   dot.style.top = (rect.top - pitchRect.top + rect.height / 2) + "px";
+  dot.style.setProperty("--tr-angle", `${(angle + 180).toFixed(0)}deg`);
+  dot.style.transform = `translate(-2px, -50%) rotate(${(angle + 180).toFixed(0)}deg)`;
   pitch.appendChild(dot);
-  setTimeout(() => dot.remove(), 300);
+  setTimeout(() => dot.remove(), 260);
+}
+
+function spawnImpactBurst(x, y, color) {
+  const pitch = document.querySelector(".penalty-pitch");
+  if (!pitch || prefersReducedMotion) return;
+  for (let i = 0; i < 6; i++) {
+    const p = document.createElement("span");
+    p.className = "impact-spark";
+    const angle = (Math.PI * 2 * i) / 6 + Math.random() * 0.4;
+    const dist = 18 + Math.random() * 14;
+    p.style.left = x + "px";
+    p.style.top = y + "px";
+    p.style.setProperty("--sx", `${(Math.cos(angle) * dist).toFixed(1)}px`);
+    p.style.setProperty("--sy", `${(Math.sin(angle) * dist).toFixed(1)}px`);
+    if (color) p.style.background = color;
+    pitch.appendChild(p);
+    setTimeout(() => p.remove(), 400);
+  }
+}
+
+function updateGaugeNeedle(power) {
+  const needle = document.getElementById("penaltyPowerNeedle");
+  if (!needle) return;
+  const angleDeg = 180 - Math.max(0, Math.min(100, power)) * 1.8;
+  const rad = (angleDeg * Math.PI) / 180;
+  const len = 78;
+  needle.setAttribute("x2", (100 + len * Math.cos(rad)).toFixed(1));
+  needle.setAttribute("y2", (100 - len * Math.sin(rad)).toFixed(1));
+}
+
+function diveKeeper(zone, stretch) {
+  const keeper = document.getElementById("penaltyKeeper");
+  const shadow = document.getElementById("penaltyKeeperShadow");
+  const v = PENALTY_DIVE_VECTORS[zone];
+  keeper.style.setProperty("--dive-x", `${v.x}px`);
+  keeper.style.setProperty("--dive-y", `${v.y}px`);
+  keeper.style.setProperty("--dive-rot", `${v.rot}deg`);
+  keeper.classList.remove("keeper-urgent");
+  keeper.classList.add("diving", stretch ? "diving-stretch" : "diving-clean");
+  shadow.classList.add("diving");
+  penaltyKeeperStretch = stretch;
+}
+
+function scheduleKeeperIdleTic() {
+  clearTimeout(penaltyIdleTimer);
+  penaltyIdleTimer = setTimeout(() => {
+    if (penaltyState !== "aiming") return;
+    const keeper = document.getElementById("penaltyKeeper");
+    keeper.classList.remove("keeper-tic");
+    void keeper.offsetWidth;
+    keeper.classList.add("keeper-tic");
+    scheduleKeeperIdleTic();
+  }, 500 + Math.random() * 1400);
 }
 
 function showPenaltyStamp(text, kind) {
@@ -1108,6 +1172,10 @@ function teardownPenaltyRound() {
     cancelAnimationFrame(penaltyFlightRAF);
     penaltyFlightRAF = null;
   }
+  if (penaltyIdleTimer) {
+    clearTimeout(penaltyIdleTimer);
+    penaltyIdleTimer = null;
+  }    
   if (penaltyPowerRAF) {
     cancelAnimationFrame(penaltyPowerRAF);
     penaltyPowerRAF = null;
@@ -1139,8 +1207,7 @@ function resetPenaltyUI() {
   const ball = document.getElementById("penaltyBall");
   ball.style.transform = "";
   ball.classList.remove("spinning-ball");
-
-  document.getElementById("penaltyPowerBar").style.width = "0%";
+    
   document.getElementById("penaltyKeeper").className = "keeper";
   document.getElementById("penaltyGoal").classList.remove("net-ripple");
   document.getElementById("penaltyStamp").className = "penalty-stamp";
@@ -1159,65 +1226,107 @@ function resetPenaltyUI() {
 function startPenaltyRound() {
   resetPenaltyUI();
   penaltyState = "aiming";
-  document.getElementById("penaltyKeeper").classList.add("idle-shimmy");
-  updateTurnBanner();  
+  penaltyAimStartTime = performance.now();
+  scheduleKeeperIdleTic();
+  updateTurnBanner();
 
-  // Motor de la barra de potencia
+  // Motor de la barra de potencia: se acelera cuanto más tiempo pasa
+  // sin patear, para que clavar el punto justo sea un desafío de timing.
   let lastTime = performance.now();
   function animatePower(now) {
     if (penaltyState !== "aiming") return;
     const dt = now - lastTime;
     lastTime = now;
+    const heldMs = now - penaltyAimStartTime;
+    const speedFactor = 1 + Math.min(1.6, heldMs / 2600);
 
-    // Sube y baja como loco
-    currentPower += (powerDirection * 0.15) * dt;
+    currentPower += (powerDirection * 0.15 * speedFactor) * dt;
     if (currentPower >= 105) { currentPower = 105; powerDirection = -1; }
     if (currentPower <= 0) { currentPower = 0; powerDirection = 1; }
 
-    document.getElementById("penaltyPowerBar").style.width = Math.min(currentPower, 100) + "%";
+    updateGaugeNeedle(Math.min(currentPower, 100));
     penaltyPowerRAF = requestAnimationFrame(animatePower);
   }
-  penaltyPowerRAF = requestAnimationFrame(animatePower); // <- EL FIX: antes decía "performance.now"
+  penaltyPowerRAF = requestAnimationFrame(animatePower);
 
   const doKick = (zone) => {
     capturedPower = currentPower;
     penaltyKickZone = zone;
-    penaltyState = "reacting";
-    document.getElementById("penaltyKeeper").classList.remove("idle-shimmy");
+    penaltyReactionCutoffMs = penaltyReactionWindow(capturedPower);
+    penaltyState = "kicking";
+    clearTimeout(penaltyIdleTimer);
     document.getElementById("penaltyBall").classList.add("ball-waiting");
 
-    const reactStart = performance.now();
-
-    function reactFrame(now) {
-      if (penaltyState !== "reacting") return;
-      const remaining = Math.max(0, 3000 - (now - reactStart));
-      document.getElementById("penaltyStatus").textContent =
-        `¡ARQUERO, ELEGÍ UN LADO! ⏱️ ${(remaining / 1000).toFixed(1)}s`;
-      document.getElementById("penaltyKeeper").classList.toggle("keeper-urgent", remaining < 800);
-      if (remaining > 0) {
-        penaltyReactRAF = requestAnimationFrame(reactFrame);
-      }
-    }
-    penaltyReactRAF = requestAnimationFrame(reactFrame);
-
-    // Recién acá, pasados los 3 segundos fijos, se hace la animación de patear
+    // Pequeño delay de contacto (gesto de pateo) — no es la ventana de
+    // reacción, es solo el tiempo que tarda la pierna en llegar a la pelota.
     penaltyReactTimer = setTimeout(() => {
       penaltyReactTimer = null;
       penaltyState = "flight";
       document.getElementById("penaltyBall").classList.remove("ball-waiting");
-      document.getElementById("penaltyKeeper").classList.remove("keeper-urgent");
+      busPlaySound("/static/audio/kickball.wav", 0.6);
 
       if (capturedPower > 95) {
         document.getElementById("penaltyStatus").textContent = "¡Se pasó de potencia!";
       } else if (capturedPower >= 85) {
-        document.getElementById("penaltyStatus").textContent = "¡Fierrazo inatajable! Arquero rezá...";
+        document.getElementById("penaltyStatus").textContent = "¡Fierrazo! Arquero, reaccioná...";
       } else {
         document.getElementById("penaltyStatus").textContent = "¡Va la pelota!";
       }
 
       launchPenaltyBall(zone, capturedPower);
-    }, 3000);
+      watchKeeperReaction();
+    }, 130);
   };
+
+  penaltyKeyHandler = (e) => {
+    if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
+    if (e.repeat) return;
+    const zone = PENALTY_ZONES[e.key.toLowerCase()];
+    if (!zone) return;
+
+    if (penaltyState === "aiming") {
+      doKick(zone);
+    } else if (penaltyState === "flight" && !penaltyKeeperZone) {
+      const elapsed = performance.now() - penaltyFlightStartTime;
+      if (elapsed > penaltyReactionCutoffMs) {
+        penaltyKeeperTooSlow = true;
+        return; // se durmió, ya no llega
+      }
+      penaltyKeeperZone = zone;
+      const lateFrac = elapsed / penaltyReactionCutoffMs; // 0 (reflejo) -> 1 (al límite)
+      diveKeeper(zone, lateFrac > 0.72);
+    }
+  };
+  window.addEventListener("keydown", penaltyKeyHandler);
+}
+
+function watchKeeperReaction() {
+  function tick(now) {
+    if (penaltyState !== "flight" || penaltyKeeperZone) {
+      if (penaltyState === "flight") document.getElementById("penaltyReactionTimer").classList.remove("show");
+      penaltyReactRAF = null;
+      return;
+    }
+    const elapsed = now - penaltyFlightStartTime;
+    const remaining = Math.max(0, penaltyReactionCutoffMs - elapsed);
+    const frac = remaining / penaltyReactionCutoffMs;
+
+    const timer = document.getElementById("penaltyReactionTimer");
+    timer.classList.add("show");
+    document.getElementById("penaltyReactionFill").style.transform = `scaleX(${Math.max(0, frac).toFixed(3)})`;
+    document.getElementById("penaltyKeeper").classList.toggle("keeper-urgent", frac < 0.3 && frac > 0);
+
+    if (remaining > 0) {
+      penaltyReactRAF = requestAnimationFrame(tick);
+    } else {
+      penaltyReactRAF = null;
+      document.getElementById("penaltyKeeper").classList.remove("keeper-urgent");
+      timer.classList.remove("show");
+      penaltyKeeperTooSlow = true;
+    }
+  }
+  penaltyReactRAF = requestAnimationFrame(tick);
+}
 
   penaltyKeyHandler = (e) => {
     if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
@@ -1248,98 +1357,140 @@ function penaltyCenterOf(el) {
 
 function launchPenaltyBall(zone, power) {
   const ball = document.getElementById("penaltyBall");
+  const ballCore = ball.querySelector(".ball-core");
   const goal = document.getElementById("penaltyGoal");
-  const pitchRect = document.querySelector(".penalty-pitch").getBoundingClientRect();
+  const pitch = document.querySelector(".penalty-pitch");
+  const pitchRect = pitch.getBoundingClientRect();
   const goalRect = goal.getBoundingClientRect();
   const start = penaltyCenterOf(ball);
-  
+
   let pos = { ...PENALTY_ZONE_POS[zone] };
-  
-  // Si se pasó de 95%, la manda a la tribuna (Y negativo)
-  if (power > 95) pos.y = -0.5;
+  if (power > 95) pos.y = -0.5; // a la tribuna
 
   const target = {
     x: goalRect.left - pitchRect.left + goalRect.width * pos.x,
     y: goalRect.top - pitchRect.top + goalRect.height * pos.y,
   };
-  const dx = target.x - start.x;
-  const dy = target.y - start.y;
+
+  // Punto señuelo: la pelota apunta primero acá, no al rincón real,
+  // para que mirar la pantalla no delate el tiro antes de tiempo.
+  const decoy = {
+    x: start.x + (target.x - start.x) * 0.22,
+    y: start.y + (target.y - start.y) * 0.55 - 30,
+  };
 
   const { duration, revealFrac } = penaltyShotTiming(power);
+  const durS = duration / 1000;
+  const revealAtS = durS * revealFrac;
 
-  ball.classList.add("spinning-ball");
+  // Estado físico real: posición + velocidad, integrados con gravedad
+  // frame a frame (no interpolación de "% recorrido"). curveAccel/curveMax
+  // quedan listos para la comba lateral que se va a sumar más adelante.
+  const phys = { x: start.x, y: start.y, vx: 0, vy: 0, curveAccel: 0, curveMax: 260 };
+
+  function aimAt(dest, timeLeft) {
+    phys.vx = (dest.x - phys.x) / timeLeft;
+    phys.vy = ((dest.y - phys.y) - 0.5 * PENALTY_GRAVITY * timeLeft * timeLeft) / timeLeft;
+  }
+  aimAt(decoy, Math.max(0.05, revealAtS));
+
+  let reAimed = false;
   const startTime = performance.now();
   penaltyFlightStartTime = startTime;
-  let trailTick = 0;
-
-  // Hasta revealFrac la pelota casi no se desvía (no delata el rincón);
-  // después "quiebra" fuerte hacia el destino real, como un tiro con
-  // comba. Esto es lo que hace que mirar la pantalla no alcance para
-  // atajar todo - hay que jugársela antes de ver el quiebre.
-  function revealEase(t) {
-    if (t <= revealFrac) {
-      return 0.16 * (t / revealFrac);
-    }
-    const local = (t - revealFrac) / (1 - revealFrac);
-    return 0.16 + 0.84 * (1 - Math.pow(1 - local, 3));
-  }
+  let lastT = startTime;
+  let trailAccum = 0;
+  let spin = 0;
 
   function frame(now) {
-    const t = Math.min((now - startTime) / duration, 1);
-    const prog = revealEase(t);
-    const lift = prefersReducedMotion ? 0 : Math.sin(t * Math.PI) * (power > 95 ? -60 : -22);
-    const scale = 1 - 0.4 * prog;
+    const dt = Math.min((now - lastT) / 1000, 0.032);
+    lastT = now;
+    const elapsedS = (now - startTime) / 1000;
+
+    if (!reAimed && elapsedS >= revealAtS) {
+      reAimed = true;
+      aimAt(target, Math.max(0.05, durS - elapsedS));
+    }
+
+    // Paso de física real: gravedad + velocidad.
+    phys.vy += PENALTY_GRAVITY * dt;
+    // Acá en el futuro: phys.vx += clamp(phys.curveAccel * dt, -curveMax, curveMax);
+    phys.x += phys.vx * dt;
+    phys.y += phys.vy * dt;
+
+    const dxNow = phys.x - start.x;
+    const dyNow = phys.y - start.y;
+    const speed = Math.hypot(phys.vx, phys.vy);
+    const scale = Math.max(0.55, 1 - (elapsedS / durS) * 0.4);
 
     ball.style.transform =
-      `translate(calc(-50% + ${(dx * prog).toFixed(1)}px), ${(dy * prog + lift).toFixed(1)}px) scale(${scale.toFixed(2)})`;
-    trailTick++;
-    if (!prefersReducedMotion && t < 1 && trailTick % 2 === 0) {
-      spawnBallTrail(ball);
+      `translate(calc(-50% + ${dxNow.toFixed(1)}px), ${dyNow.toFixed(1)}px) scale(${scale.toFixed(2)})`;
+
+    // Giro sobre su propio eje, coherente con la velocidad — en un
+    // elemento hijo aparte, para que nunca compita con la posición.
+    spin += speed * dt * 0.6;
+    ballCore.style.transform = `rotate(${(spin % 360).toFixed(0)}deg)`;
+
+    trailAccum += dt;
+    if (!prefersReducedMotion && trailAccum > 0.024) {
+      trailAccum = 0;
+      spawnBallTrail(ball, phys.vx, phys.vy);
     }
-    if (t < 1) {
+
+    if (elapsedS < durS) {
       penaltyFlightRAF = requestAnimationFrame(frame);
     } else {
       penaltyFlightRAF = null;
-      resolvePenaltyShot(zone, power);
+      resolvePenaltyShot(zone, power, phys);
     }
   }
   penaltyFlightRAF = requestAnimationFrame(frame);
 }
 
-function resolvePenaltyShot(kickZone, power) {
+function resolvePenaltyShot(kickZone, power, phys) {
   penaltyState = "done";
   teardownPenaltyRound();
-  document.getElementById("penaltyBall").classList.remove("spinning-ball");
   const goal = document.getElementById("penaltyGoal");
+  const pitch = document.querySelector(".penalty-pitch");
+  const impactX = phys ? phys.x : 0;
+  const impactY = phys ? phys.y : 0;
   let scored, flavor;
 
   const saved = penaltyKeeperZone === kickZone;
 
   if (power > 95) {
-    // 1. Se pasó de rosca: siempre afuera
     document.getElementById("penaltyStatus").textContent = "¡Afuera!";
     showPenaltyStamp("¡A LA TRIBUNA!", "stamp-out");
     scored = false;
     flavor = "¡Se llenó de pelota y la mandó a la calle!";
   } else if (saved) {
-    // 2. El arquero adivinó el rincón: ATAJADA (incluso si era fierrazo)
     document.getElementById("penaltyStatus").textContent = "¡Atajada!";
-    showPenaltyStamp("¡ATAJADA!", "stamp-save");
     scored = false;
+    if (penaltyKeeperStretch) {
+      showPenaltyStamp("¡LA SACÓ COMO PUDO!", "stamp-save stamp-stretch");
+      busPlaySound("/static/audio/dash.wav", 0.6);
+      pitch.classList.add("shake");
+      setTimeout(() => pitch.classList.remove("shake"), 350);
+    } else {
+      showPenaltyStamp("¡ATAJADA!", "stamp-save");
+      busPlaySound("/static/audio/card-pickup.wav", 0.55);
+    }
+    spawnImpactBurst(impactX, impactY, "#f2efe6");
     if (power >= 85) {
       flavor = "¡MANO DE DIOS! Le sacó un fierrazo tremendo del ángulo.";
     } else {
       flavor = PENALTY_SAVE_FLAVORS[Math.floor(Math.random() * PENALTY_SAVE_FLAVORS.length)];
     }
   } else {
-    // 3. El arquero no llegó o fue al otro palo: GOL
     goal.classList.add("net-ripple");
     setTimeout(() => goal.classList.remove("net-ripple"), 450);
+    spawnImpactBurst(impactX, impactY, "#f2efe6");
 
     if (power >= 85) {
       document.getElementById("penaltyStatus").textContent = "¡GOLAZO!";
       showPenaltyStamp("¡GOLAZO!", "stamp-goal");
       flavor = "¡Le rompió el arco! Fierrazo inatajable.";
+      pitch.classList.add("shake");
+      setTimeout(() => pitch.classList.remove("shake"), 350);
     } else {
       document.getElementById("penaltyStatus").textContent = "¡GOL!";
       showPenaltyStamp("¡GOL!", "stamp-goal");
@@ -1409,7 +1560,7 @@ function updateTurnBanner() {
   const kickerName = shootout.currentKicker === "challenger" ? shootout.challengerName : shootout.championName;
   const keeperName = shootout.currentKicker === "challenger" ? shootout.championName : shootout.challengerName;
   const banner = document.getElementById("penaltyTurnBanner");
-  banner.textContent = `⚽ Patea ${kickerName} — ataja ${keeperName}`;
+  banner.textContent = `Patea ${kickerName} — ataja ${keeperName}`;
   banner.classList.remove("pop");
   void banner.offsetWidth;
   banner.classList.add("pop");
