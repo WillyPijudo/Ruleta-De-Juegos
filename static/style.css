@@ -891,7 +891,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   justify-content: center;
   box-shadow: 0 3px 0 rgba(0,0,0,0.5), 0 4px 8px rgba(0,0,0,0.4);
 }
-.key-mean { font-size: 13px; color: var(--text); }
+.key-badge-combo { font-size: 11px; letter-spacing: -1px; padding: 0 4px; }
 
 /* mini goal diagram used in the penalty intro screen */
 .zone-legend {
