@@ -1175,17 +1175,19 @@ input[type="text"]::placeholder { color: var(--text-muted); }
     repeating-linear-gradient(90deg, rgba(255,255,255,0.22) 0 1px, transparent 1px 11px),
     repeating-linear-gradient(0deg, rgba(255,255,255,0.22) 0 1px, transparent 1px 11px);
   opacity: 0.8;
-  transform-origin: center top;
+  transform-origin: var(--impact-x, 50%) var(--impact-y, 25%);
   transition: transform 0.35s cubic-bezier(0.3, 1.4, 0.4, 1);
 }
 .goal.net-ripple .net {
-  transform: scaleY(1.06) translateY(3px);
-  animation: net-shake 0.4s ease;
+  animation: net-shake 0.45s cubic-bezier(.34, 1.4, .4, 1);
   z-index: 5; /* FIX profundidad: la malla ahora tapa a la pelota mientras se hunde adentro */
 }
 @keyframes net-shake {
-  0%, 100% { filter: brightness(1); }
-  30% { filter: brightness(1.6); }
+  0%   { transform: scale(1); filter: brightness(1); }
+  22%  { transform: scale(0.9, 0.94); filter: brightness(1.75); }
+  55%  { transform: scale(1.06, 1.03); filter: brightness(1.15); }
+  80%  { transform: scale(0.98, 1); filter: brightness(1); }
+  100% { transform: scale(1); filter: brightness(1); }
 }
 
 .keeper {
@@ -1558,15 +1560,28 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   width: 46px; height: 46px;
   margin-left: -23px; margin-top: -23px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(0,0,0,0.45), rgba(0,0,0,0) 70%);
+  background: radial-gradient(circle, rgba(0,0,0,0.5), rgba(0,0,0,0) 70%);
   z-index: 5;
   pointer-events: none;
-  animation: net-bulge-pop 0.4s ease-out forwards;
+  animation: net-bulge-pop 0.45s ease-out forwards;
+}
+.net-bulge::after {
+  content: "";
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.5);
+  opacity: 0;
+  animation: net-ring-pop 0.5s ease-out forwards;
 }
 @keyframes net-bulge-pop {
   0%   { transform: scale(0.3); opacity: 0; }
-  35%  { transform: scale(1.15); opacity: 0.9; }
-  100% { transform: scale(1.5); opacity: 0; }
+  35%  { transform: scale(1.15); opacity: 0.95; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+@keyframes net-ring-pop {
+  0%   { transform: scale(0.4); opacity: 0.8; }
+  100% { transform: scale(1.8); opacity: 0; }
 }
 
 
