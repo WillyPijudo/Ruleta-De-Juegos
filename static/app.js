@@ -979,10 +979,24 @@ function finishRps() {
    corners with the same keys. Flight time is tuned so a save is
    possible but not trivial. */
 
-const PENALTY_ZONES = {
-  a: "bl", s: "bc", d: "br",
-  arrowleft: "tl", arrowup: "tc", arrowright: "tr",
+// Controles por combos: 4 teclas lógicas (no 6), funcionan WASD o flechas
+// indistintamente. Vertical = fila (obligatoria), horizontal = modificador
+// opcional que apunta al palo. Solo vertical = al medio.
+const PENALTY_KEY_TO_DIR = {
+  arrowup: "up", w: "up",
+  arrowdown: "down", s: "down",
+  arrowleft: "left", a: "left",
+  arrowright: "right", d: "right",
 };
+const PENALTY_COMBO_WINDOW_MS = 70; // margen para que 2 teclas cuenten como un solo combo
+
+function penaltyZoneFromDirs(dirs) {
+  const vertical = dirs.has("up") ? "up" : dirs.has("down") ? "down" : null;
+  if (!vertical) return null;
+  const horizontal = dirs.has("left") ? "left" : dirs.has("right") ? "right" : null;
+  if (vertical === "up") return horizontal === "left" ? "tl" : horizontal === "right" ? "tr" : "tc";
+  return horizontal === "left" ? "bl" : horizontal === "right" ? "br" : "bc";
+}
 const PENALTY_ZONE_POS = {
   bl: { x: 0.15, y: 0.86 }, bc: { x: 0.5, y: 0.90 }, br: { x: 0.85, y: 0.86 },
   tl: { x: 0.15, y: 0.28 }, tc: { x: 0.5, y: 0.20 }, tr: { x: 0.85, y: 0.28 },
@@ -1029,6 +1043,7 @@ let penaltyReactionCutoffMs = 700;
 let penaltyAimStartTime = 0;
 let penaltyReactTimer = null;
 let penaltyRoundTimeout = null;
+let penaltyKeeperLateFrac = 0;
 let shootout = null;
 
 /**
@@ -1289,7 +1304,9 @@ function resetPenaltyUI() {
   const keeperEl = document.getElementById("penaltyKeeper");
   keeperEl.className = "keeper";
   keeperEl.style.animationDuration = "";
-  document.getElementById("penaltyKeeperShadow").style.animationDuration = "";
+  const shadowEl = document.getElementById("penaltyKeeperShadow");
+  shadowEl.className = "keeper-shadow"; // FIX: sin esto, desde la ronda 2 la sombra no reinicia su animación
+  shadowEl.style.animationDuration = "";
   document.getElementById("penaltyGoal").classList.remove("net-ripple");
   document.getElementById("penaltyStamp").className = "penalty-stamp";
   const trophy = document.getElementById("trophyBurst");
@@ -1369,10 +1386,13 @@ function startPenaltyRound() {
     }, 260);
   };
 
-  penaltyKeyHandler = (e) => {
-    if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
-    if (e.repeat) return;
-    const zone = PENALTY_ZONES[e.key.toLowerCase()];
+  const penaltyHeldDirs = new Set();
+  let penaltyComboTimer = null;
+
+  const resolvePenaltyCombo = () => {
+    penaltyComboTimer = null;
+    const zone = penaltyZoneFromDirs(penaltyHeldDirs);
+    penaltyHeldDirs.clear();
     if (!zone) return;
 
     if (penaltyState === "aiming") {
@@ -1395,6 +1415,19 @@ function startPenaltyRound() {
       const remainingMs = Math.max(140, penaltyFlightDurationMs - elapsed);
       diveKeeper(zone, penaltyKeeperLateFrac > 0.72, remainingMs);
     }
+  };
+
+  penaltyKeyHandler = (e) => {
+    if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
+    if (e.repeat) return;
+    const dir = PENALTY_KEY_TO_DIR[e.key.toLowerCase()];
+    if (!dir) return;
+    if (penaltyState !== "aiming" && penaltyState !== "kicking" &&
+        !(penaltyState === "flight" && !penaltyKeeperZone)) return;
+
+    penaltyHeldDirs.add(dir);
+    clearTimeout(penaltyComboTimer);
+    penaltyComboTimer = setTimeout(resolvePenaltyCombo, PENALTY_COMBO_WINDOW_MS);
   };
   window.addEventListener("keydown", penaltyKeyHandler);
 }
