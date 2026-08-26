@@ -800,6 +800,34 @@ function closeDuelSelect() {
   document.getElementById("duelSelectModal").classList.add("hidden");
 }
 
+
+/* ---------- Challenger name modal (reemplaza al prompt() nativo) ---------- */
+
+function openChallengerNameModal(championName) {
+  document.getElementById("challengerChampionName").textContent = championName;
+  const input = document.getElementById("challengerNameInput");
+  input.value = "";
+  updateChallengerPreview();
+  document.getElementById("challengerNameModal").classList.remove("hidden");
+  setTimeout(() => input.focus(), 60);
+}
+
+function updateChallengerPreview() {
+  const val = document.getElementById("challengerNameInput").value.trim();
+  const preview = document.getElementById("challengerPreview");
+  preview.textContent = "🙋 " + (val || "Retador");
+  preview.classList.remove("challenger-preview-pop");
+  void preview.offsetWidth; // fuerza reflow para poder repetir la animación
+  preview.classList.add("challenger-preview-pop");
+}
+
+function confirmChallengerName() {
+  const val = document.getElementById("challengerNameInput").value.trim();
+  pendingChallengerName = val || "Retador";
+  document.getElementById("challengerNameModal").classList.add("hidden");
+  openDuelSelect();
+}
+
 /* ---------------- RPS duel ----------------
    Now opens on an intro screen first (big key legend, no timer) so
    nobody gets ambushed by a countdown before they've even read the
@@ -1504,11 +1532,29 @@ document.addEventListener("DOMContentLoaded", () => {
     const championName = (currentWinnerGame && currentWinnerGame.added_by) || "Campeón";
     let challenger = (playerNameInput.value || "").trim();
     if (!challenger || challenger.toLowerCase() === championName.toLowerCase()) {
-      challenger = (prompt(`¿Quién desafía a ${championName}?`, "") || "").trim();
+      openChallengerNameModal(championName);
+      return;
     }
     pendingChallengerName = challenger || "Retador";
     openDuelSelect();
   });
+
+  document.getElementById("challengerNameInput").addEventListener("input", (e) => {
+    updateChallengerPreview();
+    e.target.classList.remove("challenger-input-bump");
+    void e.target.offsetWidth;
+    e.target.classList.add("challenger-input-bump");
+    playTick();
+  });
+  document.getElementById("challengerNameInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); confirmChallengerName(); }
+  });
+  document.getElementById("challengerConfirmBtn").addEventListener("click", confirmChallengerName);
+  document.getElementById("challengerCancelBtn").addEventListener("click", () => {
+    document.getElementById("challengerNameModal").classList.add("hidden");
+  });
+
+    
   document.getElementById("closeDuelSelectModal").addEventListener("click", closeDuelSelect);
   document.getElementById("pickRpsBtn").addEventListener("click", () => {
     closeDuelSelect();
