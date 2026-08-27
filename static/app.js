@@ -5261,19 +5261,20 @@ const HS_JUMP_VY = -680;
 const HS_GOAL_W = 44;
 const HS_GOAL_H = 150;
 const HS_WALL_RESTITUTION = 0.7;
-const HS_GROUND_RESTITUTION = 0.6;
+const HS_GROUND_RESTITUTION = 0.55; // un poco menos elástica, pesa más al pisar
 const HS_CEIL_RESTITUTION = 0.6;
-const HS_AIR_DRAG = 0.999;
+const HS_AIR_DRAG = 0.994; // antes casi no frenaba en el aire (0.999) — ahora se siente el peso
 const HS_BOOT_W = 42;
 const HS_BOOT_H = 20;
 const HS_LEG_LEN = 52;            // radio del péndulo: distancia FIJA cabeza -> botín
 const HS_BOOT_REST_ANGLE = 1.7;   // reposo: abajo y un poco atrás (rad, 0 = derecha, PI/2 = abajo)
 const HS_BOOT_MAX_ANGLE = -0.55;  // pateando a fondo: adelante y por ARRIBA de la cabeza (rad)
-const HS_KICK_POWER = 760;
-const HS_HEAD_POWER = 620;
+const HS_KICK_POWER = 640;
+const HS_HEAD_POWER = 520;
 const HS_GOALS_TO_WIN = 5;
 const HS_TIME_SECONDS = 60;
-const HS_MAX_BALL_SPEED = 1450;
+const HS_MAX_BALL_SPEED = 1100;
+const HS_PLAYER_PUSH = 40; // fuerza del empujón cuando dos jugadores chocan de verdad
 const HS_BOOT_EXTEND_TIME = 0.34;      // seg. para llegar a la extensión máxima manteniendo la tecla
 const HS_BOOT_RETRACT_TIME = 0.5;      // seg. para volver a reposo al soltar (de a poco, no de golpe)
 const HS_BOOT_STRIKE_THRESHOLD = 0.4;  // a partir de acá el botín ya pega con potencia real
@@ -5595,6 +5596,7 @@ function hsLoop(now) {
 
   hsUpdatePlayer(hsState.left, dt, HS_KEYS_LEFT, now);
   hsUpdatePlayer(hsState.right, dt, HS_KEYS_RIGHT, now);
+  hsResolvePlayers();
 
   // Sub-pasos de física de la pelota: a alta velocidad, un solo dt grande
   // puede mover la pelota más de lo que mide una cabeza/botín en un frame,
@@ -5693,7 +5695,7 @@ function hsClampBallVelocity(b) {
 
 function hsUpdateBall(dt) {
   const b = hsState.ball;
-  b.vy += HS_GRAVITY * 0.72 * dt;
+  b.vy += HS_GRAVITY * dt; // antes tenía un *0.72 que la hacía sentir liviana/flotante
   b.x += b.vx * dt;
   b.y += b.vy * dt;
   b.vx *= HS_AIR_DRAG;
@@ -5800,6 +5802,32 @@ function hsResolveCollisions(now) {
 
   hsCheckGoal();
 }
+
+
+// Los jugadores ahora son sólidos entre sí: si sus cabezas se acercan
+// demasiado, se separan a mitad y mitad + un empujoncito de velocidad,
+// como un choque de verdad. De paso esto arregla que el botín de uno
+// quedara visualmente "encajado" en el cuello del otro cuando se pisaban.
+function hsResolvePlayers() {
+  const a = hsState.left, b = hsState.right;
+  const aCY = a.y - HS_HEAD_OFFSET, bCY = b.y - HS_HEAD_OFFSET;
+  const dx = b.x - a.x;
+  const dy = bCY - aCY;
+  const dist = Math.hypot(dx, dy) || 0.001;
+  const minDist = HS_HEAD_R * 2 + 6;
+  if (dist < minDist) {
+    const nx = dx / dist;
+    const overlap = minDist - dist;
+    a.x -= nx * overlap * 0.5;
+    b.x += nx * overlap * 0.5;
+    a.vx -= nx * HS_PLAYER_PUSH;
+    b.vx += nx * HS_PLAYER_PUSH;
+    a.x = Math.max(HS_HEAD_R + 4, Math.min(HS_CANVAS_W - HS_HEAD_R - 4, a.x));
+    b.x = Math.max(HS_HEAD_R + 4, Math.min(HS_CANVAS_W - HS_HEAD_R - 4, b.x));
+  }
+}
+
+
 
 function hsCheckGoal() {
   const b = hsState.ball;
@@ -5926,24 +5954,79 @@ function hsDrawField() {
   ctx.arc(HS_CANVAS_W / 2, HS_CANVAS_H - 4, 50, Math.PI, 0);
   ctx.stroke();
 
-  // Arcos con red de verdad (crosshatch), no un rectángulo traslúcido
+  // Arcos con profundidad real: panel de fondo en perspectiva (se angosta
+  // hacia adentro) + pared lateral con sombra/luz + red de fondo. La red
+  // de ADELANTE se dibuja aparte, después de la pelota (ver hsDrawGoalFronts) —
+  // así lo que entra al arco se ve realmente "adentro", no encima de una imagen plana.
+  const goalDepth = 16;
   [0, HS_CANVAS_W - HS_GOAL_W].forEach((gx, i) => {
     const isLeft = i === 0;
-    ctx.fillStyle = "rgba(255,255,255,0.05)";
-    ctx.fillRect(gx, HS_PITCH_Y - HS_GOAL_H, HS_GOAL_W, HS_GOAL_H);
-    ctx.strokeStyle = "rgba(255,255,255,0.26)";
+    const topY = HS_PITCH_Y - HS_GOAL_H;
+    const innerX = isLeft ? gx + HS_GOAL_W - goalDepth : gx + goalDepth;
+
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.beginPath();
+    ctx.moveTo(gx + (isLeft ? 0 : HS_GOAL_W), topY);
+    ctx.lineTo(innerX, topY + goalDepth * 0.6);
+    ctx.lineTo(innerX, HS_PITCH_Y - goalDepth * 0.3);
+    ctx.lineTo(gx + (isLeft ? 0 : HS_GOAL_W), HS_PITCH_Y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = isLeft ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.22)";
+    ctx.beginPath();
+    ctx.moveTo(gx + (isLeft ? HS_GOAL_W : 0), topY);
+    ctx.lineTo(innerX, topY + goalDepth * 0.6);
+    ctx.lineTo(innerX, HS_PITCH_Y - goalDepth * 0.3);
+    ctx.lineTo(gx + (isLeft ? HS_GOAL_W : 0), HS_PITCH_Y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(255,255,255,0.22)";
     ctx.lineWidth = 1;
-    for (let ny = HS_PITCH_Y - HS_GOAL_H + 8; ny < HS_PITCH_Y; ny += 10) {
+    for (let ny = topY + 8; ny < HS_PITCH_Y; ny += 10) {
       ctx.beginPath(); ctx.moveTo(gx + 2, ny); ctx.lineTo(gx + HS_GOAL_W - 2, ny); ctx.stroke();
     }
     for (let nx = gx + 6; nx < gx + HS_GOAL_W; nx += 10) {
-      ctx.beginPath(); ctx.moveTo(nx, HS_PITCH_Y - HS_GOAL_H + 2); ctx.lineTo(nx, HS_PITCH_Y - 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(nx, topY + 2); ctx.lineTo(nx, HS_PITCH_Y - 2); ctx.stroke();
     }
+
     ctx.strokeStyle = "#f0ece2";
     ctx.lineWidth = 5;
-    ctx.strokeRect(gx + (isLeft ? 2 : 0), HS_PITCH_Y - HS_GOAL_H, HS_GOAL_W - 2, HS_GOAL_H);
+    ctx.strokeRect(gx + (isLeft ? 2 : 0), topY, HS_GOAL_W - 2, HS_GOAL_H);
+    ctx.strokeStyle = "rgba(255,255,255,0.55)";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(gx + (isLeft ? 3 : 1), topY + 2);
+    ctx.lineTo(gx + (isLeft ? 3 : 1), HS_PITCH_Y - 2);
+    ctx.stroke();
   });
 }
+
+
+// Red delantera: se dibuja DESPUÉS de la pelota y los jugadores, recortada
+// (clip) al área del arco. Cuando la pelota entra a hacer el gol, estas
+// líneas quedan por encima de ella — ahí es donde se nota que está
+// "adentro" de la red y no flotando arriba de una imagen de fondo.
+function hsDrawGoalFronts() {
+  const ctx = hsCtx;
+  [0, HS_CANVAS_W - HS_GOAL_W].forEach((gx) => {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(gx, HS_PITCH_Y - HS_GOAL_H, HS_GOAL_W, HS_GOAL_H);
+    ctx.clip();
+    ctx.strokeStyle = "rgba(255,255,255,0.5)";
+    ctx.lineWidth = 1.4;
+    for (let ny = HS_PITCH_Y - HS_GOAL_H + 4; ny < HS_PITCH_Y; ny += 16) {
+      ctx.beginPath(); ctx.moveTo(gx - 4, ny); ctx.lineTo(gx + HS_GOAL_W + 4, ny); ctx.stroke();
+    }
+    for (let nx = gx - 4; nx < gx + HS_GOAL_W + 4; nx += 16) {
+      ctx.beginPath(); ctx.moveTo(nx, HS_PITCH_Y - HS_GOAL_H); ctx.lineTo(nx, HS_PITCH_Y); ctx.stroke();
+    }
+    ctx.restore();
+  });
+}
+
 
 function hsDrawPlayer(p) {
   const ctx = hsCtx;
@@ -5976,19 +6059,27 @@ function hsDrawPlayer(p) {
   ctx.save();
   ctx.translate(bootPose.x, bootPose.y);
   ctx.rotate(p.facing * (bootPose.extend * 0.6 - 0.15));
+  // Media/cuff — conecta visualmente con la pierna, para que no parezca
+  // una forma suelta flotando.
+  ctx.fillStyle = dark;
+  ctx.fillRect(-6, -9, 12, 8);
+  // Botín: cuña con taco redondeado atrás y punta hacia adelante.
   ctx.fillStyle = "#efe9dd";
   ctx.beginPath();
-  ctx.moveTo(-HS_BOOT_W * 0.42, -3);
-  ctx.quadraticCurveTo(-HS_BOOT_W * 0.5, 6, -HS_BOOT_W * 0.3, 8);
-  ctx.lineTo(HS_BOOT_W * (p.facing === 1 ? 0.5 : 0.32), 8);
-  ctx.quadraticCurveTo(HS_BOOT_W * (p.facing === 1 ? 0.58 : 0.4), 2, HS_BOOT_W * (p.facing === 1 ? 0.4 : 0.22), -6);
+  ctx.moveTo(-9, -2);
+  ctx.quadraticCurveTo(-12, 7, -6, 9);
+  ctx.lineTo(p.facing === 1 ? 15 : 9, 9);
+  ctx.quadraticCurveTo(p.facing === 1 ? 19 : 13, 3, p.facing === 1 ? 13 : 7, -6);
   ctx.closePath();
   ctx.fill();
   ctx.strokeStyle = "#2a2530";
   ctx.lineWidth = 1.4;
   ctx.stroke();
-  ctx.fillStyle = dark;
-  ctx.fillRect(-HS_BOOT_W * 0.42, -3, HS_BOOT_W * 0.22, 5);
+  // Suela + franja con el color del equipo (para diferenciarlos de un vistazo)
+  ctx.fillStyle = "#2a2530";
+  ctx.fillRect(-9, 6, p.facing === 1 ? 24 : 18, 3);
+  ctx.fillStyle = color;
+  ctx.fillRect(-7, -1, 8, 3);
   ctx.restore();
 
   if (bootPose.isStrike) {
@@ -6086,6 +6177,7 @@ function hsDraw() {
   hsDrawField();
   [hsState.left, hsState.right].forEach((p) => hsDrawPlayer(p));
   hsDrawBall();
+  hsDrawGoalFronts();
   ctx.restore();
 }
 
