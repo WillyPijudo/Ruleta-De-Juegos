@@ -5267,11 +5267,23 @@ const HS_FRICTION = 11;
 const HS_JUMP_VY = -600;
 const HS_GOAL_W = 50;
 const HS_GOAL_H = 175;
-const HS_WALL_RESTITUTION = 0.76;   // (antes 0.88) rebote de pared más controlado, ya no pinball loco
-const HS_GROUND_RESTITUTION = 0.84; // (antes 0.76) FIX "pelota pesada": pica alto y rápido, como una pelota liviana de verdad
-const HS_CEIL_RESTITUTION = 0.74;
-const HS_AIR_DRAG = 0.996;           // FIX pelota loca: 0.999 era casi cero roce, ahora frena un poco más natural sin dejar de viajar lejos
-const HS_BOOT_W = 46;               // (antes 66) FIX "botín más grande que la cabeza": ya no hace falta que sea gigante para tapar el hueco - de eso se encarga la cápsula de pierna (HS_LEG_RADIUS), así que ahora es un tamaño realista, más chico que la cabeza
+// ===== FÍSICA DE LA PELOTA - REDISEÑADA DE CERO =====
+// En vez de seguir parchando número por número, este es un set coherente
+// pensado como sistema: gravedad realista (arcos que se sienten con peso
+// real pero no lentos), rebotes que pierden energía de a poco (como una
+// pelota real, no una superpelota ni un ladrillo), y potencias de patada
+// calculadas para que el número de gravedad/roce de arriba tengan sentido
+// con la potencia de picada. Si algo se siente mal, decime EXACTAMENTE en
+// qué momento (¿al picar? ¿al patear? ¿en el aire?) para afinar sin tener
+// que rediseñar todo de nuevo.
+const HS_BALL_GRAVITY = 1300;       // peso real: un tiro alto tarda medio segundo en volver a bajar, no se siente ni pesado ni flotante
+// (separada de HS_GRAVITY, que es la de los jugadores/salto - así no toco
+// el salto de nuevo por accidente, como pediste)
+const HS_AIR_DRAG = 0.998;          // roce de aire mínimo - la gravedad ya se encarga del peso, no hace falta frenarla también en el aire
+const HS_GROUND_RESTITUTION = 0.62; // pica como una pelota real: pierde altura de a poco, no rebota igual de alto para siempre
+const HS_WALL_RESTITUTION = 0.68;   // rebote de pared/palo controlado
+const HS_CEIL_RESTITUTION = 0.6;
+const HS_BOOT_W = 52;               // (antes 46, +un poco para compensar la pierna más corta de arriba)
 const HS_BOOT_H = 22;                // (antes 30)
 const HS_BOOT_VISUAL_SCALE = 1.15;  // (antes 1.7, ahí estaba el problema real) con 1.7 el dibujo terminaba midiendo ~60px de ancho, casi lo mismo que el diámetro de la cabeza (72px) - por eso se veía gigante y la cabeza "achicada" en comparación
 // FIX cabeza flotando + rango de péndulo corto: subí el largo de pierna
@@ -5280,7 +5292,12 @@ const HS_BOOT_VISUAL_SCALE = 1.15;  // (antes 1.7, ahí estaba el problema real)
 // pateando (antes de esto era matemáticamente imposible que llegara). El
 // de patada también subió para más alcance real hacia adelante.
 const HS_LEG_LEN = 52;              // reposo: llega justo al piso
-const HS_LEG_LEN_KICK = 112;        // patada a fondo: bastante más alcance hacia adelante
+// FIX "el botín se va al carajo lejos de la cabeza al patear": 112 era casi
+// el TRIPLE del radio de la cabeza (36) - con la pierna tan larga, apenas
+// rotaba un poco ya se veía como si el pie saliera disparado lejos del
+// cuerpo. Ahora se estira mucho menos, se mantiene pegado y sigue dando
+// buen alcance para conectar la pelota.
+const HS_LEG_LEN_KICK = 74;         // (antes 112)
 
 // Arco de ~129°: arranca abajo/atrás tocando el piso (reposo) y termina
 // bien ADELANTE de la cabeza y un poco por arriba del centro.
@@ -5305,11 +5322,11 @@ const HS_BOOT_ROT_KICK = -0.15; // patada a fondo: pie extendido, siguiendo el p
 // para cuando la patada llegaba DILUIDA (bug del promedio de impulsos que
 // arreglamos antes). Ahora que un solo toque aplica la potencia completa,
 // hay que bajarlos - si no, hasta un toque flojo sale volando.
-const HS_KICK_POWER = 1150;       // (antes 1550)
-const HS_HEAD_POWER = 800;        // (antes 980)
+const HS_KICK_POWER = 980;        // recalibrado para la gravedad/roce nuevos
+const HS_HEAD_POWER = 700;        // recalibrado para la gravedad/roce nuevos
 const HS_GOALS_TO_WIN = 5;
 const HS_TIME_SECONDS = 60;
-const HS_MAX_BALL_SPEED = 1650;   // (antes 2200)
+const HS_MAX_BALL_SPEED = 1500;   // recalibrado para la gravedad/roce nuevos
 const HS_PLAYER_PUSH = 44;
 // FIX "el movimiento del botín es muy rápido para apuntar": con 0.15s
 // llegaba a la extensión máxima casi al instante, así que era imposible
@@ -5894,7 +5911,7 @@ function hsResolveGoalBars(b) {
 
 function hsUpdateBall(dt) {
   const b = hsState.ball;
-  b.vy += HS_GRAVITY * dt;
+  b.vy += HS_BALL_GRAVITY * dt;
   b.x += b.vx * dt;
   b.y += b.vy * dt;
   // FIX "la pelota está en el aire y de la nada cae muy rápido": el roce
@@ -5938,16 +5955,14 @@ function hsUpdateBall(dt) {
     }
   }
 
-  if (b.x - HS_BALL_R < HS_GOAL_W && !inGoalMouth) {
-    b.x = HS_GOAL_W + HS_BALL_R;
-    b.vx = Math.abs(b.vx) * HS_WALL_RESTITUTION;
-    b.squash = Math.min(1, Math.abs(b.vx) / 700);
-  }
-  if (b.x + HS_BALL_R > HS_CANVAS_W - HS_GOAL_W && !inGoalMouth) {
-    b.x = HS_CANVAS_W - HS_GOAL_W - HS_BALL_R;
-    b.vx = -Math.abs(b.vx) * HS_WALL_RESTITUTION;
-    b.squash = Math.min(1, Math.abs(b.vx) / 700);
-  }
+  // FIX BUG GRAVE (parte de por qué "la física se siente mal"): acá había
+  // una pared invisible que bloqueaba a la pelota en TODA la columna de
+  // ancho del arco (0 a HS_GOAL_W) para CUALQUIER altura por encima del
+  // travesaño - o sea, hasta el techo de la pantalla. Un tiro que pasara
+  // por arriba del arco chocaba contra la nada en pleno aire, como si
+  // hubiera un campo de fuerza. Ya no hace falta: el travesaño y los
+  // postes de abajo (hsResolveGoalBars) son los que de verdad frenan la
+  // pelota, y por arriba del arco ahora es aire libre, como corresponde.
 
   // FIX BUG "la pelota rebota abajo de la cancha y se teletransporta":
   // mientras la pelota está dentro de la boca del arco (inGoalMouth), antes
@@ -6580,30 +6595,6 @@ function hsDrawPlayer(p) {
       ctx.lineTo(bootPose.x - dirx * (6 * i + 10), bootPose.y - diry * (6 * i + 10));
       ctx.stroke();
     }
-    ctx.restore();
-  }
-
-  // NUEVO: anillo de carga arriba de la cabeza mientras mantenés la tecla de
-  // patear. Ahora que estirar el botín tarda más (HS_BOOT_EXTEND_TIME), hace
-  // falta feedback visual claro de CUÁNTA potencia llevás acumulada para
-  // poder elegir el momento justo de soltar - un toque corto (anillo casi
-  // vacío) da un puntinazo suave, aguantar hasta llenarlo del todo da el
-  // tiro más potente.
-  if (p.bootExtend > 0.04) {
-    const ringR = HS_HEAD_R + 12;
-    ctx.save();
-    ctx.globalAlpha = 0.85;
-    ctx.strokeStyle = "rgba(255,255,255,0.18)";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(headCX, headCY, ringR, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.strokeStyle = p.bootExtend > HS_BOOT_STRIKE_THRESHOLD ? "#ff5f5f" : color;
-    ctx.lineWidth = 4;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.arc(headCX, headCY, ringR, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p.bootExtend);
-    ctx.stroke();
     ctx.restore();
   }
 
