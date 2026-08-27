@@ -5249,7 +5249,11 @@ function gmbSetupTouchZone(zoneId, joyId, dashBtnId, kickBtnId, side) {
 
 const HS_GRAVITY = 820;           // (antes 1380) MUCHO menos: la pelota flota y se puede mandar a volar de verdad
 const HS_HEAD_R = 36;
-const HS_HEAD_OFFSET = 56;
+// FIX "cabeza flotando": bajado de 56 a 46 - antes ni el botín estirado al
+// máximo llegaba a tocar el piso a este offset (le faltaban matemáticamente
+// 16px). Ahora, combinado con el nuevo HS_LEG_LEN de más abajo, el botín SÍ
+// toca el piso en reposo.
+const HS_HEAD_OFFSET = 46;
 const HS_BALL_R = 15;
 const HS_MOVE_ACCEL = 2500;
 const HS_MAX_SPEED = 350;
@@ -5264,15 +5268,17 @@ const HS_AIR_DRAG = 0.999;          // (antes 0.996) casi sin roce de aire: los 
 const HS_BOOT_W = 66;
 const HS_BOOT_H = 30;
 const HS_BOOT_VISUAL_SCALE = 1.7;   // botín vectorial más grande y presente
-const HS_LEG_LEN = 40;              // reposo: pierna corta, botín bien pegado a la cabeza
-const HS_LEG_LEN_KICK = 92;         // NUEVO: al patear a fondo la pierna se ESTIRA hacia adelante (antes el radio era fijo en 50, por eso el péndulo se sentía corto)
+// FIX cabeza flotando + rango de péndulo corto: subí el largo de pierna
+// (reposo Y patada) y recalculé el ángulo de reposo para que, con el nuevo
+// HS_HEAD_OFFSET, el botín quede EXACTO tocando el piso cuando no estás
+// pateando (antes de esto era matemáticamente imposible que llegara). El
+// de patada también subió para más alcance real hacia adelante.
+const HS_LEG_LEN = 52;              // reposo: llega justo al piso
+const HS_LEG_LEN_KICK = 112;        // patada a fondo: bastante más alcance hacia adelante
 
-// FIX "el péndulo tiene poco rango y no llega adelante de la cabeza": antes
-// iba de 1.98rad a 0.25rad (arco de sólo ~99°, casi todo abajo y atrás).
-// Ahora el arco es de ~157°: arranca bien atrás/abajo (reposo, pegado al
-// piso) y termina ADELANTE de la cabeza, casi a la altura del centro
-// (nunca arriba del todo, pero con mucho más alcance y "windmill" real).
-const HS_BOOT_REST_ANGLE = 2.35;
+// Arco de ~129°: arranca abajo/atrás tocando el piso (reposo) y termina
+// bien ADELANTE de la cabeza y un poco por arriba del centro.
+const HS_BOOT_REST_ANGLE = 2.0;
 const HS_BOOT_MAX_ANGLE = -0.25;
 const HS_LEG_RADIUS = 24;
 const HS_KICK_POWER = 1550;       // (antes 920) para mandarla a volar de verdad
@@ -5584,7 +5590,7 @@ function hsRenderPickScreen() {
   const { championName, challengerName } = hsNames();
   document.getElementById("headPickerName").textContent =
     hsPickState.step === 1 ? championName : challengerName;
-  document.querySelectorAll("#headPick .fight-pick-card").forEach((card) => {
+  document.querySelectorAll("#headPick .hs-pick-card").forEach((card) => {
     const taken = hsPickState.step === 2 && card.dataset.head === hsPickState.leftHead;
     card.classList.toggle("hs-head-taken", taken);
     card.disabled = taken;
@@ -5894,78 +5900,99 @@ function hsResolveCollisions(now) {
   let vxSum = 0, vySum = 0, hits = 0;
 
   [hsState.left, hsState.right].forEach((p) => {
-    // Cabeza: círculo contra círculo, con empuje extra hacia arriba (cabezazo real).
     const headCX = p.x;
     const headCY = p.y - HS_HEAD_OFFSET;
-    const dx = b.x - headCX;
-    const dy = b.y - headCY;
-    const dist = Math.hypot(dx, dy) || 0.001;
-    const minDist = HS_HEAD_R + HS_BALL_R;
-    if (dist < minDist) {
-      const nx = dx / dist, ny = dy / dist;
-      b.x = headCX + nx * minDist;
-      b.y = headCY + ny * minDist;
-      const speedIn = Math.hypot(b.vx, b.vy);
-      const power = Math.max(HS_HEAD_POWER, Math.min(speedIn * 1.1, HS_HEAD_POWER * 1.6));
-      vxSum += nx * power + p.vx * 0.5;
-      vySum += ny * power - 60;
-      hits++;
-      if (!p.headCoolUntil || now > p.headCoolUntil) {
-        p.headCoolUntil = now + 180;
+    const bootPose = hsBootPose(p);
+
+    // FIX "pelota pesada": antes cabeza + botín + pierna podían pegarle a
+    // la pelota LOS TRES en el mismo frame (se solapan geométricamente
+    // cerca del pivote, sobre todo durante una patada), y como todo se
+    // promediaba junto, UNA sola patada terminaba diluida entre 2-3
+    // impulsos - un tiro a fondo (1550 de potencia) aplicaba apenas un
+    // tercio de eso. Ahora cada jugador aporta UN SOLO impulso por frame
+    // (se prioriza patada > cabezazo > toque pasivo > pierna); la
+    // separación de posición se sigue resolviendo igual para las tres
+    // formas, solo el empujón de velocidad es único.
+    let applied = false;
+
+    if (!applied) {
+      const reach = bootPose.isStrike ? HS_KICK_REACH : HS_BOOT_W * 0.5;
+      const bdx = b.x - bootPose.x, bdy = b.y - bootPose.y;
+      const bdist = Math.hypot(bdx, bdy) || 0.001;
+      const minBootDist = reach + HS_BALL_R * 0.7;
+      if (bdist < minBootDist) {
+        const nx = bdx / bdist, ny = bdy / bdist;
+        b.x = bootPose.x + nx * minBootDist;
+        b.y = bootPose.y + ny * minBootDist;
+        if (bootPose.isStrike) {
+          const kickT = Math.max(0, Math.min(1,
+            (bootPose.extend - HS_BOOT_STRIKE_THRESHOLD) / (1 - HS_BOOT_STRIKE_THRESHOLD)));
+          const power = HS_KICK_POWER * (0.75 + 0.45 * kickT);
+          vxSum += p.facing * power + p.vx * 0.4;
+          vySum += -260 - 60 * kickT + ny * 120;
+          hits++;
+          applied = true;
+          if (!p.bootCoolUntil || now > p.bootCoolUntil) {
+            p.bootCoolUntil = now + HS_KICK_COOLDOWN;
+            busPlaySound("/static/audio/kickball.wav", 0.6);
+          }
+        }
       }
     }
 
-    // Botín: ahora es un péndulo, así que el hitbox es un círculo alrededor
-    // de su posición actual (bootPose.x/y) — no un rectángulo fijo, porque
-    // el botín ya no se mueve en línea recta.
-    const bootPose = hsBootPose(p);
-    const reach = bootPose.isStrike ? HS_KICK_REACH : HS_BOOT_W * 0.5;
-    const bdx = b.x - bootPose.x, bdy = b.y - bootPose.y;
-    const bdist = Math.hypot(bdx, bdy) || 0.001;
-    const minBootDist = reach + HS_BALL_R * 0.7;
-    if (bdist < minBootDist) {
-      const nx = bdx / bdist, ny = bdy / bdist;
-      b.x = bootPose.x + nx * minBootDist;
-      b.y = bootPose.y + ny * minBootDist;
-      if (bootPose.isStrike) {
-        const kickT = Math.max(0, Math.min(1,
-          (bootPose.extend - HS_BOOT_STRIKE_THRESHOLD) / (1 - HS_BOOT_STRIKE_THRESHOLD)));
-        const power = HS_KICK_POWER * (0.75 + 0.45 * kickT);
-        vxSum += p.facing * power + p.vx * 0.4;
-        vySum += -260 - 60 * kickT + ny * 120;
+    if (!applied) {
+      const dx = b.x - headCX, dy = b.y - headCY;
+      const dist = Math.hypot(dx, dy) || 0.001;
+      const minDist = HS_HEAD_R + HS_BALL_R;
+      if (dist < minDist) {
+        const nx = dx / dist, ny = dy / dist;
+        b.x = headCX + nx * minDist;
+        b.y = headCY + ny * minDist;
+        const speedIn = Math.hypot(b.vx, b.vy);
+        const power = Math.max(HS_HEAD_POWER, Math.min(speedIn * 1.1, HS_HEAD_POWER * 1.6));
+        vxSum += nx * power + p.vx * 0.5;
+        vySum += ny * power - 60;
         hits++;
-        if (!p.bootCoolUntil || now > p.bootCoolUntil) {
-          p.bootCoolUntil = now + HS_KICK_COOLDOWN;
-          busPlaySound("/static/audio/kickball.wav", 0.6);
+        applied = true;
+        if (!p.headCoolUntil || now > p.headCoolUntil) {
+          p.headCoolUntil = now + 180;
         }
-      } else {
+      }
+    }
+
+    if (!applied) {
+      const reach = HS_BOOT_W * 0.5;
+      const bdx = b.x - bootPose.x, bdy = b.y - bootPose.y;
+      const bdist = Math.hypot(bdx, bdy) || 0.001;
+      const minBootDist = reach + HS_BALL_R * 0.7;
+      if (bdist < minBootDist) {
+        const nx = bdx / bdist, ny = bdy / bdist;
+        b.x = bootPose.x + nx * minBootDist;
+        b.y = bootPose.y + ny * minBootDist;
         const speedIn = Math.hypot(b.vx, b.vy);
         vxSum += nx * speedIn * HS_PASSIVE_BOUNCE + p.vx * 0.2;
         vySum += ny * Math.abs(b.vy) * HS_PASSIVE_BOUNCE - 40;
         hits++;
+        applied = true;
       }
     }
 
-    // FIX BUG REPORTADO: "un jugador patea y le pasa por abajo de la cabeza
-    // al otro, atravesándolo". Antes SOLO había dos círculos de colisión
-    // (cabeza y botín) — el tramo entre ambos (la "pierna", que hace de
-    // cuello ya que el cabezón no tiene uno) no frenaba nada. Un tiro raso
-    // que pasara entre la cabeza (arriba) y el botín recogido (abajo) se
-    // colaba de largo. Ahora la pierna es una cápsula (segmento + radio)
-    // que también choca con la pelota, así el cuerpo entero — cabeza,
-    // pierna y botín — cubre un área continua, sin huecos.
-    const legNear = hsClosestPointOnSegment(b.x, b.y, headCX, headCY, bootPose.x, bootPose.y);
-    const ldx = b.x - legNear.x, ldy = b.y - legNear.y;
-    const ldist = Math.hypot(ldx, ldy) || 0.001;
-    const legMinDist = HS_LEG_RADIUS + HS_BALL_R;
-    if (ldist < legMinDist) {
-      const nx = ldx / ldist, ny = ldy / ldist;
-      b.x = legNear.x + nx * legMinDist;
-      b.y = legNear.y + ny * legMinDist;
-      const speedIn = Math.hypot(b.vx, b.vy);
-      vxSum += nx * speedIn * HS_PASSIVE_BOUNCE + p.vx * 0.2;
-      vySum += ny * Math.abs(b.vy) * HS_PASSIVE_BOUNCE - 30;
-      hits++;
+    // Cápsula de pierna (cubre el hueco "cuello" entre cabeza y botín, así
+    // un tiro raso no se cuela por ahí) - solo si nada más tocó este frame.
+    if (!applied) {
+      const legNear = hsClosestPointOnSegment(b.x, b.y, headCX, headCY, bootPose.x, bootPose.y);
+      const ldx = b.x - legNear.x, ldy = b.y - legNear.y;
+      const ldist = Math.hypot(ldx, ldy) || 0.001;
+      const legMinDist = HS_LEG_RADIUS + HS_BALL_R;
+      if (ldist < legMinDist) {
+        const nx = ldx / ldist, ny = ldy / ldist;
+        b.x = legNear.x + nx * legMinDist;
+        b.y = legNear.y + ny * legMinDist;
+        const speedIn = Math.hypot(b.vx, b.vy);
+        vxSum += nx * speedIn * HS_PASSIVE_BOUNCE + p.vx * 0.2;
+        vySum += ny * Math.abs(b.vy) * HS_PASSIVE_BOUNCE - 30;
+        hits++;
+      }
     }
   });
 
@@ -6398,27 +6425,6 @@ function hsDrawBoot(ctx, p, bootPose, color, dark) {
   ctx.restore();
 }
 
-// FIX "cabeza flotando": pierna de apoyo CORTA Y FIJA, siempre pegada al
-// piso justo debajo de la cabeza (no sigue al péndulo). Le da al personaje
-// una base visual constante, patee lo que patee la otra pierna.
-function hsDrawStandingLeg(ctx, p, dark) {
-  const headCX = p.x;
-  const headCY = p.y - HS_HEAD_OFFSET;
-  ctx.strokeStyle = dark;
-  ctx.lineWidth = 11;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(headCX, headCY + HS_HEAD_R * 0.65);
-  ctx.lineTo(headCX + p.facing * 3, p.y - 4);
-  ctx.stroke();
-  ctx.save();
-  ctx.globalAlpha = 0.95;
-  ctx.fillStyle = "#141417";
-  ctx.beginPath();
-  ctx.ellipse(headCX + p.facing * 3, p.y - 2, 10, 5, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
 
 function hsDrawPlayer(p) {
   const ctx = hsCtx;
@@ -6438,7 +6444,6 @@ function hsDrawPlayer(p) {
 
   const bootPose = hsBootPose(p);
 
-  hsDrawStandingLeg(ctx, p, dark);
   hsDrawBoot(ctx, p, bootPose, color, dark);
 
   if (bootPose.isStrike) {
@@ -6594,7 +6599,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
   document.getElementById("headPickBackBtn").addEventListener("click", () => hsShowScreen("headModeSelect"));
-  document.querySelectorAll("#headPick .fight-pick-card").forEach((card) => {
+  document.querySelectorAll("#headPick .hs-pick-card").forEach((card) => {
     card.addEventListener("click", () => {
       if (card.disabled) return;
       hsHandlePickClick(card.dataset.head);
