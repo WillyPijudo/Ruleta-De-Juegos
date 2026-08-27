@@ -2745,8 +2745,10 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 }
 #headCanvas {
   width: 100%;
-  height: 100%;
+  height: auto;
+  aspect-ratio: 900 / 420; /* misma proporción que su resolución interna: nada de achatado */
   max-width: 1000px;
+  max-height: 100%;
   border-radius: var(--radius-md);
   border: 2px solid rgba(217, 169, 78, 0.35);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
