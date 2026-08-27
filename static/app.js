@@ -5247,57 +5247,51 @@ function gmbSetupTouchZone(zoneId, joyId, dashBtnId, kickBtnId, side) {
 
 /* ===================== Cabezones (Head Soccer) ===================== */
 
-const HS_CANVAS_W = 1200;         // (antes 900) FIX pedido: ventana/cancha bastante más ancha
-const HS_CANVAS_H = 500;          // (antes 420) más alta también, para que no quede achatada
-const HS_PITCH_Y = HS_CANVAS_H - 40;
-const HS_GRAVITY = 1380;          // (antes 1550) FIX "pelota pesada": menos gravedad = más hangtime, tiros largos de verdad
+const HS_GRAVITY = 820;           // (antes 1380) MUCHO menos: la pelota flota y se puede mandar a volar de verdad
 const HS_HEAD_R = 36;
 const HS_HEAD_OFFSET = 56;
-const HS_BALL_R = 15;             // pelota levemente más chica en relación al botín = se siente más ágil/liviana
+const HS_BALL_R = 15;
 const HS_MOVE_ACCEL = 2500;
 const HS_MAX_SPEED = 350;
 const HS_FRICTION = 11;
 const HS_JUMP_VY = -700;
 const HS_GOAL_W = 50;
 const HS_GOAL_H = 175;
-const HS_WALL_RESTITUTION = 0.82;   // (antes 0.78) rebote de pared más vivo
-const HS_GROUND_RESTITUTION = 0.76; // (antes 0.66) FIX "pelota pesada/aburrida": ahora pica de verdad y liviana
-const HS_CEIL_RESTITUTION = 0.68;   // (antes 0.65)
-const HS_AIR_DRAG = 0.996;          // (antes 0.991) casi sin roce de aire, para que los tiros largos lleguen lejos de verdad
+const HS_WALL_RESTITUTION = 0.88;   // (antes 0.82) rebote de pared bien vivo
+const HS_GROUND_RESTITUTION = 0.84; // (antes 0.76) FIX "pelota pesada": pica alto y rápido, como una pelota liviana de verdad
+const HS_CEIL_RESTITUTION = 0.74;
+const HS_AIR_DRAG = 0.999;          // (antes 0.996) casi sin roce de aire: los tiros largos llegan lejos
 const HS_BOOT_W = 66;
 const HS_BOOT_H = 30;
-const HS_BOOT_VISUAL_SCALE = 1.55;  // escala del dibujo vectorial de respaldo (ver hsDrawBootFallback)
-const HS_LEG_LEN = 50;
-// FIX BUG PRINCIPAL: antes el péndulo iba de 1.7rad a -0.55rad, un arco tan
-// grande que en el pateo a fondo el botín terminaba ARRIBA de la cabeza, con
-// un rango exagerado que no se parece a ningún Head Soccer/Headball real.
-// Ahora el arco es mucho más corto y SIEMPRE se queda a la altura de la
-// cabeza para abajo: reposo colgando atrás-abajo, pateo a fondo bien
-// adelante pero apenas por encima del nivel de la cabeza, nunca por arriba.
-const HS_BOOT_REST_ANGLE = 1.98;  // reposo: colgando abajo y atrás (~113°, rad; 0 = derecha, PI/2 = abajo)
-const HS_BOOT_MAX_ANGLE = 0.25;   // pateando a fondo: adelante, ~14° (nunca arriba de la cabeza)
-const HS_LEG_RADIUS = 24;         // FIX "sin cuello": grosor de la pierna/cuerpo entre cabeza y botín - ver hsResolveCollisions
-const HS_KICK_POWER = 920;        // (antes 760) FIX "pelota pesada": patadas mucho más contundentes, tiros que llegan lejos de verdad
-const HS_HEAD_POWER = 680;        // (antes 600) cabezazos más contundentes
+const HS_BOOT_VISUAL_SCALE = 1.7;   // botín vectorial más grande y presente
+const HS_LEG_LEN = 40;              // reposo: pierna corta, botín bien pegado a la cabeza
+const HS_LEG_LEN_KICK = 92;         // NUEVO: al patear a fondo la pierna se ESTIRA hacia adelante (antes el radio era fijo en 50, por eso el péndulo se sentía corto)
+
+// FIX "el péndulo tiene poco rango y no llega adelante de la cabeza": antes
+// iba de 1.98rad a 0.25rad (arco de sólo ~99°, casi todo abajo y atrás).
+// Ahora el arco es de ~157°: arranca bien atrás/abajo (reposo, pegado al
+// piso) y termina ADELANTE de la cabeza, casi a la altura del centro
+// (nunca arriba del todo, pero con mucho más alcance y "windmill" real).
+const HS_BOOT_REST_ANGLE = 2.35;
+const HS_BOOT_MAX_ANGLE = -0.25;
+const HS_LEG_RADIUS = 24;
+const HS_KICK_POWER = 1550;       // (antes 920) para mandarla a volar de verdad
+const HS_HEAD_POWER = 980;        // (antes 680)
 const HS_GOALS_TO_WIN = 5;
 const HS_TIME_SECONDS = 60;
-const HS_MAX_BALL_SPEED = 1450;   // (antes 1150) para que los tiros fuertes no se topen con un techo bajo
-const HS_PLAYER_PUSH = 44; // fuerza del empujón cuando dos jugadores chocan de verdad
-const HS_BOOT_EXTEND_TIME = 0.28;
-const HS_BOOT_RETRACT_TIME = 0.48;     // seg. para volver a reposo al soltar (de a poco, no de golpe)
-const HS_BOOT_STRIKE_THRESHOLD = 0.4;  // a partir de acá el botín ya pega con potencia real
-const HS_KICK_COOLDOWN = 220;
-const HS_KICK_REACH = HS_BOOT_W * 0.95;
-const HS_PASSIVE_BOUNCE = 0.45;
-// FIX BUG "botín levantado = cabeza flotando": empujamos el botín (hitbox Y
-// dibujo, los dos, para que coincidan siempre) hacia abajo a medida que se
-// extiende. Simula que la cancha es 3D: aunque el botín "patee" hacia
-// adelante, nunca se despega del nivel del piso más de la cuenta.
-const HS_BOOT_GROUND_BIAS = 20;
-// FIX BUG "pelota se cuela por debajo de la cabeza": con el sesgo de arriba
-// el botín queda pegado al piso, así que ahora la cápsula pierna+botín
-// SIEMPRE tapa el hueco entre cabeza y piso, sin importar el ángulo.
-const HS_NET_DEPTH = 46; // FIX BUG "pelota se teletransporta": pared trasera del arco (ver hsUpdateBall)
+const HS_MAX_BALL_SPEED = 2200;   // (antes 1450) sin techo bajo para los tiros fuertes
+const HS_PLAYER_PUSH = 44;
+const HS_BOOT_EXTEND_TIME = 0.15;      // (antes 0.28) patada mucho más rápida/explosiva
+const HS_BOOT_RETRACT_TIME = 0.34;     // (antes 0.48)
+const HS_BOOT_STRIKE_THRESHOLD = 0.35;
+const HS_KICK_COOLDOWN = 190;
+const HS_KICK_REACH = HS_BOOT_W * 1.05;
+const HS_PASSIVE_BOUNCE = 0.5;
+// FIX "cabeza flotando": ya NO se resuelve empujando el botín hacia abajo
+// (eso achataba el péndulo). Ahora hay una PIERNA DE APOYO fija, siempre
+// pegada al piso bajo la cabeza, y por separado la pierna que patea, libre
+// de moverse con todo su rango (ver hsDrawStandingLeg más abajo).
+const HS_NET_DEPTH = 46;
 
 let hsState = null;
 let hsRAF = null;
@@ -5433,7 +5427,8 @@ function hsLoadHeadImages() {
     img.src = `/static/img/heads/${key}.png`;
     hsHeadImages[key] = img;
   });
-  hsLoadBootImage();
+  // El botín ya NO usa imagen (sacado por pedido) — es 100% vectorial,
+  // ver hsDrawBoot.
 }
 
 // Botín real (la imagen que pasaste, 616x1024) en vez del dibujo vectorial.
@@ -5774,23 +5769,23 @@ function hsBootLocalAngle(p) {
   return base + drag;
 }
 
-// El botín ORBITA la cabeza con radio fijo (péndulo real, no una línea recta).
-// Si mira a la izquierda, se espeja el ángulo con (PI - ángulo) — mismo truco
-// que espeja x,y sin tener que duplicar la matemática para cada lado.
+// El botín ORBITA la cabeza (péndulo real), pero ahora el RADIO también es
+// analógico: en reposo la pierna está corta y pegada al cuerpo (HS_LEG_LEN),
+// y a medida que se extiende se ESTIRA hasta HS_LEG_LEN_KICK — como una
+// patada real, no un compás fijo. Esto es lo que le da el alcance y la
+// sensación de rango que faltaba.
 function hsBootPose(p) {
   const headCX = p.x;
   const headCY = p.y - HS_HEAD_OFFSET;
   const local = hsBootLocalAngle(p);
   const angle = p.facing === 1 ? local : Math.PI - local;
-  // FIX "cabeza flotando" + "pelota pasa por debajo de la cabeza": a medida
-  // que el botín se extiende hacia adelante, lo bajamos un poco (ground
-  // bias) para que nunca se aleje del piso — como si la cancha tuviera
-  // profundidad real y el pie, al patear, siguiera pisando cerca del suelo.
-  const groundBias = HS_BOOT_GROUND_BIAS * p.bootExtend;
+  const stretchT = 1 - (1 - p.bootExtend) * (1 - p.bootExtend); // easeOutQuad
+  const legLen = HS_LEG_LEN + (HS_LEG_LEN_KICK - HS_LEG_LEN) * stretchT;
   return {
-    x: headCX + Math.cos(angle) * HS_LEG_LEN,
-    y: headCY + Math.sin(angle) * HS_LEG_LEN + groundBias,
+    x: headCX + Math.cos(angle) * legLen,
+    y: headCY + Math.sin(angle) * legLen,
     angle,
+    legLen,
     isStrike: p.bootExtend > HS_BOOT_STRIKE_THRESHOLD,
     extend: p.bootExtend,
   };
@@ -6316,29 +6311,112 @@ function hsDrawGoalFronts() {
 }
 
 // Respaldo vectorial: se usa solo si /static/img/boot.png todavía no cargó.
-function hsDrawBootFallback(ctx, p, bootPose, color, dark) {
+// Botín 100% vectorial (SIN imagen/PNG), detallado, con degradé de sombra,
+// cordones, suela con tacos y una franja lateral gruesa del color de
+// equipo integrada al cuerpo del botín (no un parche aparte). No dibuja
+// ningún "palo" conector: eso lo cubre hsDrawStandingLeg por separado.
+function hsDrawBoot(ctx, p, bootPose, color, dark) {
   ctx.save();
   ctx.translate(bootPose.x, bootPose.y);
   ctx.scale(p.facing, 1);
-  ctx.rotate(bootPose.extend * 0.5 - 0.12);
+  ctx.rotate(hsBootLocalAngle(p) - HS_BOOT_REST_ANGLE);
   ctx.scale(HS_BOOT_VISUAL_SCALE, HS_BOOT_VISUAL_SCALE);
-  ctx.fillStyle = dark;
-  ctx.fillRect(-6, -9, 12, 8);
-  ctx.fillStyle = "#efe9dd";
+
+  ctx.save();
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = "#000";
   ctx.beginPath();
-  ctx.moveTo(-9, -2);
-  ctx.quadraticCurveTo(-12, 7, -6, 9);
-  ctx.lineTo(15, 9);
-  ctx.quadraticCurveTo(19, 3, 13, -6);
+  ctx.ellipse(-2, 9, 15, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  ctx.moveTo(-9, -11);
+  ctx.lineTo(3, -11);
+  ctx.lineTo(4, -1);
+  ctx.lineTo(-10, -1);
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = "#2a2530";
+
+  const body = new Path2D();
+  body.moveTo(-10, -3);
+  body.quadraticCurveTo(-14, 6, -7, 10);
+  body.lineTo(16, 10);
+  body.quadraticCurveTo(21, 2, 15, -8);
+  body.quadraticCurveTo(8, -13, -10, -3);
+  body.closePath();
+
+  const bodyShade = ctx.createLinearGradient(-10, -12, 16, 10);
+  bodyShade.addColorStop(0, "#3a3a42");
+  bodyShade.addColorStop(0.5, "#232328");
+  bodyShade.addColorStop(1, "#141417");
+  ctx.fillStyle = bodyShade;
+  ctx.fill(body);
+  ctx.strokeStyle = "#0a0a0c";
   ctx.lineWidth = 1.4 / HS_BOOT_VISUAL_SCALE;
-  ctx.stroke();
-  ctx.fillStyle = "#2a2530";
-  ctx.fillRect(-9, 6, 24, 3);
+  ctx.stroke(body);
+
+  ctx.save();
+  ctx.clip(body);
+  ctx.globalAlpha = 0.18;
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.ellipse(0, -6, 14, 4, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.clip(body);
   ctx.fillStyle = color;
-  ctx.fillRect(-7, -1, 8, 3);
+  ctx.beginPath();
+  ctx.moveTo(-6, -4);
+  ctx.lineTo(10, -6);
+  ctx.lineTo(11, -1);
+  ctx.lineTo(-5, 1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  ctx.strokeStyle = "#0a0a0c";
+  ctx.lineWidth = 1 / HS_BOOT_VISUAL_SCALE;
+  for (let i = 0; i < 3; i++) {
+    const lx = -6 + i * 3.4;
+    ctx.beginPath();
+    ctx.moveTo(lx, -8.5);
+    ctx.lineTo(lx + 2.2, -5.5);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "#e7e2d6";
+  ctx.fillRect(-8, 8.5, 22, 2.6);
+  ctx.fillStyle = "#0a0a0c";
+  for (let sx = -7; sx < 13; sx += 4.5) {
+    ctx.fillRect(sx, 10.6, 2, 2.4);
+  }
+
+  ctx.restore();
+}
+
+// FIX "cabeza flotando": pierna de apoyo CORTA Y FIJA, siempre pegada al
+// piso justo debajo de la cabeza (no sigue al péndulo). Le da al personaje
+// una base visual constante, patee lo que patee la otra pierna.
+function hsDrawStandingLeg(ctx, p, dark) {
+  const headCX = p.x;
+  const headCY = p.y - HS_HEAD_OFFSET;
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = 11;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(headCX, headCY + HS_HEAD_R * 0.65);
+  ctx.lineTo(headCX + p.facing * 3, p.y - 4);
+  ctx.stroke();
+  ctx.save();
+  ctx.globalAlpha = 0.95;
+  ctx.fillStyle = "#141417";
+  ctx.beginPath();
+  ctx.ellipse(headCX + p.facing * 3, p.y - 2, 10, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 
@@ -6358,29 +6436,11 @@ function hsDrawPlayer(p) {
   ctx.fill();
   ctx.restore();
 
-  // Pierna: une la cabeza con el botín SIGUIENDO EL MISMO PÉNDULO (mismo
-  // ángulo/radio que hsBootPose) — por eso ya no se ve la cabeza flotando,
-  // están conectadas de verdad en cada frame, se doble en el mismo arco.
   const bootPose = hsBootPose(p);
-  ctx.strokeStyle = dark;
-  ctx.lineWidth = 9;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(headCX, headCY + HS_HEAD_R * 0.7);
-  ctx.lineTo(bootPose.x, bootPose.y);
-  ctx.stroke();
 
-  // Botín: primero intenta la imagen real que pasaste (/static/img/boot.png);
-  // si todavía no cargó, cae al dibujo vectorial de respaldo — así nunca
-  // falta el pie mientras se descarga la imagen.
-  if (!hsDrawBootImage(p, bootPose)) {
-    hsDrawBootFallback(ctx, p, bootPose, color, dark);
-  }
+  hsDrawStandingLeg(ctx, p, dark);
+  hsDrawBoot(ctx, p, bootPose, color, dark);
 
-  // FIX "círculo feo poco realista": el aro blanco que quedaba dando vueltas
-  // alrededor del botín extendido se reemplaza por una estela de movimiento
-  // corta en la dirección de la patada — más sutil y se nota más el golpe,
-  // sin la mancha circular fija.
   if (bootPose.isStrike) {
     ctx.save();
     ctx.globalAlpha = 0.3 * bootPose.extend;
@@ -6415,7 +6475,6 @@ function hsDrawPlayer(p) {
     ctx.lineWidth = 2;
     ctx.stroke();
   }
-
 }
 
 function hsDrawBall() {
