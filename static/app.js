@@ -5246,11 +5246,14 @@ function gmbSetupTouchZone(zoneId, joyId, dashBtnId, kickBtnId, side) {
 
 
 /* ===================== Cabezones (Head Soccer) ===================== */
-
-const HS_CANVAS_W = 900;
-const HS_CANVAS_H = 420;
-const HS_PITCH_Y = 360; // línea del piso - deja lugar arriba para el salto y abajo para el pasto
-const HS_GRAVITY = 820;           // (antes 1380) MUCHO menos: la pelota flota y se puede mandar a volar de verdad
+const HS_CANVAS_W = 1500; // (antes 900) cancha bastante más larga, más entretenida
+const HS_CANVAS_H = 440;  // (antes 420) un poco más de aire vertical
+const HS_PITCH_Y = 370;   // línea de piso - deja margen arriba para saltar y abajo para el pasto
+// Gravedad más fuerte + salto más corto = más peso, pero el salto sigue
+// siendo divertido. Con estos números el punto más alto del salto queda
+// bien por debajo del techo de la ventana (antes no había NINGÚN límite
+// de techo, por eso parecía que saltaban "al infinito").
+const HS_GRAVITY = 950;  
 const HS_HEAD_R = 36;
 // FIX "cabeza flotando": bajado de 56 a 46 - antes ni el botín estirado al
 // máximo llegaba a tocar el piso a este offset (le faltaban matemáticamente
@@ -5261,13 +5264,13 @@ const HS_BALL_R = 15;
 const HS_MOVE_ACCEL = 2500;
 const HS_MAX_SPEED = 350;
 const HS_FRICTION = 11;
-const HS_JUMP_VY = -700;
+const HS_JUMP_VY = -600; 
 const HS_GOAL_W = 50;
 const HS_GOAL_H = 175;
-const HS_WALL_RESTITUTION = 0.88;   // (antes 0.82) rebote de pared bien vivo
+const HS_WALL_RESTITUTION = 0.76;   // (antes 0.88) rebote de pared más controlado, ya no pinball loco
 const HS_GROUND_RESTITUTION = 0.84; // (antes 0.76) FIX "pelota pesada": pica alto y rápido, como una pelota liviana de verdad
 const HS_CEIL_RESTITUTION = 0.74;
-const HS_AIR_DRAG = 0.999;          // (antes 0.996) casi sin roce de aire: los tiros largos llegan lejos
+const HS_AIR_DRAG = 0.996;           // FIX pelota loca: 0.999 era casi cero roce, ahora frena un poco más natural sin dejar de viajar lejos
 const HS_BOOT_W = 66;
 const HS_BOOT_H = 30;
 const HS_BOOT_VISUAL_SCALE = 1.7;   // botín vectorial más grande y presente
@@ -5284,11 +5287,15 @@ const HS_LEG_LEN_KICK = 112;        // patada a fondo: bastante más alcance hac
 const HS_BOOT_REST_ANGLE = 2.0;
 const HS_BOOT_MAX_ANGLE = -0.25;
 const HS_LEG_RADIUS = 24;
-const HS_KICK_POWER = 1550;       // (antes 920) para mandarla a volar de verdad
-const HS_HEAD_POWER = 980;        // (antes 680)
+// FIX "se va a la mierda al mínimo toque": estos números estaban pensados
+// para cuando la patada llegaba DILUIDA (bug del promedio de impulsos que
+// arreglamos antes). Ahora que un solo toque aplica la potencia completa,
+// hay que bajarlos - si no, hasta un toque flojo sale volando.
+const HS_KICK_POWER = 1150;       // (antes 1550)
+const HS_HEAD_POWER = 800;        // (antes 980)
 const HS_GOALS_TO_WIN = 5;
 const HS_TIME_SECONDS = 60;
-const HS_MAX_BALL_SPEED = 2200;   // (antes 1450) sin techo bajo para los tiros fuertes
+const HS_MAX_BALL_SPEED = 1650;   // (antes 2200)
 const HS_PLAYER_PUSH = 44;
 const HS_BOOT_EXTEND_TIME = 0.15;      // (antes 0.28) patada mucho más rápida/explosiva
 const HS_BOOT_RETRACT_TIME = 0.34;     // (antes 0.48)
@@ -5751,6 +5758,13 @@ function hsUpdatePlayer(p, dt, keys, now) {
     p.y = HS_PITCH_Y;
     p.vy = 0;
     p.onGround = true;
+  }
+  // FIX: no existía NINGÚN techo - por eso parecía salto infinito/gravedad 0
+  // (nada frenaba al jugador si por lo que sea ganaba mucha velocidad hacia
+  // arriba, por ej. un cabezazo propio muy fuerte). Ahora hay un techo real.
+  if (p.y < HS_HEAD_R + 20) {
+    p.y = HS_HEAD_R + 20;
+    p.vy = Math.max(0, p.vy);
   }
   // Botín analógico: mientras mantenés la tecla, avanza de a poco desde
   // debajo de la cabeza hasta adelante; al soltar, vuelve solo y también
