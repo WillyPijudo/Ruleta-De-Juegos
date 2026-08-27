@@ -5266,6 +5266,9 @@ const HS_CEIL_RESTITUTION = 0.6;
 const HS_AIR_DRAG = 0.999;
 const HS_BOOT_W = 42;
 const HS_BOOT_H = 20;
+const HS_LEG_LEN = 52;            // radio del péndulo: distancia FIJA cabeza -> botín
+const HS_BOOT_REST_ANGLE = 1.7;   // reposo: abajo y un poco atrás (rad, 0 = derecha, PI/2 = abajo)
+const HS_BOOT_MAX_ANGLE = -0.55;  // pateando a fondo: adelante y por ARRIBA de la cabeza (rad)
 const HS_KICK_POWER = 760;
 const HS_HEAD_POWER = 620;
 const HS_GOALS_TO_WIN = 5;
@@ -5592,10 +5595,20 @@ function hsLoop(now) {
 
   hsUpdatePlayer(hsState.left, dt, HS_KEYS_LEFT, now);
   hsUpdatePlayer(hsState.right, dt, HS_KEYS_RIGHT, now);
-  hsUpdateBall(dt);
-  hsResolveCollisions(now);
-  hsDraw();
 
+  // Sub-pasos de física de la pelota: a alta velocidad, un solo dt grande
+  // puede mover la pelota más de lo que mide una cabeza/botín en un frame,
+  // y el choque nunca se detecta (tunneling). Partimos el frame en pasos
+  // más chicos según qué tan rápido va la pelota.
+  const speed = Math.hypot(hsState.ball.vx, hsState.ball.vy);
+  const steps = Math.min(6, Math.max(1, Math.ceil((speed * dt) / 10)));
+  const subDt = dt / steps;
+  for (let i = 0; i < steps; i++) {
+    hsUpdateBall(subDt);
+    hsResolveCollisions(now);
+  }
+
+  hsDraw();
   hsRAF = requestAnimationFrame(hsLoop);
 }
 
@@ -5637,13 +5650,29 @@ function hsUpdatePlayer(p, dt, keys, now) {
 // Posición real del botín, ahora analógica según cuánto mantengas la tecla
 // (0 = reposo debajo de la cabeza, 1 = extendido bien adelante). La usan
 // tanto la colisión como el dibujo, así el hitbox y lo que se ve SIEMPRE coinciden.
+// Ángulo local del botín asumiendo que el jugador mira a la derecha (facing=1).
+// REST -> MAX según cuánto mantengas la tecla, más un "arrastre" al correr
+// (si vas para adelante el botín se atrasa un toque, si vas para atrás se
+// adelanta un toque — como una zancada real).
+function hsBootLocalAngle(p) {
+  const base = HS_BOOT_REST_ANGLE + (HS_BOOT_MAX_ANGLE - HS_BOOT_REST_ANGLE) * p.bootExtend;
+  const moveT = Math.max(-1, Math.min(1, (p.vx * p.facing) / HS_MAX_SPEED));
+  const drag = moveT * 0.22 * (1 - p.bootExtend); // se apaga solo cuando ya estás pateando a fondo
+  return base + drag;
+}
+
+// El botín ORBITA la cabeza con radio fijo (péndulo real, no una línea recta).
+// Si mira a la izquierda, se espeja el ángulo con (PI - ángulo) — mismo truco
+// que espeja x,y sin tener que duplicar la matemática para cada lado.
 function hsBootPose(p) {
-  const base = HS_BOOT_W * 0.35; // reposo
-  const fwd = HS_BOOT_W * 0.95;  // extendido del todo (amplio, no exagerado)
-  const offset = base + (fwd - base) * p.bootExtend;
+  const headCX = p.x;
+  const headCY = p.y - HS_HEAD_OFFSET;
+  const local = hsBootLocalAngle(p);
+  const angle = p.facing === 1 ? local : Math.PI - local;
   return {
-    x: p.x + p.facing * offset,
-    y: p.y - HS_BOOT_H * 0.4,
+    x: headCX + Math.cos(angle) * HS_LEG_LEN,
+    y: headCY + Math.sin(angle) * HS_LEG_LEN,
+    angle,
     isStrike: p.bootExtend > HS_BOOT_STRIKE_THRESHOLD,
     extend: p.bootExtend,
   };
@@ -5704,6 +5733,10 @@ function hsUpdateBall(dt) {
 
 function hsResolveCollisions(now) {
   const b = hsState.ball;
+  // Acumulamos impulsos en vez de pisarlos: si los DOS jugadores tocan la
+  // pelota en el mismo paso (un 50/50 real), se promedian en vez de que
+  // el segundo jugador borre lo que hizo el primero (eso era parte del bug).
+  let vxSum = 0, vySum = 0, hits = 0;
 
   [hsState.left, hsState.right].forEach((p) => {
     // Cabeza: círculo contra círculo, con empuje extra hacia arriba (cabezazo real).
@@ -5718,46 +5751,52 @@ function hsResolveCollisions(now) {
       b.x = headCX + nx * minDist;
       b.y = headCY + ny * minDist;
       const speedIn = Math.hypot(b.vx, b.vy);
-      const power = Math.max(HS_HEAD_POWER, Math.min(speedIn * 1.1, HS_HEAD_POWER * 1.6)); // FIX: tope, ya no escala sin límite
-      b.vx = nx * power + p.vx * 0.5;
-      b.vy = ny * power - 60;
-      hsClampBallVelocity(b);
+      const power = Math.max(HS_HEAD_POWER, Math.min(speedIn * 1.1, HS_HEAD_POWER * 1.6));
+      vxSum += nx * power + p.vx * 0.5;
+      vySum += ny * power - 60;
+      hits++;
       if (!p.headCoolUntil || now > p.headCoolUntil) {
         p.headCoolUntil = now + 180;
       }
     }
 
-    // Botín: rectángulo pegado a los pies, hacia donde mira.
-    // Botín: sigue la pose real (incluye la patada activa tipo catapulta)
+    // Botín: ahora es un péndulo, así que el hitbox es un círculo alrededor
+    // de su posición actual (bootPose.x/y) — no un rectángulo fijo, porque
+    // el botín ya no se mueve en línea recta.
     const bootPose = hsBootPose(p);
-    const reach = bootPose.isStrike ? HS_KICK_REACH : HS_BOOT_W / 2;
-    const closestX = Math.max(bootPose.x - reach, Math.min(b.x, bootPose.x + reach));
-    const closestY = Math.max(bootPose.y - HS_BOOT_H / 2, Math.min(b.y, bootPose.y + HS_BOOT_H / 2));
-    const bdx = b.x - closestX, bdy = b.y - closestY;
+    const reach = bootPose.isStrike ? HS_KICK_REACH : HS_BOOT_W * 0.5;
+    const bdx = b.x - bootPose.x, bdy = b.y - bootPose.y;
     const bdist = Math.hypot(bdx, bdy) || 0.001;
-    if (bdist < HS_BALL_R) {
+    const minBootDist = reach + HS_BALL_R * 0.7;
+    if (bdist < minBootDist) {
       const nx = bdx / bdist, ny = bdy / bdist;
-      b.x = closestX + nx * HS_BALL_R;
-      b.y = closestY + ny * HS_BALL_R;
+      b.x = bootPose.x + nx * minBootDist;
+      b.y = bootPose.y + ny * minBootDist;
       if (bootPose.isStrike) {
-        // Más potencia cuanto más estirado esté el botín en el momento del contacto.
         const kickT = Math.max(0, Math.min(1,
           (bootPose.extend - HS_BOOT_STRIKE_THRESHOLD) / (1 - HS_BOOT_STRIKE_THRESHOLD)));
         const power = HS_KICK_POWER * (0.75 + 0.45 * kickT);
-        b.vx = p.facing * power + p.vx * 0.4;
-        b.vy = -260 - 60 * kickT + ny * 120;
+        vxSum += p.facing * power + p.vx * 0.4;
+        vySum += -260 - 60 * kickT + ny * 120;
+        hits++;
         if (!p.bootCoolUntil || now > p.bootCoolUntil) {
           p.bootCoolUntil = now + HS_KICK_COOLDOWN;
           busPlaySound("/static/audio/kickball.wav", 0.6);
         }
       } else {
         const speedIn = Math.hypot(b.vx, b.vy);
-        b.vx = nx * speedIn * HS_PASSIVE_BOUNCE + p.vx * 0.2;
-        b.vy = ny * Math.abs(b.vy) * HS_PASSIVE_BOUNCE - 40;
+        vxSum += nx * speedIn * HS_PASSIVE_BOUNCE + p.vx * 0.2;
+        vySum += ny * Math.abs(b.vy) * HS_PASSIVE_BOUNCE - 40;
+        hits++;
       }
-      hsClampBallVelocity(b);
     }
   });
+
+  if (hits > 0) {
+    b.vx = vxSum / hits;
+    b.vy = vySum / hits;
+    hsClampBallVelocity(b);
+  }
 
   hsCheckGoal();
 }
@@ -5922,10 +5961,21 @@ function hsDrawPlayer(p) {
   ctx.fill();
   ctx.restore();
 
+  // Pierna: une la cabeza con el botín SIGUIENDO EL MISMO PÉNDULO (mismo
+  // ángulo/radio que hsBootPose) — por eso ya no se ve la cabeza flotando,
+  // están conectadas de verdad en cada frame, se doble en el mismo arco.
   const bootPose = hsBootPose(p);
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = 9;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(headCX, headCY + HS_HEAD_R * 0.7);
+  ctx.lineTo(bootPose.x, bootPose.y);
+  ctx.stroke();
+
   ctx.save();
   ctx.translate(bootPose.x, bootPose.y);
-  ctx.rotate(p.facing * (bootPose.extend * 0.45 - 0.12));
+  ctx.rotate(p.facing * (bootPose.extend * 0.6 - 0.15));
   ctx.fillStyle = "#efe9dd";
   ctx.beginPath();
   ctx.moveTo(-HS_BOOT_W * 0.42, -3);
@@ -5951,13 +6001,6 @@ function hsDrawPlayer(p) {
     ctx.stroke();
     ctx.restore();
   }
-
-  ctx.strokeStyle = dark;
-  ctx.lineWidth = 10;
-  ctx.beginPath();
-  ctx.moveTo(headCX, headCY + HS_HEAD_R * 0.65);
-  ctx.lineTo(headCX, headCY + HS_HEAD_R * 0.3);
-  ctx.stroke();
 
   ctx.save();
   ctx.globalAlpha = 0.22;
