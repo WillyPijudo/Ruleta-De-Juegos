@@ -5264,9 +5264,9 @@ const HS_BALL_R = 15;
 const HS_MOVE_ACCEL = 2500;
 const HS_MAX_SPEED = 350;
 const HS_FRICTION = 11;
-const HS_JUMP_VY = -600;
+const HS_JUMP_VY = -470; // (antes -600) salto bastante más bajo - antes subía más de 2.5x el diámetro de la cabeza, se sentía exagerado
 const HS_GOAL_W = 50;
-const HS_GOAL_H = 175;
+const HS_GOAL_H = 155; // (antes 175) un poco más corto
 // ===== FÍSICA DE LA PELOTA - REDISEÑADA DE CERO =====
 // En vez de seguir parchando número por número, este es un set coherente
 // pensado como sistema: gravedad realista (arcos que se sienten con peso
@@ -5753,6 +5753,8 @@ function hsLoop(now) {
   hsUpdatePlayer(hsState.left, dt, HS_KEYS_LEFT, now);
   hsUpdatePlayer(hsState.right, dt, HS_KEYS_RIGHT, now);
   hsResolvePlayers();
+  hsResolvePlayerVsGoalFrame(hsState.left);
+  hsResolvePlayerVsGoalFrame(hsState.right);
 
   // Sub-pasos de física de la pelota: a alta velocidad, un solo dt grande
   // puede mover la pelota más de lo que mide una cabeza/botín en un frame,
@@ -5794,17 +5796,10 @@ function hsUpdatePlayer(p, dt, keys, now) {
   p.vy += HS_GRAVITY * dt;
   p.y += p.vy * dt;
   if (p.y >= HS_PITCH_Y) {
-    // NUEVO: aterrizaje con un poco de "peso" visual - si venía cayendo
-    // fuerte, la cabeza se achata un instante al tocar el piso y se
-    // recupera sola (mismo truco de squash & stretch que ya usa la pelota).
-    if (!p.onGround && p.vy > 260) {
-      p.landSquash = Math.min(1, p.vy / 900);
-    }
     p.y = HS_PITCH_Y;
     p.vy = 0;
     p.onGround = true;
   }
-  if (p.landSquash) p.landSquash = Math.max(0, p.landSquash - dt * 5);
   // FIX: no existía NINGÚN techo - por eso parecía salto infinito/gravedad 0
   // (nada frenaba al jugador si por lo que sea ganaba mucha velocidad hacia
   // arriba, por ej. un cabezazo propio muy fuerte). Ahora hay un techo real.
@@ -6153,6 +6148,38 @@ function hsResolveCollisions(now) {
 // demasiado, se separan a mitad y mitad + un empujoncito de velocidad,
 // como un choque de verdad. De paso esto arregla que el botín de uno
 // quedara visualmente "encajado" en el cuello del otro cuando se pisaban.
+// FIX BUG "el travesaño/red de arriba no tiene colisión con los jugadores":
+// hsResolveGoalBars solo frenaba a la PELOTA. Los jugadores (cabeza) podían
+// caminar/saltar derecho a través del caño y de la red como si fueran una
+// imagen pegada de fondo, sin ningún sólido ahí. Ahora el travesaño Y el
+// poste delantero de cada arco también son sólidos para la cabeza.
+function hsResolvePlayerVsGoalFrame(p) {
+  const barY0 = HS_PITCH_Y - HS_GOAL_H - HS_GOAL_BAR_THICK / 2;
+  const barY1 = HS_PITCH_Y - HS_GOAL_H + HS_GOAL_BAR_THICK / 2;
+  const pt = HS_GOAL_BAR_THICK;
+  const frames = [
+    { x0: 0, x1: HS_GOAL_W, y0: barY0, y1: barY1 },                                   // travesaño izq
+    { x0: HS_GOAL_W - pt / 2, x1: HS_GOAL_W + pt / 2, y0: barY0, y1: HS_PITCH_Y },      // poste delantero izq
+    { x0: HS_CANVAS_W - HS_GOAL_W, x1: HS_CANVAS_W, y0: barY0, y1: barY1 },             // travesaño der
+    { x0: HS_CANVAS_W - HS_GOAL_W - pt / 2, x1: HS_CANVAS_W - HS_GOAL_W + pt / 2, y0: barY0, y1: HS_PITCH_Y }, // poste delantero der
+  ];
+  const headCY = p.y - HS_HEAD_OFFSET;
+  frames.forEach((rect) => {
+    const cx = Math.max(rect.x0, Math.min(p.x, rect.x1));
+    const cy = Math.max(rect.y0, Math.min(headCY, rect.y1));
+    const dx = p.x - cx, dy = headCY - cy;
+    const dist = Math.hypot(dx, dy) || 0.0001;
+    if (dist < HS_HEAD_R) {
+      const nx = dx / dist, ny = dy / dist;
+      const push = HS_HEAD_R - dist;
+      p.x += nx * push;
+      p.y += ny * push;
+      if (ny > 0.3 && p.vy < 0) p.vy = 0; // si lo frena por abajo del travesaño, corta el impulso hacia arriba
+      p.x = Math.max(HS_HEAD_R + 4, Math.min(HS_CANVAS_W - HS_HEAD_R - 4, p.x));
+    }
+  });
+}
+
 function hsResolvePlayers() {
   const a = hsState.left, b = hsState.right;
   const aCY = a.y - HS_HEAD_OFFSET, bCY = b.y - HS_HEAD_OFFSET;
@@ -6516,15 +6543,12 @@ function hsDrawBoot(ctx, p, bootPose, color, dark) {
   ctx.fill();
   ctx.restore();
 
-  // Tobillera (conecta con la pierna) - un cilindro corto, no un rectángulo plano
-  const cuff = new Path2D();
-  cuff.moveTo(-9, -15);
-  cuff.quadraticCurveTo(-4, -17, 1, -15);
-  cuff.lineTo(2, -4);
-  cuff.quadraticCurveTo(-4, -2, -9, -4);
-  cuff.closePath();
-  ctx.fillStyle = dark;
-  ctx.fill(cuff);
+  // FIX "volvió la figura geométrica pegada al botín": acá había una
+  // tobillera (cuff) que giraba con SU PROPIA rotación (independiente de
+  // hacia dónde apunta la pierna real). Como la pierna (hsDrawLeg) y este
+  // cuff casi nunca apuntaban para el mismo lado, quedaba una formita
+  // sobrante en la unión. Sacada del todo - la pierna nueva ya conecta
+  // limpio directo al cuerpo del botín.
 
   // Cuerpo del botín: talón redondeado atrás, empeine bajo, punta redondeada
   // adelante - silueta bien definida de cana, no una cuña genérica.
@@ -6693,19 +6717,10 @@ function hsDrawPlayer(p) {
   ctx.fill();
   ctx.restore();
 
-  const drawn = (() => {
-    const sq = p.landSquash || 0;
-    if (sq > 0.01) {
-      ctx.save();
-      ctx.translate(headCX, headCY);
-      ctx.scale(1 + sq * 0.1, 1 - sq * 0.1);
-      ctx.translate(-headCX, -headCY);
-      const ok = hsDrawHeadImage(p.headKey, headCX, headCY, p.facing);
-      ctx.restore();
-      return ok;
-    }
-    return hsDrawHeadImage(p.headKey, headCX, headCY, p.facing);
-  })();
+  // FIX "volvió la figura geométrica pegada a la cabeza que se estira":
+  // era este squash-on-landing (escalaba la imagen de la cabeza al
+  // aterrizar). Sacado del todo, ya no vale la pena el riesgo visual.
+  const drawn = hsDrawHeadImage(p.headKey, headCX, headCY, p.facing);
   if (!drawn) {
     ctx.fillStyle = color;
     ctx.beginPath();
