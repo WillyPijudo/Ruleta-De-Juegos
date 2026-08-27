@@ -5311,9 +5311,15 @@ const HS_GOALS_TO_WIN = 5;
 const HS_TIME_SECONDS = 60;
 const HS_MAX_BALL_SPEED = 1650;   // (antes 2200)
 const HS_PLAYER_PUSH = 44;
-const HS_BOOT_EXTEND_TIME = 0.15;      // (antes 0.28) patada mucho más rápida/explosiva
-const HS_BOOT_RETRACT_TIME = 0.34;     // (antes 0.48)
-const HS_BOOT_STRIKE_THRESHOLD = 0.35;
+// FIX "el movimiento del botín es muy rápido para apuntar": con 0.15s
+// llegaba a la extensión máxima casi al instante, así que era imposible
+// soltar a mitad de camino para un toque suave o un puntinazo - cualquier
+// toque de tecla, por corto que fuera, ya salía casi a full potencia.
+// Ahora hay una ventana real (~0.4s) para elegir CUÁNTO pateás: soltás
+// rápido = toque suave y controlado, aguantás = disparo a fondo.
+const HS_BOOT_EXTEND_TIME = 0.4;       // (antes 0.15)
+const HS_BOOT_RETRACT_TIME = 0.4;      // (antes 0.34) misma duración, se siente parejo ida y vuelta
+const HS_BOOT_STRIKE_THRESHOLD = 0.22; // (antes 0.35) más bajo: ya un toque corto conecta con la pelota (flojo), no hace falta llegar casi al máximo para que "cuente"
 const HS_KICK_COOLDOWN = 190;
 const HS_KICK_REACH = HS_BOOT_W * 1.05;
 const HS_PASSIVE_BOUNCE = 0.5;
@@ -5322,6 +5328,7 @@ const HS_PASSIVE_BOUNCE = 0.5;
 // pegada al piso bajo la cabeza, y por separado la pierna que patea, libre
 // de moverse con todo su rango (ver hsDrawStandingLeg más abajo).
 const HS_NET_DEPTH = 46;
+const HS_GOAL_BAR_THICK = 10; // NUEVO: grosor real del travesaño/palo para que tenga colisión de verdad (antes era puro dibujo, sin física)
 
 let hsState = null;
 let hsRAF = null;
@@ -5849,12 +5856,57 @@ function hsClampBallVelocity(b) {
   }
 }
 
+// FIX BUG REPORTADO: "el travesaño y la red de arriba no tienen colisión,
+// la pelota entra de cualquier lado". Antes el arco NO tenía ninguna
+// colisión propia arriba - solo existía una pared lateral invisible que se
+// "apagaba" en cuanto la pelota bajaba del nivel del travesaño
+// (inGoalMouth), así que si la pelota llegaba desde arriba, en diagonal, o
+// picando justo en esa altura, no chocaba con nada real y podía colarse.
+// Ahora el travesaño de cada arco es un rectángulo con colisión de
+// verdad (círculo-contra-rectángulo): la pelota rebota si lo toca desde
+// arriba, abajo o cualquier ángulo, como un caño real.
+function hsResolveGoalBars(b) {
+  const barY0 = HS_PITCH_Y - HS_GOAL_H - HS_GOAL_BAR_THICK / 2;
+  const barY1 = HS_PITCH_Y - HS_GOAL_H + HS_GOAL_BAR_THICK / 2;
+  const bars = [
+    { x0: -HS_NET_DEPTH, x1: HS_GOAL_W, y0: barY0, y1: barY1 },
+    { x0: HS_CANVAS_W - HS_GOAL_W, x1: HS_CANVAS_W + HS_NET_DEPTH, y0: barY0, y1: barY1 },
+  ];
+  bars.forEach((rect) => {
+    const cx = Math.max(rect.x0, Math.min(b.x, rect.x1));
+    const cy = Math.max(rect.y0, Math.min(b.y, rect.y1));
+    const dx = b.x - cx, dy = b.y - cy;
+    const dist = Math.hypot(dx, dy) || 0.0001;
+    if (dist < HS_BALL_R) {
+      const nx = dx / dist, ny = dy / dist;
+      const push = HS_BALL_R - dist;
+      b.x += nx * push;
+      b.y += ny * push;
+      const vDotN = b.vx * nx + b.vy * ny;
+      if (vDotN < 0) {
+        b.vx -= (1 + HS_WALL_RESTITUTION) * vDotN * nx;
+        b.vy -= (1 + HS_WALL_RESTITUTION) * vDotN * ny;
+      }
+      b.squash = Math.min(1, Math.hypot(b.vx, b.vy) / 700);
+    }
+  });
+}
+
 function hsUpdateBall(dt) {
   const b = hsState.ball;
   b.vy += HS_GRAVITY * dt;
   b.x += b.vx * dt;
   b.y += b.vy * dt;
+  // FIX "la pelota está en el aire y de la nada cae muy rápido": el roce
+  // del aire SOLO frenaba la velocidad horizontal (b.vx), nunca la vertical.
+  // En un tiro largo, con el tiempo perdía impulso hacia adelante pero la
+  // gravedad seguía sumando velocidad de caída sin ningún freno - la
+  // trayectoria se iba poniendo cada vez más vertical en vez de ser una
+  // parábola pareja, y por eso al final del recorrido parecía que "se caía
+  // de golpe". Ahora el roce frena un poquito también la caída, como el
+  // aire real, y la parábola queda pareja de punta a punta.
   b.vx *= HS_AIR_DRAG;
+  b.vy *= HS_AIR_DRAG;
   b.spin += b.vx * dt * 0.05;
 
   // NUEVO: "juice" de squash & stretch - cada rebote fuerte deja la pelota
@@ -5915,6 +5967,8 @@ function hsUpdateBall(dt) {
     b.vx = -Math.abs(b.vx) * HS_WALL_RESTITUTION * 0.6;
     b.squash = Math.min(1, Math.abs(b.vx) / 700);
   }
+
+  hsResolveGoalBars(b);
 
   hsClampBallVelocity(b);
 }
@@ -6153,11 +6207,16 @@ function hsResetPositions() {
 function hsDrawHeadImage(key, cx, cy, facing) {
   const img = hsHeadImages[key];
   if (!img || !img.complete || !img.naturalWidth) return false;
-  const size = HS_HEAD_R * 2.3;
+  // FIX "las cabezas se ven mal": esto forzaba SIEMPRE un cuadrado
+  // (size x size) sin importar la proporción real del PNG - si la imagen
+  // no era perfectamente cuadrada, se veía estirada o achatada. Ahora se
+  // respeta el aspect ratio real de cada imagen.
+  const targetH = HS_HEAD_R * 2.3;
+  const targetW = targetH * (img.naturalWidth / img.naturalHeight);
   hsCtx.save();
   hsCtx.translate(cx, cy);
   if (facing < 0) hsCtx.scale(-1, 1); // el sprite mira a la derecha por defecto; si mira a la izquierda, lo espejamos
-  hsCtx.drawImage(img, -size / 2, -size / 2, size, size);
+  hsCtx.drawImage(img, -targetW / 2, -targetH / 2, targetW, targetH);
   hsCtx.restore();
   return true;
 }
@@ -6524,6 +6583,30 @@ function hsDrawPlayer(p) {
     ctx.restore();
   }
 
+  // NUEVO: anillo de carga arriba de la cabeza mientras mantenés la tecla de
+  // patear. Ahora que estirar el botín tarda más (HS_BOOT_EXTEND_TIME), hace
+  // falta feedback visual claro de CUÁNTA potencia llevás acumulada para
+  // poder elegir el momento justo de soltar - un toque corto (anillo casi
+  // vacío) da un puntinazo suave, aguantar hasta llenarlo del todo da el
+  // tiro más potente.
+  if (p.bootExtend > 0.04) {
+    const ringR = HS_HEAD_R + 12;
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(headCX, headCY, ringR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = p.bootExtend > HS_BOOT_STRIKE_THRESHOLD ? "#ff5f5f" : color;
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.arc(headCX, headCY, ringR, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p.bootExtend);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   ctx.save();
   ctx.globalAlpha = 0.22;
   ctx.fillStyle = "#000";
@@ -6537,7 +6620,7 @@ function hsDrawPlayer(p) {
     if (sq > 0.01) {
       ctx.save();
       ctx.translate(headCX, headCY);
-      ctx.scale(1 + sq * 0.18, 1 - sq * 0.18);
+      ctx.scale(1 + sq * 0.1, 1 - sq * 0.1);
       ctx.translate(-headCX, -headCY);
       const ok = hsDrawHeadImage(p.headKey, headCX, headCY, p.facing);
       ctx.restore();
