@@ -5271,10 +5271,9 @@ const HS_HEAD_POWER = 620;
 const HS_GOALS_TO_WIN = 5;
 const HS_TIME_SECONDS = 60;
 const HS_MAX_BALL_SPEED = 1450;
-const HS_KICK_WINDUP = 0.09;
-const HS_KICK_STRIKE = 0.10;
-const HS_KICK_RECOVER = 0.12;
-const HS_KICK_TOTAL = HS_KICK_WINDUP + HS_KICK_STRIKE + HS_KICK_RECOVER;
+const HS_BOOT_EXTEND_TIME = 0.34;      // seg. para llegar a la extensión máxima manteniendo la tecla
+const HS_BOOT_RETRACT_TIME = 0.5;      // seg. para volver a reposo al soltar (de a poco, no de golpe)
+const HS_BOOT_STRIKE_THRESHOLD = 0.4;  // a partir de acá el botín ya pega con potencia real
 const HS_KICK_COOLDOWN = 280;
 const HS_KICK_REACH = HS_BOOT_W * 0.9;
 const HS_PASSIVE_BOUNCE = 0.35;
@@ -5291,6 +5290,111 @@ let hsCanvas = null;
 let hsCtx = null;
 let hsShakeState = { time: 0, mag: 0 };
 let hsPickState = { step: 1, leftHead: null };
+
+const HS_DEFAULT_KEYS_LEFT  = { left: "a", right: "d", jump: "w", kick: "s" };
+const HS_DEFAULT_KEYS_RIGHT = { left: "arrowleft", right: "arrowright", jump: "arrowup", kick: "arrowdown" };
+const HS_KEYS_LEFT  = { ...HS_DEFAULT_KEYS_LEFT };
+const HS_KEYS_RIGHT = { ...HS_DEFAULT_KEYS_RIGHT };
+
+function hsLoadControls() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("hsControls") || "null");
+    if (saved && saved.left && saved.right) {
+      Object.assign(HS_KEYS_LEFT, saved.left);
+      Object.assign(HS_KEYS_RIGHT, saved.right);
+    }
+  } catch (e) { /* si falla localStorage, se queda con los defaults */ }
+}
+function hsSaveControls() {
+  try { localStorage.setItem("hsControls", JSON.stringify({ left: HS_KEYS_LEFT, right: HS_KEYS_RIGHT })); }
+  catch (e) {}
+}
+function hsResetControls() {
+  Object.assign(HS_KEYS_LEFT, HS_DEFAULT_KEYS_LEFT);
+  Object.assign(HS_KEYS_RIGHT, HS_DEFAULT_KEYS_RIGHT);
+  hsSaveControls();
+  hsBuildRemapUI();
+  hsUpdateModeSelectHint();
+}
+function hsKeyDisplayName(k) {
+  const NAMES = { arrowup: "↑", arrowdown: "↓", arrowleft: "←", arrowright: "→", " ": "Espacio", enter: "Enter", shift: "Shift" };
+  return NAMES[k] || (k || "?").toUpperCase();
+}
+
+const HS_CONTROL_ACTIONS = [
+  { key: "left", label: "Izquierda" },
+  { key: "right", label: "Derecha" },
+  { key: "jump", label: "Saltar" },
+  { key: "kick", label: "Patear (mantener)" },
+];
+
+function hsBuildRemapUI() {
+  const leftCol = document.getElementById("headRemapLeftCol");
+  const rightCol = document.getElementById("headRemapRightCol");
+  leftCol.innerHTML = "";
+  rightCol.innerHTML = "";
+  const { championName, challengerName } = hsNames();
+
+  const buildSide = (col, side, title) => {
+    const heading = document.createElement("span");
+    heading.className = "controls-who";
+    heading.textContent = title;
+    col.appendChild(heading);
+    HS_CONTROL_ACTIONS.forEach((action) => {
+      const row = document.createElement("div");
+      row.className = "key-row";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "key-badge gambeta-remap-btn"; // reusa el estilo que ya tenés
+      const map = side === "left" ? HS_KEYS_LEFT : HS_KEYS_RIGHT;
+      btn.textContent = hsKeyDisplayName(map[action.key]);
+      btn.addEventListener("click", () => hsStartRebind(side, action.key, btn));
+      const label = document.createElement("span");
+      label.className = "key-mean";
+      label.textContent = action.label;
+      row.appendChild(btn);
+      row.appendChild(label);
+      col.appendChild(row);
+    });
+  };
+  buildSide(leftCol, "left", championName);
+  buildSide(rightCol, "right", challengerName);
+}
+
+let hsRebindListener = null;
+function hsStartRebind(side, actionKey, btn) {
+  if (hsRebindListener) return;
+  const original = btn.textContent;
+  btn.textContent = "…";
+  btn.classList.add("gambeta-remap-listening");
+  hsRebindListener = (e) => {
+    e.preventDefault();
+    const k = e.key.toLowerCase();
+    if (k !== "escape") {
+      const map = side === "left" ? HS_KEYS_LEFT : HS_KEYS_RIGHT;
+      map[actionKey] = k;
+      hsSaveControls();
+      btn.textContent = hsKeyDisplayName(k);
+      hsUpdateModeSelectHint();
+    } else {
+      btn.textContent = original;
+    }
+    btn.classList.remove("gambeta-remap-listening");
+    window.removeEventListener("keydown", hsRebindListener, true);
+    hsRebindListener = null;
+  };
+  window.addEventListener("keydown", hsRebindListener, true);
+}
+
+function hsUpdateModeSelectHint() {
+  const hint = document.querySelector("#headModeSelect .modal-body-text");
+  if (!hint) return;
+  hint.textContent =
+    `Campeón: ${hsKeyDisplayName(HS_KEYS_LEFT.left)}/${hsKeyDisplayName(HS_KEYS_LEFT.right)} moverse, ` +
+    `${hsKeyDisplayName(HS_KEYS_LEFT.jump)} saltar, ${hsKeyDisplayName(HS_KEYS_LEFT.kick)} patear (mantené para estirar el botín). ` +
+    `Retador: ${hsKeyDisplayName(HS_KEYS_RIGHT.left)}/${hsKeyDisplayName(HS_KEYS_RIGHT.right)} moverse, ` +
+    `${hsKeyDisplayName(HS_KEYS_RIGHT.jump)} saltar, ${hsKeyDisplayName(HS_KEYS_RIGHT.kick)} patear.`;
+}
 
 function hsSetTimeout(fn, ms) {
   const id = setTimeout(() => {
@@ -5310,6 +5414,19 @@ function hsLoadHeadImages() {
   });
 }
 
+// Resolución real del canvas ajustada a la densidad de píxeles de la pantalla,
+// más suavizado de calidad alta al escalar las cabezas (320x320 -> ~74px).
+// Esto es lo que realmente arregla la "mala calidad" — no era la imagen.
+function hsSetupCanvas() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  hsCanvas.width = HS_CANVAS_W * dpr;
+  hsCanvas.height = HS_CANVAS_H * dpr;
+  hsCtx = hsCanvas.getContext("2d");
+  hsCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  hsCtx.imageSmoothingEnabled = true;
+  hsCtx.imageSmoothingQuality = "high";
+}
+
 function hsShowScreen(id) {
   ["headModeSelect", "headPick", "headPlay"].forEach((s) => {
     document.getElementById(s).classList.toggle("hidden", s !== id);
@@ -5327,9 +5444,12 @@ function hsNames() {
 
 function openHeadModal() {
   hsTeardown();
+  hsLoadControls();
   document.getElementById("headModal").classList.remove("hidden");
   document.getElementById("headResultOverlay").classList.add("hidden");
+  document.getElementById("headControlsScreen").classList.add("hidden");
   hsShowScreen("headModeSelect");
+  hsUpdateModeSelectHint();
 }
 
 function hsMakePlayer(side, headKey, name) {
@@ -5344,10 +5464,7 @@ function hsMakePlayer(side, headKey, name) {
     onGround: true,
     facing: side === "left" ? 1 : -1,
     score: 0,
-    headFlash: 0,
-    kicking: false,
-    kickTime: 0,
-    kickReadyAt: 0,
+    bootExtend: 0, // 0 = reposo (debajo de la cabeza), 1 = extendido del todo (adelante)
   };
 }
 
@@ -5415,7 +5532,7 @@ function hsStartMatch(leftHead, rightHead) {
 
   hsShowScreen("headPlay");
   hsCanvas = document.getElementById("headCanvas");
-  hsCtx = hsCanvas.getContext("2d");
+  hsSetupCanvas();
   hsAttachKeys();
 
   if (hsState.mode === "time") {
@@ -5430,7 +5547,11 @@ function hsAttachKeys() {
   hsKeyDownHandler = (e) => {
     if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
     const k = e.key.toLowerCase();
-    if (["a", "d", "w", "s", "arrowleft", "arrowright", "arrowup", "arrowdown"].includes(k)) e.preventDefault();
+    const bound = [
+      HS_KEYS_LEFT.left, HS_KEYS_LEFT.right, HS_KEYS_LEFT.jump, HS_KEYS_LEFT.kick,
+      HS_KEYS_RIGHT.left, HS_KEYS_RIGHT.right, HS_KEYS_RIGHT.jump, HS_KEYS_RIGHT.kick,
+    ];
+    if (bound.includes(k)) e.preventDefault();
     hsKeys[k] = true;
   };
   hsKeyUpHandler = (e) => { hsKeys[e.key.toLowerCase()] = false; };
@@ -5469,8 +5590,8 @@ function hsLoop(now) {
 
   if (hsShakeState.time > 0) hsShakeState.time = Math.max(0, hsShakeState.time - dt);
 
-  hsUpdatePlayer(hsState.left, dt, { left: "a", right: "d", jump: "w", kick: "s" }, now);
-  hsUpdatePlayer(hsState.right, dt, { left: "arrowleft", right: "arrowright", jump: "arrowup", kick: "arrowdown" }, now);
+  hsUpdatePlayer(hsState.left, dt, HS_KEYS_LEFT, now);
+  hsUpdatePlayer(hsState.right, dt, HS_KEYS_RIGHT, now);
   hsUpdateBall(dt);
   hsResolveCollisions(now);
   hsDraw();
@@ -5501,57 +5622,30 @@ function hsUpdatePlayer(p, dt, keys, now) {
     p.vy = 0;
     p.onGround = true;
   }
-  if (p.headFlash > 0) p.headFlash -= 1;
-
-  // Patada activa: dispara con la tecla de patear, no se puede spamear (cooldown)
-  if (hsKeys[keys.kick] && !p.kicking && now > p.kickReadyAt) {
-    p.kicking = true;
-    p.kickTime = 0;
-  }
-  if (p.kicking) {
-    p.kickTime += dt;
-    if (p.kickTime >= HS_KICK_TOTAL) {
-      p.kicking = false;
-      p.kickReadyAt = now + HS_KICK_COOLDOWN;
-    }
+  // Botín analógico: mientras mantenés la tecla, avanza de a poco desde
+  // debajo de la cabeza hasta adelante; al soltar, vuelve solo y también
+  // de a poco (nada de swing automático de una sola vez).
+  if (hsKeys[keys.kick]) {
+    p.bootExtend = Math.min(1, p.bootExtend + dt / HS_BOOT_EXTEND_TIME);
+  } else {
+    p.bootExtend = Math.max(0, p.bootExtend - dt / HS_BOOT_RETRACT_TIME);
   }
 }
 
-function hsKickPhaseInfo(p) {
-  if (!p.kicking) return { windup: 0, strike: false, swing: 0 };
-  const t = p.kickTime;
-  if (t < HS_KICK_WINDUP) {
-    return { windup: t / HS_KICK_WINDUP, strike: false, swing: -1 };
-  }
-  const strikeT = t - HS_KICK_WINDUP;
-  if (strikeT < HS_KICK_STRIKE) {
-    return { windup: 1, strike: true, swing: strikeT / HS_KICK_STRIKE };
-  }
-  const recoverT = strikeT - HS_KICK_STRIKE;
-  return { windup: 1 - Math.min(1, recoverT / HS_KICK_RECOVER), strike: false, swing: 1 };
-}
 
-// Posición real del botín (incluye el windup/swing de la patada) - la usan
+
+// Posición real del botín, ahora analógica según cuánto mantengas la tecla
+// (0 = reposo debajo de la cabeza, 1 = extendido bien adelante). La usan
 // tanto la colisión como el dibujo, así el hitbox y lo que se ve SIEMPRE coinciden.
 function hsBootPose(p) {
-  const info = hsKickPhaseInfo(p);
-  const base = HS_BOOT_W * 0.35;
-  const kickBack = HS_BOOT_W * 0.28;
-  const kickFwd = HS_BOOT_W * 0.75;
-  let offset;
-  if (!p.kicking) {
-    offset = base;
-  } else if (!info.strike && info.swing === -1) {
-    offset = base - (base + kickBack) * info.windup;
-  } else if (info.strike) {
-    offset = -kickBack + (kickFwd + kickBack) * info.swing;
-  } else {
-    offset = kickFwd - (kickFwd - base) * (1 - info.windup);
-  }
+  const base = HS_BOOT_W * 0.35; // reposo
+  const fwd = HS_BOOT_W * 0.95;  // extendido del todo (amplio, no exagerado)
+  const offset = base + (fwd - base) * p.bootExtend;
   return {
     x: p.x + p.facing * offset,
-    y: p.y - HS_BOOT_H * 0.4, // FIX: sigue la altura real del jugador, ya no queda pegado al piso
-    isStrike: info.strike,
+    y: p.y - HS_BOOT_H * 0.4,
+    isStrike: p.bootExtend > HS_BOOT_STRIKE_THRESHOLD,
+    extend: p.bootExtend,
   };
 }
 
@@ -5630,8 +5724,6 @@ function hsResolveCollisions(now) {
       hsClampBallVelocity(b);
       if (!p.headCoolUntil || now > p.headCoolUntil) {
         p.headCoolUntil = now + 180;
-        p.headFlash = 10;
-        playHonk();
       }
     }
 
@@ -5648,10 +5740,14 @@ function hsResolveCollisions(now) {
       b.x = closestX + nx * HS_BALL_R;
       b.y = closestY + ny * HS_BALL_R;
       if (bootPose.isStrike) {
-        b.vx = p.facing * HS_KICK_POWER * 1.1 + p.vx * 0.4;
-        b.vy = -280 + ny * 120;
+        // Más potencia cuanto más estirado esté el botín en el momento del contacto.
+        const kickT = Math.max(0, Math.min(1,
+          (bootPose.extend - HS_BOOT_STRIKE_THRESHOLD) / (1 - HS_BOOT_STRIKE_THRESHOLD)));
+        const power = HS_KICK_POWER * (0.75 + 0.45 * kickT);
+        b.vx = p.facing * power + p.vx * 0.4;
+        b.vy = -260 - 60 * kickT + ny * 120;
         if (!p.bootCoolUntil || now > p.bootCoolUntil) {
-          p.bootCoolUntil = now + 180;
+          p.bootCoolUntil = now + HS_KICK_COOLDOWN;
           busPlaySound("/static/audio/kickball.wav", 0.6);
         }
       } else {
@@ -5826,27 +5922,10 @@ function hsDrawPlayer(p) {
   ctx.fill();
   ctx.restore();
 
-  // FIX: el torso ahora sigue p.y (altura real), no HS_PITCH_Y fijo -> ya no se estira al saltar
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(p.x - 9, p.y - 4);
-  ctx.lineTo(p.x + 9, p.y - 4);
-  ctx.lineTo(headCX + 6, headCY + HS_HEAD_R * 0.55);
-  ctx.lineTo(headCX - 6, headCY + HS_HEAD_R * 0.55);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = dark;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  ctx.fillStyle = dark;
-  ctx.fillRect(p.x - 8, p.y - 16, 16, 8);
-
   const bootPose = hsBootPose(p);
-  const info = hsKickPhaseInfo(p);
   ctx.save();
   ctx.translate(bootPose.x, bootPose.y);
-  ctx.rotate(p.facing * (info.strike ? 0.35 * info.swing : info.windup ? -0.25 * info.windup : 0));
+  ctx.rotate(p.facing * (bootPose.extend * 0.45 - 0.12));
   ctx.fillStyle = "#efe9dd";
   ctx.beginPath();
   ctx.moveTo(-HS_BOOT_W * 0.42, -3);
@@ -5862,13 +5941,13 @@ function hsDrawPlayer(p) {
   ctx.fillRect(-HS_BOOT_W * 0.42, -3, HS_BOOT_W * 0.22, 5);
   ctx.restore();
 
-  if (info.strike) {
+  if (bootPose.isStrike) {
     ctx.save();
-    ctx.globalAlpha = 0.6 * (1 - info.swing);
+    ctx.globalAlpha = 0.35 * bootPose.extend;
     ctx.strokeStyle = "#fff";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(bootPose.x + p.facing * 8, bootPose.y, 10 + info.swing * 16, 0, Math.PI * 2);
+    ctx.arc(bootPose.x + p.facing * 6, bootPose.y, 8 + bootPose.extend * 10, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
@@ -5899,17 +5978,6 @@ function hsDrawPlayer(p) {
     ctx.stroke();
   }
 
-  if (p.headFlash > 0) {
-    const a = p.headFlash / 10;
-    ctx.save();
-    ctx.globalAlpha = a * 0.6;
-    ctx.strokeStyle = "#fff";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(headCX, headCY, HS_HEAD_R + (1 - a) * 16, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
 }
 
 function hsDrawBall() {
@@ -6028,6 +6096,19 @@ document.addEventListener("DOMContentLoaded", () => {
       hsHandlePickClick(card.dataset.head);
     });
   });
+
+  document.getElementById("headControlsBtn").addEventListener("click", () => {
+    hsBuildRemapUI();
+    document.getElementById("headModeSelect").classList.add("hidden");
+    document.getElementById("headControlsScreen").classList.remove("hidden");
+  });
+  document.getElementById("headRemapBackBtn").addEventListener("click", () => {
+    document.getElementById("headControlsScreen").classList.add("hidden");
+    document.getElementById("headModeSelect").classList.remove("hidden");
+  });
+  document.getElementById("headRemapResetBtn").addEventListener("click", hsResetControls);
+    
+    
   document.getElementById("headRematchBtn").addEventListener("click", () => {
     if (hsState) hsStartMatch(hsState.left.headKey, hsState.right.headKey);
   });
