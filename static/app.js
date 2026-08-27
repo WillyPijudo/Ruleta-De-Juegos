@@ -5247,6 +5247,9 @@ function gmbSetupTouchZone(zoneId, joyId, dashBtnId, kickBtnId, side) {
 
 /* ===================== Cabezones (Head Soccer) ===================== */
 
+const HS_CANVAS_W = 900;
+const HS_CANVAS_H = 420;
+const HS_PITCH_Y = 360; // línea del piso - deja lugar arriba para el salto y abajo para el pasto
 const HS_GRAVITY = 820;           // (antes 1380) MUCHO menos: la pelota flota y se puede mandar a volar de verdad
 const HS_HEAD_R = 36;
 // FIX "cabeza flotando": bajado de 56 a 46 - antes ni el botín estirado al
