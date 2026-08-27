@@ -5978,110 +5978,101 @@ function hsDrawField() {
   const ctx = hsCtx;
   ctx.clearRect(0, 0, HS_CANVAS_W, HS_CANVAS_H);
 
-  // Cielo / fondo de estadio
+  // Cielo nocturno de estadio
   const sky = ctx.createLinearGradient(0, 0, 0, HS_PITCH_Y);
-  sky.addColorStop(0, "#0d0b18");
-  sky.addColorStop(0.55, "#1c1730");
-  sky.addColorStop(1, "#2a2438");
+  sky.addColorStop(0, "#08101a");
+  sky.addColorStop(1, "#1a253a");
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, HS_CANVAS_W, HS_PITCH_Y);
 
-  // Luces de estadio (glow difuso arriba)
-  [HS_CANVAS_W * 0.18, HS_CANVAS_W * 0.82].forEach((lx) => {
-    const glow = ctx.createRadialGradient(lx, 20, 4, lx, 20, 140);
-    glow.addColorStop(0, "rgba(255,244,214,0.22)");
-    glow.addColorStop(1, "rgba(255,244,214,0)");
-    ctx.fillStyle = glow;
-    ctx.fillRect(lx - 140, -50, 280, 220);
-  });
+  // Focos de luz 3D (Haces cruzados con modo de fusión screen)
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  const light1 = ctx.createLinearGradient(HS_CANVAS_W * 0.2, 0, HS_CANVAS_W * 0.4, HS_PITCH_Y);
+  light1.addColorStop(0, "rgba(255, 255, 255, 0.12)"); light1.addColorStop(1, "rgba(255, 255, 255, 0)");
+  ctx.fillStyle = light1; 
+  ctx.beginPath(); ctx.moveTo(HS_CANVAS_W * 0.1, 0); ctx.lineTo(HS_CANVAS_W * 0.3, 0); ctx.lineTo(HS_CANVAS_W * 0.6, HS_PITCH_Y); ctx.lineTo(HS_CANVAS_W * 0.1, HS_PITCH_Y); ctx.fill();
 
-  // Silueta de tribuna al fondo
-  ctx.fillStyle = "rgba(0,0,0,0.3)";
-  ctx.fillRect(0, HS_PITCH_Y - 42, HS_CANVAS_W, 42);
-  ctx.fillStyle = "rgba(0,0,0,0.18)";
-  for (let i = 0; i < 34; i++) {
-    ctx.fillRect(i * (HS_CANVAS_W / 34), HS_PITCH_Y - 42 + (i % 2 === 0 ? 5 : 0), HS_CANVAS_W / 34 - 2, 10);
+  const light2 = ctx.createLinearGradient(HS_CANVAS_W * 0.8, 0, HS_CANVAS_W * 0.6, HS_PITCH_Y);
+  light2.addColorStop(0, "rgba(255, 255, 255, 0.12)"); light2.addColorStop(1, "rgba(255, 255, 255, 0)");
+  ctx.fillStyle = light2; 
+  ctx.beginPath(); ctx.moveTo(HS_CANVAS_W * 0.7, 0); ctx.lineTo(HS_CANVAS_W * 0.9, 0); ctx.lineTo(HS_CANVAS_W * 0.9, HS_PITCH_Y); ctx.lineTo(HS_CANVAS_W * 0.4, HS_PITCH_Y); ctx.fill();
+  ctx.restore();
+
+  // Tribunas (Público de fondo)
+  ctx.fillStyle = "#111824";
+  ctx.fillRect(0, HS_PITCH_Y - 100, HS_CANVAS_W, 100);
+  ctx.strokeStyle = "rgba(255,255,255,0.04)";
+  ctx.lineWidth = 2;
+  for(let i=0; i<4; i++) {
+     let ty = HS_PITCH_Y - 100 + i*25;
+     ctx.beginPath(); ctx.moveTo(0, ty); ctx.lineTo(HS_CANVAS_W, ty); ctx.stroke();
   }
+  
+  // Puntitos simulando flashes de cámaras y público
+  ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
+  for(let i=0; i<120; i++) { ctx.fillRect(Math.random() * HS_CANVAS_W, HS_PITCH_Y - 100 + Math.random() * 90, 2.5, 2.5); }
+  ctx.fillStyle = "rgba(255, 62, 127, 0.3)";
+  for(let i=0; i<40; i++) { ctx.fillRect(Math.random() * HS_CANVAS_W, HS_PITCH_Y - 100 + Math.random() * 90, 3, 3); }
 
-  // Pasto a rayas
-  const stripeW = 56;
+  // Carteles LED
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, HS_PITCH_Y - 18, HS_CANVAS_W, 18);
+  ctx.fillStyle = "#f5cd76";
+  ctx.font = "bold 12px 'JetBrains Mono', monospace";
+  ctx.textAlign = "center";
+  for(let i=0; i<8; i++) { ctx.fillText("RULETA JUEGOS", i*140 + 70, HS_PITCH_Y - 5); }
+
+  // Pasto 3D vibrante
+  const stripeW = 60;
   let stripeI = 0;
   for (let x = 0; x < HS_CANVAS_W; x += stripeW) {
-    ctx.fillStyle = stripeI % 2 === 0 ? "#2d6a38" : "#296032";
+    ctx.fillStyle = stripeI % 2 === 0 ? "#338c3e" : "#2a7833";
     ctx.fillRect(x, HS_PITCH_Y, stripeW, HS_CANVAS_H - HS_PITCH_Y);
     stripeI++;
   }
   const grassShade = ctx.createLinearGradient(0, HS_PITCH_Y, 0, HS_CANVAS_H);
-  grassShade.addColorStop(0, "rgba(0,0,0,0)");
-  grassShade.addColorStop(1, "rgba(0,0,0,0.35)");
+  grassShade.addColorStop(0, "rgba(0,0,0,0.1)");
+  grassShade.addColorStop(1, "rgba(0,0,0,0.6)");
   ctx.fillStyle = grassShade;
   ctx.fillRect(0, HS_PITCH_Y, HS_CANVAS_W, HS_CANVAS_H - HS_PITCH_Y);
 
-  // Línea de mitad de cancha + círculo central
-  ctx.strokeStyle = "rgba(255,255,255,0.4)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(HS_CANVAS_W / 2, HS_PITCH_Y);
-  ctx.lineTo(HS_CANVAS_W / 2, HS_CANVAS_H);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(HS_CANVAS_W / 2, HS_CANVAS_H - 4, 50, Math.PI, 0);
-  ctx.stroke();
+  // Línea y círculo central
+  ctx.strokeStyle = "rgba(255,255,255,0.45)";
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(HS_CANVAS_W / 2, HS_PITCH_Y); ctx.lineTo(HS_CANVAS_W / 2, HS_CANVAS_H); ctx.stroke();
+  ctx.beginPath(); ctx.arc(HS_CANVAS_W / 2, HS_CANVAS_H - 4, 60, Math.PI, 0); ctx.stroke();
 
-  // Arcos con profundidad real: panel de fondo en perspectiva (se angosta
-  // hacia adentro) + pared lateral con sombra/luz + red de fondo. La red
-  // de ADELANTE se dibuja aparte, después de la pelota (ver hsDrawGoalFronts) —
-  // así lo que entra al arco se ve realmente "adentro", no encima de una imagen plana.
-  const goalDepth = 16;
+  // Arcos con interior negro
+  const goalDepth = 20;
   [0, HS_CANVAS_W - HS_GOAL_W].forEach((gx, i) => {
     const isLeft = i === 0;
     const topY = HS_PITCH_Y - HS_GOAL_H;
     const innerX = isLeft ? gx + HS_GOAL_W - goalDepth : gx + goalDepth;
 
-    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fillStyle = "rgba(10,12,18,0.7)";
     ctx.beginPath();
     ctx.moveTo(gx + (isLeft ? 0 : HS_GOAL_W), topY);
     ctx.lineTo(innerX, topY + goalDepth * 0.6);
     ctx.lineTo(innerX, HS_PITCH_Y - goalDepth * 0.3);
     ctx.lineTo(gx + (isLeft ? 0 : HS_GOAL_W), HS_PITCH_Y);
-    ctx.closePath();
-    ctx.fill();
+    ctx.closePath(); ctx.fill();
 
-    ctx.fillStyle = isLeft ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.22)";
-    ctx.beginPath();
-    ctx.moveTo(gx + (isLeft ? HS_GOAL_W : 0), topY);
-    ctx.lineTo(innerX, topY + goalDepth * 0.6);
-    ctx.lineTo(innerX, HS_PITCH_Y - goalDepth * 0.3);
-    ctx.lineTo(gx + (isLeft ? HS_GOAL_W : 0), HS_PITCH_Y);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.strokeStyle = "rgba(255,255,255,0.22)";
+    ctx.strokeStyle = "rgba(255,255,255,0.25)";
     ctx.lineWidth = 1;
-    for (let ny = topY + 8; ny < HS_PITCH_Y; ny += 10) {
-      ctx.beginPath(); ctx.moveTo(gx + 2, ny); ctx.lineTo(gx + HS_GOAL_W - 2, ny); ctx.stroke();
-    }
-    for (let nx = gx + 6; nx < gx + HS_GOAL_W; nx += 10) {
-      ctx.beginPath(); ctx.moveTo(nx, topY + 2); ctx.lineTo(nx, HS_PITCH_Y - 2); ctx.stroke();
-    }
+    for (let ny = topY + 12; ny < HS_PITCH_Y; ny += 14) { ctx.beginPath(); ctx.moveTo(gx + 2, ny); ctx.lineTo(gx + HS_GOAL_W - 2, ny); ctx.stroke(); }
+    for (let nx = gx + 8; nx < gx + HS_GOAL_W; nx += 14) { ctx.beginPath(); ctx.moveTo(nx, topY + 2); ctx.lineTo(nx, HS_PITCH_Y - 2); ctx.stroke(); }
 
-    ctx.strokeStyle = "#f0ece2";
-    ctx.lineWidth = 5;
-    ctx.strokeRect(gx + (isLeft ? 2 : 0), topY, HS_GOAL_W - 2, HS_GOAL_H);
-    ctx.strokeStyle = "rgba(255,255,255,0.55)";
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(gx + (isLeft ? 3 : 1), topY + 2);
-    ctx.lineTo(gx + (isLeft ? 3 : 1), HS_PITCH_Y - 2);
-    ctx.stroke();
+    ctx.strokeStyle = "#fdfdfd";
+    ctx.lineWidth = 6;
+    ctx.lineJoin = "round";
+    ctx.strokeRect(gx + (isLeft ? 3 : 0), topY, HS_GOAL_W - 3, HS_GOAL_H);
+    ctx.strokeStyle = "rgba(0,0,0,0.3)";
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(gx + (isLeft ? 5 : 2), topY + 2); ctx.lineTo(gx + (isLeft ? 5 : 2), HS_PITCH_Y - 2); ctx.stroke();
   });
 }
 
-
-// Red delantera: se dibuja DESPUÉS de la pelota y los jugadores, recortada
-// (clip) al área del arco. Cuando la pelota entra a hacer el gol, estas
-// líneas quedan por encima de ella — ahí es donde se nota que está
-// "adentro" de la red y no flotando arriba de una imagen de fondo.
 function hsDrawGoalFronts() {
   const ctx = hsCtx;
   [0, HS_CANVAS_W - HS_GOAL_W].forEach((gx) => {
@@ -6089,18 +6080,17 @@ function hsDrawGoalFronts() {
     ctx.beginPath();
     ctx.rect(gx, HS_PITCH_Y - HS_GOAL_H, HS_GOAL_W, HS_GOAL_H);
     ctx.clip();
-    ctx.strokeStyle = "rgba(255,255,255,0.5)";
-    ctx.lineWidth = 1.4;
-    for (let ny = HS_PITCH_Y - HS_GOAL_H + 4; ny < HS_PITCH_Y; ny += 16) {
+    ctx.strokeStyle = "rgba(255,255,255,0.7)";
+    ctx.lineWidth = 1.5;
+    for (let ny = HS_PITCH_Y - HS_GOAL_H + 6; ny < HS_PITCH_Y; ny += 18) {
       ctx.beginPath(); ctx.moveTo(gx - 4, ny); ctx.lineTo(gx + HS_GOAL_W + 4, ny); ctx.stroke();
     }
-    for (let nx = gx - 4; nx < gx + HS_GOAL_W + 4; nx += 16) {
+    for (let nx = gx - 4; nx < gx + HS_GOAL_W + 4; nx += 18) {
       ctx.beginPath(); ctx.moveTo(nx, HS_PITCH_Y - HS_GOAL_H); ctx.lineTo(nx, HS_PITCH_Y); ctx.stroke();
     }
     ctx.restore();
   });
 }
-
 
 function hsDrawPlayer(p) {
   const ctx = hsCtx;
