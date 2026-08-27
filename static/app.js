@@ -5276,13 +5276,13 @@ const HS_GOAL_H = 175;
 // con la potencia de picada. Si algo se siente mal, decime EXACTAMENTE en
 // qué momento (¿al picar? ¿al patear? ¿en el aire?) para afinar sin tener
 // que rediseñar todo de nuevo.
-const HS_BALL_GRAVITY = 1300;       // peso real: un tiro alto tarda medio segundo en volver a bajar, no se siente ni pesado ni flotante
+const HS_BALL_GRAVITY = 1050;       // (antes 1300) más liviana de verdad - más aire, más hangtime
 // (separada de HS_GRAVITY, que es la de los jugadores/salto - así no toco
 // el salto de nuevo por accidente, como pediste)
-const HS_AIR_DRAG = 0.998;          // roce de aire mínimo - la gravedad ya se encarga del peso, no hace falta frenarla también en el aire
-const HS_GROUND_RESTITUTION = 0.62; // pica como una pelota real: pierde altura de a poco, no rebota igual de alto para siempre
-const HS_WALL_RESTITUTION = 0.68;   // rebote de pared/palo controlado
-const HS_CEIL_RESTITUTION = 0.6;
+const HS_AIR_DRAG = 0.999;          // (antes 0.998) casi sin roce - un tiro fuerte llega lejos sin frenarse solo
+const HS_GROUND_RESTITUTION = 0.72; // (antes 0.62) pica más vivo, como una pelota liviana de verdad
+const HS_WALL_RESTITUTION = 0.72;   // (antes 0.68)
+const HS_CEIL_RESTITUTION = 0.65;   // (antes 0.6)
 const HS_BOOT_W = 52;               // (antes 46, +un poco para compensar la pierna más corta de arriba)
 const HS_BOOT_H = 22;                // (antes 30)
 const HS_BOOT_VISUAL_SCALE = 1.15;  // (antes 1.7, ahí estaba el problema real) con 1.7 el dibujo terminaba midiendo ~60px de ancho, casi lo mismo que el diámetro de la cabeza (72px) - por eso se veía gigante y la cabeza "achicada" en comparación
@@ -5322,11 +5322,11 @@ const HS_BOOT_ROT_KICK = -0.15; // patada a fondo: pie extendido, siguiendo el p
 // para cuando la patada llegaba DILUIDA (bug del promedio de impulsos que
 // arreglamos antes). Ahora que un solo toque aplica la potencia completa,
 // hay que bajarlos - si no, hasta un toque flojo sale volando.
-const HS_KICK_POWER = 980;        // recalibrado para la gravedad/roce nuevos
-const HS_HEAD_POWER = 700;        // recalibrado para la gravedad/roce nuevos
+const HS_KICK_POWER = 1100;       // (antes 980) con menos gravedad/roce, esto SÍ se traduce en tiros largos de verdad
+const HS_HEAD_POWER = 760;        // (antes 700)
 const HS_GOALS_TO_WIN = 5;
 const HS_TIME_SECONDS = 60;
-const HS_MAX_BALL_SPEED = 1500;   // recalibrado para la gravedad/roce nuevos
+const HS_MAX_BALL_SPEED = 1650;   // (antes 1500) para no capar los tiros largos nuevos
 const HS_PLAYER_PUSH = 44;
 // FIX "el movimiento del botín es muy rápido para apuntar": con 0.15s
 // llegaba a la extensión máxima casi al instante, así que era imposible
@@ -5948,10 +5948,16 @@ function hsUpdateBall(dt) {
     if (Math.abs(b.vy) > 40) {
       b.squash = Math.min(1, Math.abs(b.vy) / 650);
       b.vy = -Math.abs(b.vy) * HS_GROUND_RESTITUTION;
-      b.vx *= 0.85;
+      // FIX "no se pueden hacer tiros largos": acá había un extra
+      // b.vx *= 0.85 en CADA rebote, además de la restitución vertical.
+      // Un tiro raso que picara 2-3 veces perdía casi toda su velocidad de
+      // golpe (0.85*0.85*0.85 ≈ 61% de pérdida extra) - por eso la pelota
+      // se sentía plomiza y no llegaba lejos. Ahora el rebote solo pierde
+      // energía por la restitución de siempre, sin este impuesto extra.
+      b.vx *= 0.97;
     } else {
       b.vy = 0;
-      b.vx *= 0.98; // rozamiento leve rodando por el piso
+      b.vx *= 0.99; // rozamiento leve rodando por el piso
     }
   }
 
@@ -6108,6 +6114,35 @@ function hsResolveCollisions(now) {
     b.vx = vxSum / hits;
     b.vy = vySum / hits;
     hsClampBallVelocity(b);
+  }
+
+  // FIX BUG "el que patea primero traspasa al rival y mete gol": arriba,
+  // resolver la patada de un jugador REUBICA la pelota de golpe (la manda
+  // al borde del alcance de su botín). Si el rival estaba pegado ahí al
+  // lado disputando la pelota, ese salto de posición podía mandarla
+  // directo MÁS ALLÁ del rival sin pasar por su colisión - la "atravesaba".
+  // Esta pasada extra, sin importar quién pateó, vuelve a chequear que la
+  // pelota no haya quedado adentro del cuerpo de NINGUNO de los dos (2
+  // iteraciones para que converja incluso si están pegados los dos).
+  const hsPushBallOut = (cx, cy, minDist) => {
+    const dx = b.x - cx, dy = b.y - cy;
+    const dist = Math.hypot(dx, dy) || 0.001;
+    if (dist < minDist) {
+      const nx = dx / dist, ny = dy / dist;
+      b.x = cx + nx * minDist;
+      b.y = cy + ny * minDist;
+    }
+  };
+  for (let pass = 0; pass < 2; pass++) {
+    [hsState.left, hsState.right].forEach((p) => {
+      const headCX = p.x;
+      const headCY = p.y - HS_HEAD_OFFSET;
+      const bp = hsBootPose(p);
+      hsPushBallOut(headCX, headCY, HS_HEAD_R + HS_BALL_R);
+      hsPushBallOut(bp.x, bp.y, HS_BOOT_W * 0.5 + HS_BALL_R * 0.7);
+      const legNear = hsClosestPointOnSegment(b.x, b.y, headCX, headCY, bp.x, bp.y);
+      hsPushBallOut(legNear.x, legNear.y, HS_LEG_RADIUS + HS_BALL_R);
+    });
   }
 
   hsCheckGoal();
@@ -6410,6 +6445,16 @@ function hsDrawField() {
     ctx.strokeStyle = "rgba(180,190,200,0.6)";
     ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(gx + (isLeft ? 0 : HS_GOAL_W), topY + 3); ctx.lineTo(backX, topY + 6); ctx.stroke();
+    // NUEVO: caño trasero de PISO - conecta la base del palo de atrás con
+    // la base del palo de adelante. Antes faltaba esta barra y la "jaula"
+    // del arco quedaba abierta por abajo, se sentía como un cartel plano
+    // en vez de una estructura 3D real con varios palos.
+    ctx.strokeStyle = "rgba(200,205,212,0.5)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(backX, HS_PITCH_Y - 4);
+    ctx.lineTo(frontNearX, HS_PITCH_Y - 1);
+    ctx.stroke();
 
     // Palos delanteros (poste + travesaño) bien blancos y gruesos, arriba de todo
     ctx.strokeStyle = "#fdfdfd";
@@ -6562,6 +6607,47 @@ function hsDrawBoot(ctx, p, bootPose, color, dark) {
 }
 
 
+// FIX BUG RAÍZ ("el botín se sale/se mueve chueco al rotar"): en el código
+// había un comentario que decía "eso lo cubre hsDrawStandingLeg por
+// separado" - pero esa función NO EXISTÍA en ningún lado del archivo. O
+// sea: nunca hubo nada dibujando la pierna. El botín quedaba literalmente
+// flotando en el aire, sin nada que lo conecte a la cabeza, y cuando el
+// péndulo giraba se veía el hueco entre los dos moviéndose sin ningún
+// límite visual - de ahí la sensación de "se mueve chueco y se sale".
+// Esta es la pierna real: una media (tapered, más ancha arriba) que va
+// desde abajo de la cabeza hasta el tobillo del botín seleccionado.
+function hsDrawLeg(ctx, p, bootPose, color, dark) {
+  const headCX = p.x;
+  const headCY = p.y - HS_HEAD_OFFSET;
+  const ax = headCX, ay = headCY + HS_HEAD_R * 0.6;
+  const bx = bootPose.x, by = bootPose.y;
+  const dx = bx - ax, dy = by - ay;
+  const len = Math.hypot(dx, dy) || 0.001;
+  const nx = -dy / len, ny = dx / len;
+  const wTop = 10, wBot = 7;
+
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(ax + nx * wTop, ay + ny * wTop);
+  ctx.lineTo(bx + nx * wBot, by + ny * wBot);
+  ctx.lineTo(bx - nx * wBot, by - ny * wBot);
+  ctx.lineTo(ax - nx * wTop, ay - ny * wTop);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
+  // Raya de la media (detalle caricaturesco simple)
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(ax, ay);
+  ctx.lineTo(bx, by);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function hsDrawPlayer(p) {
   const ctx = hsCtx;
   const headCX = p.x;
@@ -6580,6 +6666,7 @@ function hsDrawPlayer(p) {
 
   const bootPose = hsBootPose(p);
 
+  hsDrawLeg(ctx, p, bootPose, color, dark);
   hsDrawBoot(ctx, p, bootPose, color, dark);
 
   if (bootPose.isStrike) {
