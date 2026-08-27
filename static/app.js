@@ -589,6 +589,21 @@ function playBuzz() {
   osc.stop(ctx.currentTime + 0.35);
 }
 
+function playHonk() {
+  if (!soundEnabled) return;
+  const ctx = getAudioCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(220, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(160, ctx.currentTime + 0.09);
+  gain.gain.setValueAtTime(0.18, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + 0.13);
+}
+
 /* ---------------- confetti ---------------- */
 
 function launchConfetti() {
@@ -5255,7 +5270,14 @@ const HS_KICK_POWER = 760;
 const HS_HEAD_POWER = 620;
 const HS_GOALS_TO_WIN = 5;
 const HS_TIME_SECONDS = 60;
-const HS_MAX_BALL_SPEED = 1450; // FIX crash: tope de velocidad, nunca deja que explote a Infinity/NaN
+const HS_MAX_BALL_SPEED = 1450;
+const HS_KICK_WINDUP = 0.09;
+const HS_KICK_STRIKE = 0.10;
+const HS_KICK_RECOVER = 0.12;
+const HS_KICK_TOTAL = HS_KICK_WINDUP + HS_KICK_STRIKE + HS_KICK_RECOVER;
+const HS_KICK_COOLDOWN = 280;
+const HS_KICK_REACH = HS_BOOT_W * 0.9;
+const HS_PASSIVE_BOUNCE = 0.35;
 
 let hsState = null;
 let hsRAF = null;
@@ -5322,8 +5344,10 @@ function hsMakePlayer(side, headKey, name) {
     onGround: true,
     facing: side === "left" ? 1 : -1,
     score: 0,
-    kickFlash: 0,
     headFlash: 0,
+    kicking: false,
+    kickTime: 0,
+    kickReadyAt: 0,
   };
 }
 
@@ -5406,7 +5430,7 @@ function hsAttachKeys() {
   hsKeyDownHandler = (e) => {
     if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
     const k = e.key.toLowerCase();
-    if (["a", "d", "w", "arrowleft", "arrowright", "arrowup"].includes(k)) e.preventDefault();
+    if (["a", "d", "w", "s", "arrowleft", "arrowright", "arrowup", "arrowdown"].includes(k)) e.preventDefault();
     hsKeys[k] = true;
   };
   hsKeyUpHandler = (e) => { hsKeys[e.key.toLowerCase()] = false; };
@@ -5445,8 +5469,8 @@ function hsLoop(now) {
 
   if (hsShakeState.time > 0) hsShakeState.time = Math.max(0, hsShakeState.time - dt);
 
-  hsUpdatePlayer(hsState.left, dt, { left: "a", right: "d", jump: "w" });
-  hsUpdatePlayer(hsState.right, dt, { left: "arrowleft", right: "arrowright", jump: "arrowup" });
+  hsUpdatePlayer(hsState.left, dt, { left: "a", right: "d", jump: "w", kick: "s" }, now);
+  hsUpdatePlayer(hsState.right, dt, { left: "arrowleft", right: "arrowright", jump: "arrowup", kick: "arrowdown" }, now);
   hsUpdateBall(dt);
   hsResolveCollisions(now);
   hsDraw();
@@ -5454,7 +5478,7 @@ function hsLoop(now) {
   hsRAF = requestAnimationFrame(hsLoop);
 }
 
-function hsUpdatePlayer(p, dt, keys) {
+function hsUpdatePlayer(p, dt, keys, now) {
   const dir = (hsKeys[keys.right] ? 1 : 0) - (hsKeys[keys.left] ? 1 : 0);
   if (dir !== 0) {
     p.vx += dir * HS_MOVE_ACCEL * dt;
@@ -5477,8 +5501,58 @@ function hsUpdatePlayer(p, dt, keys) {
     p.vy = 0;
     p.onGround = true;
   }
-  if (p.kickFlash > 0) p.kickFlash -= 1;
   if (p.headFlash > 0) p.headFlash -= 1;
+
+  // Patada activa: dispara con la tecla de patear, no se puede spamear (cooldown)
+  if (hsKeys[keys.kick] && !p.kicking && now > p.kickReadyAt) {
+    p.kicking = true;
+    p.kickTime = 0;
+  }
+  if (p.kicking) {
+    p.kickTime += dt;
+    if (p.kickTime >= HS_KICK_TOTAL) {
+      p.kicking = false;
+      p.kickReadyAt = now + HS_KICK_COOLDOWN;
+    }
+  }
+}
+
+function hsKickPhaseInfo(p) {
+  if (!p.kicking) return { windup: 0, strike: false, swing: 0 };
+  const t = p.kickTime;
+  if (t < HS_KICK_WINDUP) {
+    return { windup: t / HS_KICK_WINDUP, strike: false, swing: -1 };
+  }
+  const strikeT = t - HS_KICK_WINDUP;
+  if (strikeT < HS_KICK_STRIKE) {
+    return { windup: 1, strike: true, swing: strikeT / HS_KICK_STRIKE };
+  }
+  const recoverT = strikeT - HS_KICK_STRIKE;
+  return { windup: 1 - Math.min(1, recoverT / HS_KICK_RECOVER), strike: false, swing: 1 };
+}
+
+// Posición real del botín (incluye el windup/swing de la patada) - la usan
+// tanto la colisión como el dibujo, así el hitbox y lo que se ve SIEMPRE coinciden.
+function hsBootPose(p) {
+  const info = hsKickPhaseInfo(p);
+  const base = HS_BOOT_W * 0.35;
+  const kickBack = HS_BOOT_W * 0.28;
+  const kickFwd = HS_BOOT_W * 0.75;
+  let offset;
+  if (!p.kicking) {
+    offset = base;
+  } else if (!info.strike && info.swing === -1) {
+    offset = base - (base + kickBack) * info.windup;
+  } else if (info.strike) {
+    offset = -kickBack + (kickFwd + kickBack) * info.swing;
+  } else {
+    offset = kickFwd - (kickFwd - base) * (1 - info.windup);
+  }
+  return {
+    x: p.x + p.facing * offset,
+    y: p.y - HS_BOOT_H * 0.4, // FIX: sigue la altura real del jugador, ya no queda pegado al piso
+    isStrike: info.strike,
+  };
 }
 
 function hsClampBallVelocity(b) {
@@ -5562,24 +5636,30 @@ function hsResolveCollisions(now) {
     }
 
     // Botín: rectángulo pegado a los pies, hacia donde mira.
-    const bootX = p.x + p.facing * (HS_BOOT_W * 0.35);
-    const bootY = HS_PITCH_Y - HS_BOOT_H * 0.5;
-    const closestX = Math.max(bootX - HS_BOOT_W / 2, Math.min(b.x, bootX + HS_BOOT_W / 2));
-    const closestY = Math.max(bootY - HS_BOOT_H / 2, Math.min(b.y, bootY + HS_BOOT_H / 2));
+    // Botín: sigue la pose real (incluye la patada activa tipo catapulta)
+    const bootPose = hsBootPose(p);
+    const reach = bootPose.isStrike ? HS_KICK_REACH : HS_BOOT_W / 2;
+    const closestX = Math.max(bootPose.x - reach, Math.min(b.x, bootPose.x + reach));
+    const closestY = Math.max(bootPose.y - HS_BOOT_H / 2, Math.min(b.y, bootPose.y + HS_BOOT_H / 2));
     const bdx = b.x - closestX, bdy = b.y - closestY;
     const bdist = Math.hypot(bdx, bdy) || 0.001;
     if (bdist < HS_BALL_R) {
       const nx = bdx / bdist, ny = bdy / bdist;
       b.x = closestX + nx * HS_BALL_R;
       b.y = closestY + ny * HS_BALL_R;
-      b.vx = p.facing * HS_KICK_POWER + p.vx * 0.4;
-      b.vy = -260 + ny * 120;
-      hsClampBallVelocity(b);
-      p.kickFlash = 8;
-      if (!p.bootCoolUntil || now > p.bootCoolUntil) {
-        p.bootCoolUntil = now + 180;
-        busPlaySound("/static/audio/kickball.wav", 0.5);
+      if (bootPose.isStrike) {
+        b.vx = p.facing * HS_KICK_POWER * 1.1 + p.vx * 0.4;
+        b.vy = -280 + ny * 120;
+        if (!p.bootCoolUntil || now > p.bootCoolUntil) {
+          p.bootCoolUntil = now + 180;
+          busPlaySound("/static/audio/kickball.wav", 0.6);
+        }
+      } else {
+        const speedIn = Math.hypot(b.vx, b.vy);
+        b.vx = nx * speedIn * HS_PASSIVE_BOUNCE + p.vx * 0.2;
+        b.vy = ny * Math.abs(b.vy) * HS_PASSIVE_BOUNCE - 40;
       }
+      hsClampBallVelocity(b);
     }
   });
 
@@ -5736,10 +5816,8 @@ function hsDrawPlayer(p) {
   const headCY = p.y - HS_HEAD_OFFSET;
   const color = p.side === "left" ? "#f5cd76" : "#2f8fb0";
   const dark = p.side === "left" ? "#b98f3f" : "#1c5f77";
-  const kicking = p.kickFlash > 0;
   const jumpT = Math.max(0, Math.min(1, (HS_PITCH_Y - p.y) / 140));
 
-  // Sombra en el piso, se achica con la altura del salto (sensación de profundidad)
   ctx.save();
   ctx.globalAlpha = 0.35 - jumpT * 0.18;
   ctx.fillStyle = "#000";
@@ -5748,11 +5826,11 @@ function hsDrawPlayer(p) {
   ctx.fill();
   ctx.restore();
 
-  // Torso/pierna: trapecio angosto en vez de una línea sola
+  // FIX: el torso ahora sigue p.y (altura real), no HS_PITCH_Y fijo -> ya no se estira al saltar
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.moveTo(p.x - 9, HS_PITCH_Y - 4);
-  ctx.lineTo(p.x + 9, HS_PITCH_Y - 4);
+  ctx.moveTo(p.x - 9, p.y - 4);
+  ctx.lineTo(p.x + 9, p.y - 4);
   ctx.lineTo(headCX + 6, headCY + HS_HEAD_R * 0.55);
   ctx.lineTo(headCX - 6, headCY + HS_HEAD_R * 0.55);
   ctx.closePath();
@@ -5761,22 +5839,20 @@ function hsDrawPlayer(p) {
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // Franja de media
   ctx.fillStyle = dark;
-  ctx.fillRect(p.x - 8, HS_PITCH_Y - 16, 16, 8);
+  ctx.fillRect(p.x - 8, p.y - 16, 16, 8);
 
-  // Botín con forma real (no un óvalo genérico)
-  const bootX = p.x + p.facing * (HS_BOOT_W * (kicking ? 0.55 : 0.35));
-  const bootY = HS_PITCH_Y - HS_BOOT_H * 0.4;
+  const bootPose = hsBootPose(p);
+  const info = hsKickPhaseInfo(p);
   ctx.save();
-  ctx.translate(bootX, bootY);
-  const f = p.facing;
+  ctx.translate(bootPose.x, bootPose.y);
+  ctx.rotate(p.facing * (info.strike ? 0.35 * info.swing : info.windup ? -0.25 * info.windup : 0));
   ctx.fillStyle = "#efe9dd";
   ctx.beginPath();
   ctx.moveTo(-HS_BOOT_W * 0.42, -3);
   ctx.quadraticCurveTo(-HS_BOOT_W * 0.5, 6, -HS_BOOT_W * 0.3, 8);
-  ctx.lineTo(HS_BOOT_W * (f === 1 ? 0.5 : 0.32), 8);
-  ctx.quadraticCurveTo(HS_BOOT_W * (f === 1 ? 0.58 : 0.4), 2, HS_BOOT_W * (f === 1 ? 0.4 : 0.22), -6);
+  ctx.lineTo(HS_BOOT_W * (p.facing === 1 ? 0.5 : 0.32), 8);
+  ctx.quadraticCurveTo(HS_BOOT_W * (p.facing === 1 ? 0.58 : 0.4), 2, HS_BOOT_W * (p.facing === 1 ? 0.4 : 0.22), -6);
   ctx.closePath();
   ctx.fill();
   ctx.strokeStyle = "#2a2530";
@@ -5786,19 +5862,17 @@ function hsDrawPlayer(p) {
   ctx.fillRect(-HS_BOOT_W * 0.42, -3, HS_BOOT_W * 0.22, 5);
   ctx.restore();
 
-  if (kicking) {
-    const burstAlpha = p.kickFlash / 8;
+  if (info.strike) {
     ctx.save();
-    ctx.globalAlpha = burstAlpha * 0.7;
+    ctx.globalAlpha = 0.6 * (1 - info.swing);
     ctx.strokeStyle = "#fff";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(bootX + p.facing * 10, bootY, 10 + (1 - burstAlpha) * 14, 0, Math.PI * 2);
+    ctx.arc(bootPose.x + p.facing * 8, bootPose.y, 10 + info.swing * 16, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
 
-  // Cuello
   ctx.strokeStyle = dark;
   ctx.lineWidth = 10;
   ctx.beginPath();
@@ -5806,7 +5880,6 @@ function hsDrawPlayer(p) {
   ctx.lineTo(headCX, headCY + HS_HEAD_R * 0.3);
   ctx.stroke();
 
-  // Sombra bajo la cabeza (le da volumen)
   ctx.save();
   ctx.globalAlpha = 0.22;
   ctx.fillStyle = "#000";
