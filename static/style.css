@@ -1672,7 +1672,8 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   gap: 18px;
   margin: 20px 0;
 }
-.fight-pick-card {
+.fight-pick-card,
+.hs-pick-card {
   background: var(--bg-alt);
   border: 2px solid var(--border-bright);
   border-radius: var(--radius-md);
@@ -1685,13 +1686,14 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   color: var(--text);
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
-.fight-pick-card:hover {
+.fight-pick-card:hover,
+.hs-pick-card:hover {
   transform: translateY(-4px) scale(1.02);
   border-color: var(--pink);
   box-shadow: 0 10px 30px rgba(255, 62, 127, 0.3);
 }
-.fight-pick-card img { width: 100%; max-width: 200px; aspect-ratio: 3/4; object-fit: cover; border-radius: 10px; }
-.fight-pick-card span { font-family: var(--font-comic); font-size: 18px; color: var(--gold-bright); }
+.fight-pick-card img, .hs-pick-card img { width: 100%; max-width: 200px; aspect-ratio: 3/4; object-fit: cover; border-radius: 10px; }
+.fight-pick-card span, .hs-pick-card span { font-family: var(--font-comic); font-size: 18px; color: var(--gold-bright); }
 
 /* --- El combate --- */
 .fight-hud {
@@ -2721,7 +2723,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 .hs-mode-grid { grid-template-columns: repeat(2, 1fr); max-width: 420px; margin: 20px auto; }
 
 .hs-pick-grid { grid-template-columns: repeat(4, 1fr); max-width: 640px; }
-.hs-pick-grid .fight-pick-card img { aspect-ratio: 1 / 1; object-fit: contain; max-width: 140px; }
+.hs-pick-grid .hs-pick-card img { aspect-ratio: 1 / 1; object-fit: contain; max-width: 140px; }
 .hs-head-taken { opacity: 0.28; filter: grayscale(1); pointer-events: none; }
 @media (max-width: 620px) {
   .hs-pick-grid { grid-template-columns: repeat(2, 1fr); }
