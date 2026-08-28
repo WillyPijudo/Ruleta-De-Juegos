@@ -887,33 +887,25 @@
 <div id="toast" class="toast hidden"></div>
 <div id="confettiLayer" class="confetti-layer"></div>
 
-<!-- Splash de Ronaldinho -->
-<div class="ronaldinho-splash hidden" id="ronaldinhoSplash">
-  <div class="ronaldinho-splash-inner">
-    <img src="/static/img/ronaldinho-bailando.png" alt="Ronaldinho" class="ronaldinho-img" onerror="this.style.display='none'">
-    <p class="ronaldinho-caption">¿SALE ESE PES 6? 😂</p>
-    <p class="ronaldinho-subcaption">TOCÁ PARA SEGUIR</p>
-  </div>
-</div>
+<!-- Panel "¿Quién juega con Mateo?" -->
+<div class="pes-panel hidden" id="pesModeSelect">
+  <button class="pes-panel-close" id="pesPanelClose" type="button" aria-label="Cerrar">✕</button>
+  <img src="/static/img/ronaldinho-bailando.png" alt="" class="pes-panel-ronaldinho" onerror="this.remove()">
+  <h2 class="pes-panel-title">¿QUIÉN JUEGA CON MATEO?</h2>
 
-<!-- Selección de duelo (modo PES) -->
-<div class="pes-mode-select hidden" id="pesModeSelect">
-  <h2 class="pes-mode-title">ELEGÍ EL DUELO</h2>
-  <div class="pes-mode-options">
-    <button class="pes-mode-btn" id="pesOptRomanMateo" type="button">
-      <span class="pes-mode-vs">ROMÁN</span>
-      <span class="pes-mode-vs-sep">VS</span>
-      <span class="pes-mode-vs">MATEO</span>
-    </button>
-    <button class="pes-mode-btn" id="pesOptLautyMateo" type="button">
-      <span class="pes-mode-vs">LAUTY</span>
-      <span class="pes-mode-vs-sep">VS</span>
-      <span class="pes-mode-vs">MATEO</span>
-    </button>
-    <button class="pes-mode-btn pes-mode-btn-mateo-solo hidden" id="pesOptMateoSolo" type="button">
-      <span class="pes-mode-vs">MATEO SOLO</span>
-    </button>
+  <div class="pes-reel" id="pesReel">
+    <span class="pes-reel-text" id="pesReelText">ROMÁN</span>
   </div>
+
+  <button class="btn btn-primary pes-spin-btn" id="pesSpinBtn" type="button">🎲 GIRAR</button>
+
+  <button class="pes-customize-btn" id="pesCustomizeBtn" type="button">✏️ Personalizar nombres</button>
+  <div class="pes-customize-box hidden" id="pesCustomizeBox">
+    <input type="text" id="pesNameA" class="pes-name-input" value="Román" maxlength="14">
+    <input type="text" id="pesNameB" class="pes-name-input" value="Lauty" maxlength="14">
+    <button class="btn btn-ghost btn-small" id="pesCustomizeSave" type="button">Guardar</button>
+  </div>
+
   <button class="pes-secret-btn" id="pesSecretBtn" type="button" title="???">👁</button>
 </div>
 
