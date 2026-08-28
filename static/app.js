@@ -7736,17 +7736,37 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ---- Resultado final: cae el botón "Desafiar" ----
   function announceResult() {
-    // Ya no arma ningún texto con el nombre - el botón siempre dice
-    // lo mismo, "⚔️ DESAFIAR" (definido en el HTML).
-    pesModeSelect.classList.add("hidden");
+    // CAMBIO: el botón ahora vive DENTRO de la ventana de la ruleta
+    // secreta (antes estaba suelto, flotando arriba de la ruleta
+    // principal - por eso ya NO ocultamos pesModeSelect acá, la caída
+    // pasa adentro de esa misma ventana).
+    const mark = document.getElementById("desafiarImpactMark");
+    mark?.classList.remove("show");
     desafiarDrop.classList.remove("hidden");
     desafiarDrop.classList.remove("desafiar-fall");
     void desafiarDrop.offsetWidth;
     desafiarDrop.classList.add("desafiar-fall");
+    // La marca de impacto aparece recién cuando "toca el piso" - sincronizada
+    // con el 0.9s de la animación de caída definida en el CSS.
+    setTimeout(() => mark?.classList.add("show"), 780);
   }
 
   desafiarBtn?.addEventListener("click", () => {
-    // A definir: qué pasa al tocar "Desafiar".
+    document.getElementById("desafioConfirmOverlay")?.classList.remove("hidden");
+  });
+
+  // ---- Ventana de confirmación "desafio.exe" ----
+  const desafioConfirmOverlay = document.getElementById("desafioConfirmOverlay");
+  function closeDesafioConfirm() {
+    desafioConfirmOverlay?.classList.add("hidden");
+  }
+  document.getElementById("desafioConfirmX")?.addEventListener("click", closeDesafioConfirm);
+  document.getElementById("desafioConfirmNo")?.addEventListener("click", closeDesafioConfirm);
+  document.getElementById("desafioConfirmYes")?.addEventListener("click", () => {
+    closeDesafioConfirm();
+    pesModeActive = false;
+    exitPesMode();      // cerramos la ruleta secreta detrás
+    openDuelSelect();   // vamos directo al selector de minijuegos que ya tenías
   });
 
   // ---- Cinemática de vidrio roto: cubre toda la pantalla con
