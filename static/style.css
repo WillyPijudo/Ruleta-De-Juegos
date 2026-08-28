@@ -2890,14 +2890,24 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   left: 8px;
   font-family: var(--font-marker);
   font-size: 10.5px;
-  color: var(--danger);
-  border: 2px solid var(--danger);
+  color: #ff5a7a;
+  border: 2px solid #ff5a7a;
   border-radius: 6px;
   padding: 3px 6px;
   transform: rotate(-9deg);
-  opacity: 0.85;
   letter-spacing: 0.5px;
-  z-index: 2;
+  z-index: 4;
+  background: rgba(20, 4, 10, 0.35);
+  text-shadow: 0 0 4px #ff5a7a, 0 0 10px #ff2d5c, 0 0 18px #ff2d5c;
+  box-shadow: 0 0 6px #ff2d5c, 0 0 14px rgba(255, 45, 92, 0.6), inset 0 0 6px rgba(255, 45, 92, 0.4);
+  animation: neon-flicker 2.8s ease-in-out infinite;
+}
+@keyframes neon-flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.85; }
+  52% { opacity: 1; }
+  54% { opacity: 0.6; }
+  56% { opacity: 1; }
 }
 
 .loser-window {
@@ -3049,10 +3059,10 @@ input[type="text"]::placeholder { color: var(--text-muted); }
    forma más redonda/inflada (antes se veía aplastada) */
 .loser-raincloud {
   position: absolute;
-  top: 4px;
-  left: 46%;
-  width: 36px;
-  height: 17px;
+  top: 16px;
+  left: 58%;
+  width: 30px;
+  height: 14px;
   z-index: 3;
   animation: raincloud-bob 3.1s ease-in-out infinite;
 }
