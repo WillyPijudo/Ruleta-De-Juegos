@@ -1102,6 +1102,23 @@ function stopDrumrollAndPlayHit(loopSrc) {
   }
 }
 
+// Narración Loquendo por ganador. Se dispara 2s después del reveal,
+// dejando que termine toda la cinemática (redoble + rincón del
+// perdedor + trompeta triste) antes de que "hable" el locutor.
+const WINNER_NARRATION_FILES = {
+  mateo: "/static/audio/narracion-mateo.mp3",
+  roman: "/static/audio/narracion-roman.mp3",
+  lauty: "/static/audio/narracion-lauty.mp3",
+};
+function playWinnerNarration(whoName) {
+  if (!soundEnabled) return;
+  const key = (whoName || "").trim().toLowerCase();
+  const path = WINNER_NARRATION_FILES[key];
+  if (!path) return;
+  busPlaySound(path, 0.85);
+}
+
+
 function showWinnerModal(winner) {
   currentWinnerGame = winner;
   const whoName = winner.added_by || "Anónimo";
@@ -1162,6 +1179,7 @@ function showWinnerModal(winner) {
       if (!playSfx("wheelWin", 0.6)) playFanfare();
 
       setTimeout(() => showLoserCorner(winner), 700);
+      setTimeout(() => playWinnerNarration(whoName), 2000);
     });
   }, 550);
 }
