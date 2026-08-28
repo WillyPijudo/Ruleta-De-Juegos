@@ -7312,27 +7312,32 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
-// ---- Estuche 3D del ganador: rota según la posición del mouse ----
+// ---- Estuche 3D del ganador: rota con física suave según el mouse ----
 (function initCoverTilt() {
   const wrap = document.getElementById("winnerCoverWrap");
   if (!wrap) return;
+  
   wrap.addEventListener("mousemove", (e) => {
     const box = wrap.querySelector(".poster-3d");
     if (!box) return;
     const rect = wrap.getBoundingClientRect();
     const px = (e.clientX - rect.left) / rect.width;
     const py = (e.clientY - rect.top) / rect.height;
-    const ry = (px - 0.5) * 75;   // giro izquierda/derecha, bien marcado
-    const rx = (0.5 - py) * 50;   // giro arriba/abajo
+    
+    // Rango de giro natural (muestra el lomo o el canto sin romper la perspectiva)
+    const ry = (px - 0.5) * 55;
+    const rx = (0.5 - py) * 35;
+    
     box.style.setProperty("--ry", ry.toFixed(2) + "deg");
     box.style.setProperty("--rx", rx.toFixed(2) + "deg");
   });
+  
   wrap.addEventListener("mouseleave", () => {
     const box = wrap.querySelector(".poster-3d");
     if (box) {
-      // Vuelve al ángulo "de vitrina", no queda plano.
-      box.style.setProperty("--ry", "-22deg");
-      box.style.setProperty("--rx", "12deg");
+      // Ángulo de vitrina perfecto por defecto
+      box.style.setProperty("--ry", "-20deg");
+      box.style.setProperty("--rx", "10deg");
     }
   });
 })();
