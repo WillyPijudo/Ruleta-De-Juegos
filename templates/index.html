@@ -6,7 +6,7 @@
 <title>Ruleta de Juegos</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Luckiest+Guy&family=Permanent+Marker&family=Fredoka:wght@500;600;700&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&&family=Rubik+Mono+Onedisplay=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Luckiest+Guy&family=Permanent+Marker&family=Fredoka:wght@500;600;700&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&family=Rubik+Mono+One&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -128,7 +128,7 @@
   <div class="modal-card">
     <p class="modal-eyebrow">¡Tenemos ganador!</p>
     <div class="modal-cover-wrap" id="winnerCoverWrap"></div>
-    <h3 id="winnerName"></h3>
+    <h3 id="winnerName" class="font-arcade"></h3>
     <p class="winner-message" id="winnerMessage"></p>
     <div class="modal-actions">
       <button id="duelChallengeBtn" class="btn btn-duel btn-small" type="button">⚔️ Desafiar al ganador</button>
