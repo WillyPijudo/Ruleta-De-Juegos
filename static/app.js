@@ -5265,7 +5265,14 @@ const HS_MOVE_ACCEL = 2500;
 const HS_MAX_SPEED = 350;
 const HS_FRICTION = 11;
 const HS_JUMP_VY = -470; // (antes -600) salto bastante más bajo - antes subía más de 2.5x el diámetro de la cabeza, se sentía exagerado
-const HS_GOAL_W = 50;
+// (antes 50) NUEVO PEDIDO: los jugadores tienen que poder meterse en su
+// propio arco a tapar un remate. Con 50px de profundidad, la cabeza (72px
+// de diámetro) NO ENTRABA ENTERA en el arco - apenas asomaba, quedaba a
+// medio meter, se veía y se sentía mal. Ahora el arco es bien más profundo
+// que la cabeza, así el arquero entra cómodo y todavía queda hueco de
+// verdad (adelante, arriba/abajo, y atrás) para que un remate bien picado
+// pueda colarse - ver hsResolvePlayerVsGoalFrame para el resto del ajuste.
+const HS_GOAL_W = 92;
 const HS_GOAL_H = 155; // (antes 175) un poco más corto
 // ===== FÍSICA DE LA PELOTA - REDISEÑADA DE CERO =====
 // En vez de seguir parchando número por número, este es un set coherente
@@ -5280,7 +5287,7 @@ const HS_BALL_GRAVITY = 1050;       // (antes 1300) más liviana de verdad - má
 // (separada de HS_GRAVITY, que es la de los jugadores/salto - así no toco
 // el salto de nuevo por accidente, como pediste)
 const HS_AIR_DRAG = 0.999;          // (antes 0.998) casi sin roce - un tiro fuerte llega lejos sin frenarse solo
-const HS_GROUND_RESTITUTION = 0.66; // (antes 0.72) con el bug de reinyección de impulso resuelto (ver hsResolveCollisions), ya no hace falta compensar rebotando tan vivo - esto da picadas controlables, buenas para jueguitos, sin sentirse muerta
+const HS_GROUND_RESTITUTION = 0.70; // (antes 0.66) con el cabezazo ya resuelto (ver hsFrameId), el rebote general seguía sintiéndose un toque apagado - subido un poco para que cada picada se sienta más viva sin volverse una superpelota
 const HS_WALL_RESTITUTION = 0.72;   // (antes 0.68)
 const HS_CEIL_RESTITUTION = 0.65;   // (antes 0.6)
 const HS_BOOT_W = 52;               // (antes 46, +un poco para compensar la pierna más corta de arriba)
@@ -5370,6 +5377,20 @@ const HS_PASSIVE_BOUNCE = 0.38; // (antes 0.5) toques/dominadas más controlable
 const HS_NET_DEPTH = 46;
 const HS_GOAL_BAR_THICK = 10; // NUEVO: grosor real del travesaño/palo para que tenga colisión de verdad (antes era puro dibujo, sin física)
 
+// ===== DASH (NUEVO, pedido explícito - programado de cero) =====
+// Doble toque rápido a la izquierda o a la derecha dispara un impulso
+// horizontal corto. Pensado con límites claros a propósito para que NO
+// quede roto: mientras dura, la velocidad queda FIJA (no se puede acelerar
+// más ni frenar a mitad de camino, así se siente como un golpe controlado
+// y no como un boost infinito que se puede encadenar), y hay un cooldown
+// real en milisegundos antes de poder volver a tirar otro. No da
+// invencibilidad ni atraviesa al rival - la colisión jugador-contra-jugador
+// (hsResolvePlayers) lo sigue frenando en seco si choca a alguien.
+const HS_DASH_SPEED = 640;       // velocidad fija (px/s) mientras dura el dash
+const HS_DASH_DURATION = 0.15;   // segundos que dura el impulso a velocidad fija
+const HS_DASH_COOLDOWN = 650;    // ms de espera real entre un dash y el siguiente
+const HS_DASH_TAP_WINDOW = 260;  // ms máximo entre los dos toques para que cuente como doble-tap
+
 let hsState = null;
 let hsRAF = null;
 let hsKeys = {};
@@ -5382,6 +5403,21 @@ let hsCanvas = null;
 let hsCtx = null;
 let hsShakeState = { time: 0, mag: 0 };
 let hsPickState = { step: 1, leftHead: null };
+// FIX "el cabezazo se frena de golpe en vez de rebotar": hsResolveCollisions
+// corre varias veces por frame (sub-steps anti-tunneling, ver hsLoop) con el
+// MISMO timestamp `now` en todas. Antes, un cabezazo fuerte en el primer
+// sub-step podía "tocarse" de nuevo en el segundo/tercer sub-step del MISMO
+// frame - y como el cooldown real (ms) recién arranca a contar, ese
+// segundo toque se procesaba como golpe "en cooldown" (débil) y pisaba el
+// impulso bueno que acababa de aplicar el primero. Con este contador de
+// frame, un jugador aporta impulso de cabezazo COMPLETO como mucho una vez
+// por frame de verdad (no por sub-step) - los sub-steps extra dentro del
+// mismo frame ya no pueden diluir el golpe que se acaba de dar.
+let hsFrameId = 0;
+// Doble-tap para el dash: guarda el último toque de izquierda/derecha por
+// jugador para detectar dos toques seguidos en la ventana de tiempo.
+let hsTapTracker = { left: { dir: 0, time: 0 }, right: { dir: 0, time: 0 } };
+let hsDashRequest = { left: null, right: null };
 
 const HS_DEFAULT_KEYS_LEFT  = { left: "a", right: "d", jump: "w", kick: "s" };
 const HS_DEFAULT_KEYS_RIGHT = { left: "arrowleft", right: "arrowright", jump: "arrowup", kick: "arrowdown" };
@@ -5648,6 +5684,12 @@ function hsMakePlayer(side, headKey, name) {
     score: 0,
     bootExtend: 0, // 0 = reposo (debajo de la cabeza), 1 = extendido del todo (adelante)
     landSquash: 0, // NUEVO: aplasta un toque la cabeza al aterrizar de un salto - juice barato, se ve bien
+    headHitFrame: -1, // NUEVO: último hsFrameId en el que este jugador ya conectó un cabezazo fuerte (ver hsFrameId)
+    dashing: false,   // NUEVO: dash - true mientras dura el impulso a velocidad fija
+    dashDir: 0,       // -1 / 1, dirección del dash en curso
+    dashUntil: 0,     // timestamp (ms) en el que termina el dash actual
+    dashCoolUntil: 0, // timestamp (ms) hasta el que no se puede volver a tirar otro dash
+    dashTrail: 0,     // NUEVO: 0-1, se usa solo para el efecto visual de estela, decae solo
   };
 }
 
@@ -5726,7 +5768,31 @@ function hsStartMatch(leftHead, rightHead) {
   hsRAF = requestAnimationFrame(hsLoop);
 }
 
+// Detecta el doble-tap de izquierda/derecha para el dash. Se llama desde
+// el keydown real (no desde el estado "tecla apretada" de hsKeys), porque
+// necesitamos toques DISCRETOS - con el estado sostenido no hay forma de
+// distinguir "la tengo apretada" de "la toqué dos veces seguidas".
+function hsHandleDashTap(side, k) {
+  const keys = side === "left" ? HS_KEYS_LEFT : HS_KEYS_RIGHT;
+  let dir = 0;
+  if (k === keys.left) dir = -1;
+  else if (k === keys.right) dir = 1;
+  if (!dir) return;
+  const tracker = hsTapTracker[side];
+  const nowMs = performance.now();
+  if (tracker.dir === dir && (nowMs - tracker.time) < HS_DASH_TAP_WINDOW) {
+    hsDashRequest[side] = dir;
+    tracker.dir = 0;
+    tracker.time = 0; // resetea, así un tercer toque no encadena otro dash de arrastre
+  } else {
+    tracker.dir = dir;
+    tracker.time = nowMs;
+  }
+}
+
 function hsAttachKeys() {
+  hsTapTracker = { left: { dir: 0, time: 0 }, right: { dir: 0, time: 0 } };
+  hsDashRequest = { left: null, right: null };
   hsKeyDownHandler = (e) => {
     if (["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
     const k = e.key.toLowerCase();
@@ -5735,6 +5801,13 @@ function hsAttachKeys() {
       HS_KEYS_RIGHT.left, HS_KEYS_RIGHT.right, HS_KEYS_RIGHT.jump, HS_KEYS_RIGHT.kick,
     ];
     if (bound.includes(k)) e.preventDefault();
+    // e.repeat = el navegador repitiendo sola la tecla mientras la tenés
+    // apretada (auto-repeat del SO) - eso NO cuenta como un segundo toque
+    // real, si no un dash "solo" tirando la tecla un toque largo.
+    if (!e.repeat) {
+      hsHandleDashTap("left", k);
+      hsHandleDashTap("right", k);
+    }
     hsKeys[k] = true;
   };
   hsKeyUpHandler = (e) => { hsKeys[e.key.toLowerCase()] = false; };
@@ -5770,6 +5843,7 @@ function hsLoop(now) {
   if (!hsState || hsState.over) { hsRAF = null; return; }
   const dt = Math.min((now - hsState.lastTime) / 1000, 0.032);
   hsState.lastTime = now;
+  hsFrameId++;
 
   if (hsShakeState.time > 0) hsShakeState.time = Math.max(0, hsShakeState.time - dt);
 
@@ -5802,8 +5876,26 @@ function hsLoop(now) {
 }
 
 function hsUpdatePlayer(p, dt, keys, now) {
+  // --- Dash: consumir el pedido de doble-tap (si hay uno pendiente y no
+  // está en cooldown), y mientras dura, la velocidad horizontal queda FIJA
+  // - ver comentario grande en HS_DASH_SPEED de por qué está diseñado así.
+  if (hsDashRequest[p.side] && !p.dashing && now >= p.dashCoolUntil) {
+    p.dashing = true;
+    p.dashDir = hsDashRequest[p.side];
+    p.dashUntil = now + HS_DASH_DURATION * 1000;
+    p.dashCoolUntil = now + HS_DASH_COOLDOWN;
+    p.dashTrail = 1;
+  }
+  hsDashRequest[p.side] = null; // se consume siempre - un pedido viejo nunca queda pendiente para más adelante
+
+  if (p.dashing && now >= p.dashUntil) p.dashing = false;
+  if (p.dashTrail > 0) p.dashTrail = Math.max(0, p.dashTrail - dt * 3.2);
+
   const dir = (hsKeys[keys.right] ? 1 : 0) - (hsKeys[keys.left] ? 1 : 0);
-  if (dir !== 0) {
+  if (p.dashing) {
+    p.vx = p.dashDir * HS_DASH_SPEED;
+    p.facing = p.dashDir;
+  } else if (dir !== 0) {
     p.vx += dir * HS_MOVE_ACCEL * dt;
     p.vx = Math.max(-HS_MAX_SPEED, Math.min(HS_MAX_SPEED, p.vx));
     p.facing = dir;
@@ -6203,25 +6295,46 @@ function hsResolveCollisions(now) {
         // cooldown, el cabezazo pasa a ser un choque pasivo (pierde energía
         // de verdad) en vez de repetir el golpe completo.
         const onHeadCooldown = p.headCoolUntil && now < p.headCoolUntil;
-        // FIX "sigue rebotando cabeza-cabeza-cabeza a máxima velocidad":
-        // el cooldown (arriba) ya evita que UN MISMO jugador reinyecte
-        // impulso frame tras frame, pero con dos cabezas muy cerca, cada
-        // una individualmente sí podía devolver casi TODA la velocidad de
-        // la otra (hasta 1.6x el HS_HEAD_POWER base) - eso seguía dando un
-        // peloteo rápido de pared a pared aunque cada cabeza solo tocara
-        // una vez por cooldown. Bajado el techo a 1.15x (ya no amplifica
-        // por encima de lo que traía) y el cooldown de 180 a 240ms, así
-        // cada cabezazo real pierde algo de energía neta en vez de
-        // conservarla casi toda - el intercambio se apaga solo en unos
-        // pocos rebotes en vez de mantenerse indefinidamente.
-        const power = onHeadCooldown
-          ? Math.min(speedIn * 0.3, HS_HEAD_POWER * 0.5)
-          : Math.min(Math.max(incoming * 0.7, 90), HS_HEAD_POWER * 1.15);
-        vxSum += nx * power + p.vx * 0.5;
-        vySum += ny * power - 60;
-        hits++;
+        // FIX "salté a atajar de cabeza y se frenó de golpe en vez de
+        // rebotar": esto pasaba porque hsResolveCollisions corre varias
+        // veces por frame (sub-steps, ver hsLoop) con el MISMO `now`. El
+        // cabezazo bueno se aplicaba en el primer sub-step, pero como el
+        // cooldown recién arranca a contar EN ESE MISMO now, el segundo o
+        // tercer sub-step del mismo frame todavía lo veía "en cooldown" y
+        // volvía a tocar la pelota con el impulso débil (0.3x) - pisando
+        // encima del golpe bueno que se acababa de dar, un frame después de
+        // haberlo aplicado. Resultado: el cabezazo fuerte quedaba anulado
+        // por su propio "eco" débil en el mismo instante. Ahora un mismo
+        // jugador aporta como mucho UN cabezazo fuerte por FRAME real
+        // (hsFrameId, no por sub-step) - los sub-steps de más solo separan
+        // posición, no vuelven a tocar la velocidad.
+        const sameFrameRehit = p.headHitFrame === hsFrameId;
+        if (!sameFrameRehit) {
+          // FIX "sigue rebotando cabeza-cabeza-cabeza a máxima velocidad":
+          // el cooldown (arriba) ya evita que UN MISMO jugador reinyecte
+          // impulso frame tras frame, pero con dos cabezas muy cerca, cada
+          // una individualmente sí podía devolver casi TODA la velocidad de
+          // la otra (hasta 1.6x el HS_HEAD_POWER base) - eso seguía dando un
+          // peloteo rápido de pared a pared aunque cada cabeza solo tocara
+          // una vez por cooldown. Bajado el techo a 1.15x (ya no amplifica
+          // por encima de lo que traía) y el cooldown de 180 a 240ms, así
+          // cada cabezazo real pierde algo de energía neta en vez de
+          // conservarla casi toda - el intercambio se apaga solo en unos
+          // pocos rebotes en vez de mantenerse indefinidamente.
+          // Piso subido (90 -> 150 fuera de cooldown, 0.3 -> 0.5 en
+          // cooldown): un cabezazo real, aunque sea débil, tiene que
+          // notarse como un rebote de verdad, nunca como una pared que
+          // absorbe toda la velocidad.
+          const power = onHeadCooldown
+            ? Math.min(speedIn * 0.5, HS_HEAD_POWER * 0.6)
+            : Math.min(Math.max(incoming * 0.7, 150), HS_HEAD_POWER * 1.15);
+          vxSum += nx * power + p.vx * 0.5;
+          vySum += ny * power - 60;
+          hits++;
+          p.headHitFrame = hsFrameId;
+          if (!onHeadCooldown) p.headCoolUntil = now + 240;
+        }
         applied = true;
-        if (!onHeadCooldown) p.headCoolUntil = now + 240;
       }
     }
 
@@ -6317,15 +6430,26 @@ function hsResolveCollisions(now) {
 // caminar/saltar derecho a través del caño y de la red como si fueran una
 // imagen pegada de fondo, sin ningún sólido ahí. Ahora el travesaño Y el
 // poste delantero de cada arco también son sólidos para la cabeza.
+// NUEVO PEDIDO: los jugadores tienen que poder meterse en su propio arco
+// para tapar un remate lejano, como un arquero de verdad. Antes el "poste
+// delantero" (la barra vertical del frente del arco) era sólido para la
+// cabeza y la dejaba afuera SIEMPRE - por diseño no se podía entrar. Ahora
+// ese poste ya NO frena al jugador (se sacó de la lista de abajo): puede
+// caminar/saltar hacia adentro del arco. Lo que sigue siendo sólido es
+// el TRAVESAÑO (la barra de arriba) - así no puede meterse saltando por
+// encima, adentro de la red por el techo. El límite de cuánto puede
+// avanzar hacia el fondo lo sigue dando el clamp normal de pantalla
+// (p.x entre HS_HEAD_R+4 y CANVAS_W-HEAD_R-4) - y como el arco ahora es
+// bastante más profundo que el diámetro de la cabeza (HS_GOAL_W=92 vs.
+// 72px de cabeza), SIEMPRE queda hueco de sobra adelante/atrás/arriba/
+// abajo del arquero para que un remate bien picado se cuele - no puede
+// tapar el arco entero solo poniéndose en el medio.
 function hsResolvePlayerVsGoalFrame(p) {
   const barY0 = HS_PITCH_Y - HS_GOAL_H - HS_GOAL_BAR_THICK / 2;
   const barY1 = HS_PITCH_Y - HS_GOAL_H + HS_GOAL_BAR_THICK / 2;
-  const pt = HS_GOAL_BAR_THICK;
   const frames = [
-    { x0: 0, x1: HS_GOAL_W, y0: barY0, y1: barY1 },                                   // travesaño izq
-    { x0: HS_GOAL_W - pt / 2, x1: HS_GOAL_W + pt / 2, y0: barY0, y1: HS_PITCH_Y },      // poste delantero izq
-    { x0: HS_CANVAS_W - HS_GOAL_W, x1: HS_CANVAS_W, y0: barY0, y1: barY1 },             // travesaño der
-    { x0: HS_CANVAS_W - HS_GOAL_W - pt / 2, x1: HS_CANVAS_W - HS_GOAL_W + pt / 2, y0: barY0, y1: HS_PITCH_Y }, // poste delantero der
+    { x0: 0, x1: HS_GOAL_W, y0: barY0, y1: barY1 },                       // travesaño izq
+    { x0: HS_CANVAS_W - HS_GOAL_W, x1: HS_CANVAS_W, y0: barY0, y1: barY1 }, // travesaño der
   ];
   const headCY = p.y - HS_HEAD_OFFSET;
   frames.forEach((rect) => {
@@ -6484,9 +6608,11 @@ function hsResetPositions() {
   hsState.left.x = HS_CANVAS_W * 0.25;
   hsState.left.y = HS_PITCH_Y;
   hsState.left.vx = 0; hsState.left.vy = 0; hsState.left.onGround = true;
+  hsState.left.dashing = false; hsState.left.dashTrail = 0;
   hsState.right.x = HS_CANVAS_W * 0.75;
   hsState.right.y = HS_PITCH_Y;
   hsState.right.vx = 0; hsState.right.vy = 0; hsState.right.onGround = true;
+  hsState.right.dashing = false; hsState.right.dashTrail = 0;
 }
 
 function hsDrawHeadImage(key, cx, cy, facing) {
@@ -6913,6 +7039,22 @@ function hsDrawPlayer(p) {
   ctx.ellipse(p.x, HS_PITCH_Y + 2, 26 - jumpT * 8, 7 - jumpT * 3, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
+
+  // Estela del dash: puro "juice" visual (no toca el hitbox), un par de
+  // siluetas fantasma detrás de la cabeza que se desvanecen solas con
+  // p.dashTrail (ver hsUpdatePlayer). Ayuda a que el impulso del dash se
+  // LEA en pantalla, no solo se sienta.
+  if (p.dashTrail > 0.01) {
+    ctx.save();
+    ctx.globalAlpha = 0.22 * p.dashTrail;
+    ctx.fillStyle = color;
+    for (let i = 1; i <= 3; i++) {
+      ctx.beginPath();
+      ctx.arc(headCX - p.dashDir * i * 14, headCY, HS_HEAD_R * (1 - i * 0.12), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
 
   const bootPose = hsBootPose(p);
 
