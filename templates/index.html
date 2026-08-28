@@ -10,6 +10,10 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+<div class="honor-badge honor-high" id="honorBadge" title="Honor">
+  <span class="honor-icon" id="honorIcon"></span>
+  <span class="honor-label" id="honorLabel">HONOR ALTO</span>
+</div>
 <div class="bg-aurora" aria-hidden="true">
   <span class="aurora-blob aurora-1"></span>
   <span class="aurora-blob aurora-2"></span>
@@ -30,6 +34,7 @@
       <button id="soundToggle" class="btn btn-ghost btn-small" type="button">🔊 Sonido</button>
       <button id="shareBtn" class="btn btn-ghost btn-small" type="button">🔗 Compartir</button>
       <button id="cursorFxToggle" class="btn btn-ghost btn-small" type="button">✨ Cursor FX</button>
+      <button id="ronaldinhoModeBtn" class="btn btn-ghost btn-small" type="button">🕺 Modo PES</button>
     </div>
     <div class="dice-charm" id="diceCharm" aria-hidden="true">
       <span class="charm-string"></span>
@@ -49,6 +54,9 @@
 
     <section class="wheel-stage">
       <div class="wheel-wrap" id="wheelWrap">
+        <div class="desafiar-drop hidden" id="desafiarDrop">
+          <button class="btn btn-duel desafiar-btn" id="desafiarBtn" type="button">⚔️ DESAFIAR</button>
+        </div>      
         <div class="lights" id="lights"></div>
         <div class="wheel-trail wheel-trail-2" id="wheelTrail2"></div>
         <div class="wheel-trail wheel-trail-1" id="wheelTrail1"></div>
@@ -878,5 +886,53 @@
 <div id="confettiLayer" class="confetti-layer"></div>
 
 <script src="{{ url_for('static', filename='app.js') }}"></script>
+<!-- Splash de Ronaldinho -->
+<div class="ronaldinho-splash hidden" id="ronaldinhoSplash">
+  <div class="ronaldinho-splash-inner">
+    <img src="/static/img/ronaldinho-bailando.png" alt="Ronaldinho" class="ronaldinho-img" onerror="this.style.display='none'">
+    <p class="ronaldinho-caption">¿SALE ESE PES 6? 😂</p>
+    <p class="ronaldinho-subcaption">TOCÁ PARA SEGUIR</p>
+  </div>
+</div>
+
+<!-- Selección de duelo (modo PES) -->
+<div class="pes-mode-select hidden" id="pesModeSelect">
+  <h2 class="pes-mode-title">ELEGÍ EL DUELO</h2>
+  <div class="pes-mode-options">
+    <button class="pes-mode-btn" id="pesOptRomanMateo" type="button">
+      <span class="pes-mode-vs">ROMÁN</span>
+      <span class="pes-mode-vs-sep">VS</span>
+      <span class="pes-mode-vs">MATEO</span>
+    </button>
+    <button class="pes-mode-btn" id="pesOptLautyMateo" type="button">
+      <span class="pes-mode-vs">LAUTY</span>
+      <span class="pes-mode-vs-sep">VS</span>
+      <span class="pes-mode-vs">MATEO</span>
+    </button>
+    <button class="pes-mode-btn pes-mode-btn-mateo-solo hidden" id="pesOptMateoSolo" type="button">
+      <span class="pes-mode-vs">MATEO SOLO</span>
+    </button>
+  </div>
+  <button class="pes-secret-btn" id="pesSecretBtn" type="button" title="???">👁</button>
+</div>
+
+<!-- Modal código secreto -->
+<div class="konami-modal hidden" id="konamiModal">
+  <div class="konami-box" id="konamiBox">
+    <button class="konami-close" id="konamiCloseBtn" type="button">✕</button>
+    <p class="konami-title" id="konamiTitle">INGRESÁ EL CÓDIGO</p>
+    <div class="konami-keys" id="konamiKeys">
+      <span class="konami-key">▲</span>
+      <span class="konami-key">▲</span>
+      <span class="konami-key">▼</span>
+      <span class="konami-key">▼</span>
+      <span class="konami-key">◀</span>
+      <span class="konami-key">▶</span>
+      <span class="konami-key">◀</span>
+      <span class="konami-key">▶</span>
+    </div>
+    <p class="konami-hint">↑ ↑ ↓ ↓ ← → ← →</p>
+  </div>
+</div>
 </body>
 </html>
