@@ -604,6 +604,21 @@ function stopSynthDrumroll() {
   if (synthDrumrollTimer) { clearInterval(synthDrumrollTimer); synthDrumrollTimer = null; }
 }
 
+function playSynthDrumrollHit() {
+  if (!soundEnabled) return;
+  const ctx = getAudioCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(600, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(120, ctx.currentTime + 0.4);
+  gain.gain.setValueAtTime(0.16, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + 0.45);
+}
+
 function playLetterBlip() {
   if (!soundEnabled) return;
   const ctx = getAudioCtx();
@@ -924,10 +939,20 @@ function revealWinnerName(name, onDone) {
   const container = document.getElementById("winnerName");
   container.innerHTML = "";
   const chars = name.split("");
+  const total = chars.length;
   let i = 0;
 
+  // Ritmo de suspenso: arranca lento, toma velocidad normal en el
+  // medio, y frena fuerte en las últimas letras para el remate.
+  function delayForNext(idx) {
+    const remaining = total - idx;
+    if (idx < 2) return 260;
+    if (remaining <= 2) return 380;
+    return 160;
+  }
+
   function revealNext() {
-    if (i >= chars.length) {
+    if (i >= total) {
       onDone && onDone();
       return;
     }
@@ -939,13 +964,13 @@ function revealWinnerName(name, onDone) {
     inner.textContent = ch === " " ? "\u00A0" : ch;
     tile.appendChild(inner);
     container.appendChild(tile);
-    void tile.offsetWidth; // fuerza reflow para que la animación dispare siempre
+    void tile.offsetWidth;
     tile.classList.add("flip-in");
     if (ch !== " ") {
       if (!playSfx("letterBlip", 0.4)) playLetterBlip();
     }
     i++;
-    setTimeout(revealNext, 85);
+    setTimeout(revealNext, delayForNext(i));
   }
   revealNext();
 }
@@ -953,7 +978,7 @@ function revealWinnerName(name, onDone) {
 function showLoserCorner(winner) {
   const candidates = Array.from(new Set(games.map((g) => g.added_by).filter(Boolean)))
     .filter((name) => name.toLowerCase() !== (winner.added_by || "").toLowerCase());
-  if (candidates.length === 0) return; // no hay a quién cargarse, no mostramos nada
+  if (candidates.length === 0) return;
   const loser = candidates[Math.floor(Math.random() * candidates.length)];
   document.getElementById("loserName").textContent = loser;
   const loserCorner = document.getElementById("loserCorner");
@@ -963,19 +988,67 @@ function showLoserCorner(winner) {
   if (!playSfx("sadTrumpet", 0.55)) playSadTrumpetFallback();
 }
 
+/* ---- redoble de tambores con golpe final ----
+   startDrumrollLoop() repite en loop SOLO los primeros 3 segundos
+   del archivo (el redoble). Cuando el nombre termina de revelarse,
+   stopDrumrollAndPlayHit() corta el loop y reproduce el mismo
+   archivo arrancando desde el segundo 4 - donde está el golpe que
+   cierra la secuencia. Si tu drumroll.wav corta el redoble o
+   arranca el golpe en otro segundo, avisame los tiempos exactos y
+   ajustamos loopEnd / el offset de abajo. */
+function startDrumrollLoop() {
+  const buffer = sfxBuffers.drumroll;
+  if (!buffer || !soundEnabled) {
+    playSynthDrumroll();
+    return null;
+  }
+  const ctx = getAudioCtx();
+  const src = ctx.createBufferSource();
+  const gain = ctx.createGain();
+  src.buffer = buffer;
+  src.loop = true;
+  src.loopStart = 0;
+  src.loopEnd = Math.min(3, buffer.duration);
+  gain.gain.value = 0.5;
+  src.connect(gain).connect(ctx.destination);
+  src.start(0, 0);
+  return src;
+}
+
+function stopDrumrollAndPlayHit(loopSrc) {
+  if (loopSrc && loopSrc.stop) {
+    try { loopSrc.stop(); } catch (e) {}
+    const buffer = sfxBuffers.drumroll;
+    if (buffer && soundEnabled) {
+      const ctx = getAudioCtx();
+      const hit = ctx.createBufferSource();
+      const gain = ctx.createGain();
+      hit.buffer = buffer;
+      gain.gain.value = 0.55;
+      hit.connect(gain).connect(ctx.destination);
+      hit.start(0, Math.min(4, buffer.duration));
+    }
+  } else {
+    stopSynthDrumroll();
+    playSynthDrumrollHit();
+  }
+}
+
 function showWinnerModal(winner) {
   currentWinnerGame = winner;
-  const who = winner.added_by || "Anónimo";
+  const whoName = winner.added_by || "Anónimo";
 
   const modal = document.getElementById("winnerModal");
   const messageEl = document.getElementById("winnerMessage");
+  const gameLabelEl = document.getElementById("winnerGameLabel");
   const wrap = document.getElementById("winnerCoverWrap");
   const loserCorner = document.getElementById("loserCorner");
   const actionButtons = modal.querySelectorAll(".modal-actions button");
 
-  // Reset del estado de suspenso antes de arrancar
   messageEl.classList.remove("show");
   messageEl.textContent = "";
+  gameLabelEl.classList.remove("show");
+  gameLabelEl.textContent = "";
   wrap.innerHTML = "";
   wrap.appendChild(posterInner(winner));
   wrap.classList.remove("cover-reveal");
@@ -986,18 +1059,21 @@ function showWinnerModal(winner) {
 
   modal.classList.remove("hidden");
 
-  const drumroll = playSfx("drumroll", 0.5, true);
-  if (!drumroll) playSynthDrumroll();
+  const drumroll = startDrumrollLoop();
 
   setTimeout(() => {
-    revealWinnerName(winner.name, () => {
-      if (drumroll && drumroll.stop) { try { drumroll.stop(); } catch (e) {} }
-      else stopSynthDrumroll();
+    // Lo que se revela en grande con suspenso es la PERSONA que
+    // ganó, no el nombre del juego (eso va abajo como dato aparte).
+    revealWinnerName(whoName, () => {
+      stopDrumrollAndPlayHit(drumroll);
 
       wrap.classList.remove("cover-suspense");
       wrap.classList.add("cover-reveal");
-      messageEl.innerHTML =
-        `<span class="winner-who">${escapeHtml(who)}</span> ganó, los demás se la tienen que bancar <span class="laugh-emoji">😂</span>`;
+
+      gameLabelEl.innerHTML = `Se quedó con: <strong>${escapeHtml(winner.name)}</strong>`;
+      gameLabelEl.classList.add("show");
+
+      messageEl.innerHTML = `Los demás se la tienen que bancar <span class="laugh-emoji">😂</span>`;
       messageEl.classList.add("show");
       actionButtons.forEach((b) => { b.disabled = false; });
 
@@ -1006,7 +1082,7 @@ function showWinnerModal(winner) {
 
       setTimeout(() => showLoserCorner(winner), 700);
     });
-  }, 350);
+  }, 550);
 }
 
 /* ---------------- shared duel outcome messaging ----------------
