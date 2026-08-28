@@ -6,12 +6,13 @@
 <title>Ruleta de Juegos</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Luckiest+Guy&family=Permanent+Marker&family=Fredoka:wght@500;600;700&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&family=Rubik+Mono+One&family=Bangers&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Luckiest+Guy&family=Permanent+Marker&family=Fredoka:wght@500;600;700&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&family=Rubik+Mono+One&family=Bangers&family=Titan+One&family=Passion+One:wght@700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+<div class="honor-vignette" id="honorVignette" aria-hidden="true"></div>
 <div class="honor-badge honor-high" id="honorBadge" title="Honor">
-  <span class="honor-icon" id="honorIcon"></span>
+  <span class="honor-icon" id="honorIcon">★</span>
   <span class="honor-label" id="honorLabel">HONOR ALTO</span>
 </div>
 <div class="bg-aurora" aria-hidden="true">
@@ -893,17 +894,32 @@
   <img src="/static/img/ronaldinho-bailando.png" alt="" class="pes-panel-ronaldinho" onerror="this.remove()">
   <h2 class="pes-panel-title">¿QUIÉN JUEGA CON MATEO?</h2>
 
-  <div class="pes-reel" id="pesReel">
-    <span class="pes-reel-text" id="pesReelText">ROMÁN</span>
+  <div class="pes-wheel-stage" id="pesWheelStage">
+    <div class="pes-wheel-lights" id="pesWheelLights"></div>
+    <div class="pes-wheel-trail pes-wheel-trail-2" id="pesWheelTrail2"></div>
+    <div class="pes-wheel-trail pes-wheel-trail-1" id="pesWheelTrail1"></div>
+    <div class="pes-wheel" id="pesWheel"></div>
+    <div class="pes-wheel-pointer" id="pesWheelPointer">⚽</div>
+    <div class="pes-wheel-hub">
+      <button id="pesSpinBtn" class="pes-wheel-spin-btn" type="button">GIRAR</button>
+    </div>
   </div>
 
-  <button class="btn btn-primary pes-spin-btn" id="pesSpinBtn" type="button">🎲 GIRAR</button>
+  <div class="winner-name-stage pes-result-stage" id="pesResultStage">
+    <span class="wn-beam wn-beam-a"></span>
+    <span class="wn-beam wn-beam-b"></span>
+    <span class="wn-flash"></span>
+    <h3 id="pesResultName" class="font-arcade"></h3>
+  </div>
 
   <button class="pes-customize-btn" id="pesCustomizeBtn" type="button">✏️ Personalizar nombres</button>
   <div class="pes-customize-box hidden" id="pesCustomizeBox">
-    <input type="text" id="pesNameA" class="pes-name-input" value="Román" maxlength="14">
-    <input type="text" id="pesNameB" class="pes-name-input" value="Lauty" maxlength="14">
-    <button class="btn btn-ghost btn-small" id="pesCustomizeSave" type="button">Guardar</button>
+    <div class="pes-name-chips" id="pesNameChips"></div>
+    <div class="pes-name-add-row">
+      <input type="text" id="pesNameNew" class="pes-name-input" placeholder="Agregar nombre..." maxlength="14">
+      <button class="btn btn-ghost btn-small" id="pesNameAddBtn" type="button">+ Agregar</button>
+    </div>
+    <p class="pes-name-hint">Mínimo 2 nombres en la rueda. Click en la ✕ de un nombre para sacarlo.</p>
   </div>
 
   <button class="pes-secret-btn" id="pesSecretBtn" type="button" title="???">👁</button>
