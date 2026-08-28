@@ -3209,48 +3209,86 @@ body.cursor-fx-off .mouse-spotlight { opacity: 0; }
 
 
 
-/* ---- Estuche 3D del ganador (tapa + lomo + brillo plástico) ---- */
-.poster-3d-stage { display: flex; justify-content: center; perspective: 900px; }
+/* ---- Estuche 3D del ganador: caja de verdad con volumen, no una
+   tarjeta plana. El canto es grueso a propósito (34px) para que se
+   note el plástico incluso sin mover el mouse. ---- */
+.poster-3d-stage { display: flex; justify-content: center; perspective: 850px; padding: 10px 0 22px; }
 .poster-3d {
   position: relative;
   width: 170px; height: 255px;
   transform-style: preserve-3d;
-  transition: transform 0.15s ease-out;
-  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition: transform 0.2s ease-out;
+  transform: rotateX(var(--rx, 12deg)) rotateY(var(--ry, -22deg));
 }
 .poster-3d.poster-3d-lying {
-  transform: rotateZ(90deg) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transform: rotateZ(90deg) rotateX(var(--rx, 12deg)) rotateY(var(--ry, -22deg));
 }
+
+/* Tapa frontal: la portada real */
 .modal-cover-wrap .poster-3d-front {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
-  transform: translateZ(8px);
+  transform: translateZ(17px);
   border-radius: 10px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.55), 0 0 0 4px rgba(255,62,127,0.25);
 }
-.poster-3d-spine {
-  position: absolute; top: 0; right: 0;
-  width: 16px; height: 100%;
-  background: linear-gradient(180deg, #201824, #0d0910 60%, #050308);
-  border-radius: 0 10px 10px 0;
-  transform-origin: right center;
-  transform: rotateY(90deg) translateZ(8px);
-  box-shadow: inset 0 0 6px rgba(0,0,0,0.6);
-}
-.poster-3d-top {
-  position: absolute; top: 0; left: 0;
-  width: 100%; height: 16px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.06));
-  transform-origin: top center;
-  transform: rotateX(-90deg) translateZ(8px);
-  border-radius: 10px 10px 0 0;
-}
+/* Brillo plástico curvo sobre la tapa */
 .poster-3d-shine {
   position: absolute; inset: 0;
-  background: linear-gradient(115deg, rgba(255,255,255,0.4), transparent 45%);
-  opacity: 0.5;
-  transform: translateZ(9px);
+  background: linear-gradient(115deg, rgba(255,255,255,0.45) 0%, transparent 35%, transparent 65%, rgba(255,255,255,0.12) 100%);
+  opacity: 0.65;
+  transform: translateZ(18px);
   border-radius: 10px;
   pointer-events: none;
   mix-blend-mode: overlay;
+}
+
+/* Contratapa (se ve al girar fuerte) */
+.poster-3d-back {
+  position: absolute; inset: 0;
+  background: linear-gradient(160deg, #241a29, #0e0a11);
+  border-radius: 10px;
+  transform: translateZ(-17px) rotateY(180deg);
+  box-shadow: inset 0 0 20px rgba(0,0,0,0.6);
+}
+
+/* Lomo derecho, tipo caja de videojuego física, con líneas de relieve */
+.poster-3d-spine {
+  position: absolute; top: 0; right: 0;
+  width: 34px; height: 100%;
+  background:
+    repeating-linear-gradient(180deg, rgba(255,255,255,0.05) 0 2px, transparent 2px 10px),
+    linear-gradient(180deg, #2a2030, #140e18 55%, #0a070c);
+  border-radius: 0 10px 10px 0;
+  transform-origin: right center;
+  transform: rotateY(90deg) translateZ(17px);
+  box-shadow: inset 0 0 8px rgba(0,0,0,0.65);
+}
+/* Canto izquierdo (bisagra) */
+.poster-3d-left {
+  position: absolute; top: 0; left: 0;
+  width: 34px; height: 100%;
+  background: linear-gradient(180deg, #1c1420, #0a070c);
+  border-radius: 10px 0 0 10px;
+  transform-origin: left center;
+  transform: rotateY(-90deg) translateZ(17px);
+  box-shadow: inset 0 0 8px rgba(0,0,0,0.65);
+}
+/* Canto superior, con destello para que se lea como plástico */
+.poster-3d-top {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 34px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.4), rgba(255,255,255,0.05) 70%);
+  border-radius: 10px 10px 0 0;
+  transform-origin: top center;
+  transform: rotateX(-90deg) translateZ(17px);
+}
+/* Canto inferior, más oscuro (menos luz le pega) */
+.poster-3d-bottom {
+  position: absolute; bottom: 0; left: 0;
+  width: 100%; height: 34px;
+  background: linear-gradient(0deg, #100b13, #241a29 70%);
+  border-radius: 0 0 10px 10px;
+  transform-origin: bottom center;
+  transform: rotateX(90deg) translateZ(17px);
 }
