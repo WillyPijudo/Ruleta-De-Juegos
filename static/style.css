@@ -3666,8 +3666,16 @@ body.cursor-fx-off .mouse-spotlight { opacity: 0; }
 @keyframes konami-flicker { 0%,92%,100% { filter: brightness(1); } 93% { filter: brightness(1.4); } 95% { filter: brightness(0.7); } 97% { filter: brightness(1.2); } }
 .konami-title { font-family: var(--font-mono); color: #ff4d4d; letter-spacing: 2px; font-size: 13px; text-shadow: 0 0 8px rgba(255,0,0,0.6); margin-bottom: 18px; }
 .konami-keys { display: flex; gap: 6px; justify-content: center; margin-bottom: 14px; flex-wrap: wrap; }
-.konami-key { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,80,80,0.4); border-radius: 4px; color: rgba(255,120,120,0.6); font-size: 13px; transition: all 0.15s ease; }
-.konami-key-active { background: #ff2d2d; color: #fff; box-shadow: 0 0 10px rgba(255,45,45,0.9); transform: scale(1.15); }
+.konami-key {
+  width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255,80,80,0.4); border-radius: 4px;
+  color: transparent; font-size: 13px; transition: all 0.15s ease;
+}
+/* Símbolo neutro: no indica ni arriba/abajo/izquierda/derecha,
+   solo dice "acá va una tecla". */
+.konami-key::before { content: "•"; color: rgba(255,120,120,0.5); font-size: 16px; }
+.konami-key-done { background: rgba(53,209,107,0.22); border-color: rgba(53,209,107,0.65); }
+.konami-key-done::before { content: "✓"; color: #35d16b; }
 .konami-hint { color: rgba(255,255,255,0.3); font-size: 11px; letter-spacing: 3px; }
 .konami-close { position: absolute; top: 6px; right: 8px; background: none; border: none; color: rgba(255,255,255,0.4); font-size: 14px; cursor: pointer; }
 .konami-box.konami-wrong { border-color: #ff0000; background: linear-gradient(160deg, #3a0505, #150101); animation: konami-shake 0.4s ease; }
