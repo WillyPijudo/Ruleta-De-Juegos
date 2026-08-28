@@ -6,7 +6,7 @@
 <title>Ruleta de Juegos</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Luckiest+Guy&family=Permanent+Marker&family=Fredoka:wght@500;600;700&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&family=Rubik+Mono+One&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Luckiest+Guy&family=Permanent+Marker&family=Fredoka:wght@500;600;700&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&family=Rubik+Mono+One&family=Bangers&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -139,20 +139,28 @@
 
     <div class="loser-corner hidden" id="loserCorner">
       <span class="loser-stamp">PERDEDOR DE LA NOCHE</span>
-      <div class="loser-window"></div>
+      <div class="loser-window">
+        <span class="window-light"></span>
+        <span class="dust-particle d1"></span>
+        <span class="dust-particle d2"></span>
+        <span class="dust-particle d3"></span>
+        <span class="dust-particle d4"></span>
+        <span class="window-shine"></span>
+      </div>
       <div class="loser-scene">
+        <div class="loser-floor"></div>
         <img src="/static/img/silla-del-perdedor.png" alt="" class="loser-chair" onerror="this.remove()">
+        <div class="loser-raincloud">
+          <span class="raindrop"></span>
+          <span class="raindrop"></span>
+          <span class="raindrop"></span>
+        </div>
         <div class="loser-clown-wrap">
           <img src="/static/img/payaso-perdedor.png" alt="" class="loser-clown" onerror="this.remove()">
           <span class="loser-tear"></span>
-          <div class="loser-raincloud">
-            <span class="raindrop"></span>
-            <span class="raindrop"></span>
-            <span class="raindrop"></span>
-          </div>
         </div>
       </div>
-      <p class="loser-caption">🤡 <span id="loserName">-</span> se banca la vista desde la silla del perdedor</p>
+      <p class="loser-caption">🤡 <span id="loserName" class="loser-name-text">-</span> se banca la vista desde la silla del perdedor</p>
     </div>
 
     <div class="modal-actions">
