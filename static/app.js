@@ -5280,7 +5280,7 @@ const HS_BALL_GRAVITY = 1050;       // (antes 1300) más liviana de verdad - má
 // (separada de HS_GRAVITY, que es la de los jugadores/salto - así no toco
 // el salto de nuevo por accidente, como pediste)
 const HS_AIR_DRAG = 0.999;          // (antes 0.998) casi sin roce - un tiro fuerte llega lejos sin frenarse solo
-const HS_GROUND_RESTITUTION = 0.72; // (antes 0.62) pica más vivo, como una pelota liviana de verdad
+const HS_GROUND_RESTITUTION = 0.66; // (antes 0.72) con el bug de reinyección de impulso resuelto (ver hsResolveCollisions), ya no hace falta compensar rebotando tan vivo - esto da picadas controlables, buenas para jueguitos, sin sentirse muerta
 const HS_WALL_RESTITUTION = 0.72;   // (antes 0.68)
 const HS_CEIL_RESTITUTION = 0.65;   // (antes 0.6)
 const HS_BOOT_W = 52;               // (antes 46, +un poco para compensar la pierna más corta de arriba)
@@ -5354,7 +5354,7 @@ const HS_BOOT_RETRACT_TIME = 0.26; // vuelta un poco más rápida que la ida, se
 const HS_BOOT_STRIKE_THRESHOLD = 0.22; // (antes 0.35) más bajo: ya un toque corto conecta con la pelota (flojo), no hace falta llegar casi al máximo para que "cuente"
 const HS_KICK_COOLDOWN = 190;
 const HS_KICK_REACH = HS_BOOT_W * 1.05;
-const HS_PASSIVE_BOUNCE = 0.5;
+const HS_PASSIVE_BOUNCE = 0.38; // (antes 0.5) toques/dominadas más controlables ahora que ya no compite contra el bug de reinyección de impulso
 // FIX "cabeza flotando": ya NO se resuelve empujando el botín hacia abajo
 // (eso achataba el péndulo). Ahora hay una PIERNA DE APOYO fija, siempre
 // pegada al piso bajo la cabeza, y por separado la pierna que patea, libre
@@ -5851,7 +5851,14 @@ function hsBootLocalAngle(p) {
   // (ver más abajo) y el rango de giro (HS_BOOT_ROT_KICK) sigue siendo
   // más grande que el original, así que el "punch" visual se mantiene
   // sin el salto raro.
-  const base = HS_BOOT_REST_ANGLE + (HS_BOOT_MAX_ANGLE - HS_BOOT_REST_ANGLE) * p.bootExtend;
+  // FIX "movimiento tosco/robótico del péndulo": lineal significa velocidad
+  // angular CONSTANTE de punta a punta - una pierna real no se mueve así,
+  // arranca con envión (lento) y acelera hacia el punto de contacto. Ease-in
+  // cuadrático: mismo recorrido total, mismo tiempo total, pero ahora el 70%
+  // inicial de la tecla apretada es "carga" y el golpe real pasa en el
+  // último tramo - se siente intencional, no como un metrónomo.
+  const easeT = p.bootExtend * p.bootExtend;
+  const base = HS_BOOT_REST_ANGLE + (HS_BOOT_MAX_ANGLE - HS_BOOT_REST_ANGLE) * easeT;
   const moveT = Math.max(-1, Math.min(1, (p.vx * p.facing) / HS_MAX_SPEED));
   const drag = moveT * 0.22 * (1 - p.bootExtend);
   return base + drag;
@@ -6079,9 +6086,33 @@ function hsResolveCollisions(now) {
       const minBootDist = reach + HS_BALL_R * 0.7;
       if (bdist < minBootDist) {
         const nx = bdx / bdist, ny = bdy / bdist;
+        // La corrección de POSICIÓN (sacar la pelota de adentro del botín)
+        // se sigue haciendo siempre, esté o no en cooldown - si no, la
+        // pelota se metería adentro del botín y quedaría atascada ahí.
         b.x = px + nx * minBootDist;
         b.y = py + ny * minBootDist;
-        if (bootPose.isStrike) {
+
+        // FIX BUG RAÍZ de "rebota entre cabezas sin parar", "siempre
+        // termina en gol" y "se teletransporta al disputarla entre dos":
+        // este bloque corre hasta 10 veces por frame (substeps anti-
+        // tunneling) y el frame se repite ~60 veces por segundo. Antes,
+        // bootCoolUntil/HS_KICK_COOLDOWN SOLO decidían si sonaba el
+        // audio - el impulso de la patada (vxSum/vySum) se volvía a sumar
+        // TODAS esas veces mientras el botín seguía extendido tocando la
+        // pelota (por ej. si dejabas la tecla apretada). Resultado: un
+        // solo "aguantar patada" reinyectaba la potencia completa de tiro
+        // decenas de veces por segundo - eso es lo que se sentía como
+        // pelota "poseída", rebotes que nunca pierden energía, y el
+        // teletransporte cuando el segundo jugador volvía a patear sobre
+        // una pelota que el primero ya había re-posicionado en el mismo
+        // frame. Ahora el cooldown gatea el IMPULSO real, no solo el
+        // sonido: una patada = un solo golpe de verdad, después hay que
+        // soltar y volver a conectar (o esperar el cooldown) para la
+        // siguiente. Mientras está en cooldown, el botín extendido sigue
+        // empujando la pelota como toque pasivo (más débil, sin potencia
+        // de tiro), así nunca se siente "muerta" ni atascada.
+        const onCooldown = p.bootCoolUntil && now < p.bootCoolUntil;
+        if (bootPose.isStrike && !onCooldown) {
           const kickT = Math.max(0, Math.min(1,
             (bootPose.extend - HS_BOOT_STRIKE_THRESHOLD) / (1 - HS_BOOT_STRIKE_THRESHOLD)));
 
@@ -6115,10 +6146,18 @@ function hsResolveCollisions(now) {
           vySum += vyPower;
           hits++;
           applied = true;
-          if (!p.bootCoolUntil || now > p.bootCoolUntil) {
-            p.bootCoolUntil = now + HS_KICK_COOLDOWN;
-            busPlaySound("/static/audio/kickball.wav", 0.6);
-          }
+          p.bootCoolUntil = now + HS_KICK_COOLDOWN;
+          busPlaySound("/static/audio/kickball.wav", 0.6);
+        } else {
+          // Botín tocando pero sin poder pegar de lleno todavía (en
+          // cooldown, o extendido pero sin llegar al umbral de "patada
+          // real"): toque pasivo de verdad, proporcional a la velocidad
+          // que la pelota YA traía - nunca inyecta potencia de la nada.
+          const speedIn = Math.hypot(b.vx, b.vy);
+          vxSum += nx * speedIn * HS_PASSIVE_BOUNCE + p.vx * 0.25;
+          vySum += ny * speedIn * HS_PASSIVE_BOUNCE * 0.6;
+          hits++;
+          applied = true;
         }
       }
     }
@@ -6146,14 +6185,24 @@ function hsResolveCollisions(now) {
         const speedIn = Math.hypot(b.vx, b.vy);
         const playerEnergy = Math.hypot(p.vx, p.vy - (p.onGround ? 0 : 200)); // saltar hacia la pelota suma empuje real
         const incoming = Math.max(speedIn, playerEnergy);
-        const power = Math.min(Math.max(incoming * 0.82, 90), HS_HEAD_POWER * 1.6);
+        // FIX mismo bug de raíz que el botín (ver comentario grande de
+        // arriba): headCoolUntil existía pero nunca frenaba el impulso, solo
+        // un flag que nadie más leía. Con las cabezas tan cerca entre sí,
+        // eso generaba el "ping-pong infinito" que reportaste: la pelota
+        // rebotando cabeza-cabeza-cabeza a velocidad casi constante, porque
+        // CADA substep (hasta 10 por frame) volvía a aplicar hasta el 82%
+        // de energía sin ningún límite de frecuencia real. Ahora, en
+        // cooldown, el cabezazo pasa a ser un choque pasivo (pierde energía
+        // de verdad) en vez de repetir el golpe completo.
+        const onHeadCooldown = p.headCoolUntil && now < p.headCoolUntil;
+        const power = onHeadCooldown
+          ? Math.min(speedIn * 0.35, HS_HEAD_POWER * 0.6)
+          : Math.min(Math.max(incoming * 0.82, 90), HS_HEAD_POWER * 1.6);
         vxSum += nx * power + p.vx * 0.5;
         vySum += ny * power - 60;
         hits++;
         applied = true;
-        if (!p.headCoolUntil || now > p.headCoolUntil) {
-          p.headCoolUntil = now + 180;
-        }
+        if (!onHeadCooldown) p.headCoolUntil = now + 180;
       }
     }
 
