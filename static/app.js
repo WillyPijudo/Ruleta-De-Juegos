@@ -7372,7 +7372,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let pesModeActive = false;
   let mateoSoloUnlocked = false;
   // Nombres por defecto, todos quitables (menos que quedar con < 2).
-  let pesNames = ["Mateo", "Román", "Lauty"];
+  let pesNames = ["Román", "Lauty"];
   let pesSpinning = false;
   let pesRotationDeg = 0;
 
