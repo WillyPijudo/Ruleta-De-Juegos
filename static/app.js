@@ -5291,13 +5291,13 @@ const HS_BOOT_VISUAL_SCALE = 1.15;  // (antes 1.7, ahí estaba el problema real)
 // HS_HEAD_OFFSET, el botín quede EXACTO tocando el piso cuando no estás
 // pateando (antes de esto era matemáticamente imposible que llegara). El
 // de patada también subió para más alcance real hacia adelante.
-const HS_LEG_LEN = 52;              // reposo: llega justo al piso
+const HS_LEG_LEN = 33;              // (antes 52) FIX "separados": mucho más corto, el botín queda pegado justo debajo de la cabeza en reposo
 // FIX "el botín se va al carajo lejos de la cabeza al patear": 112 era casi
 // el TRIPLE del radio de la cabeza (36) - con la pierna tan larga, apenas
 // rotaba un poco ya se veía como si el pie saliera disparado lejos del
 // cuerpo. Ahora se estira mucho menos, se mantiene pegado y sigue dando
 // buen alcance para conectar la pelota.
-const HS_LEG_LEN_KICK = 74;         // (antes 112)
+const HS_LEG_LEN_KICK = 58;         // (antes 74) sigue dando alcance para patear, pero más pegado al cuerpo
 
 // Arco de ~129°: arranca abajo/atrás tocando el piso (reposo) y termina
 // bien ADELANTE de la cabeza y un poco por arriba del centro.
@@ -5316,8 +5316,13 @@ const HS_LEG_RADIUS = 24;
 // valor 0→1 que ya mueve la pierna), interpolando entre un pie relajado
 // colgando (reposo) y un pie que sigue el pique hacia adelante (patada a
 // fondo) - así el dibujo SIEMPRE seguí la dirección real del movimiento.
-const HS_BOOT_ROT_REST = 0.95; // reposo: pie colgando hacia abajo, como una pierna relajada
-const HS_BOOT_ROT_KICK = -0.15; // patada a fondo: pie extendido, siguiendo el pique hacia adelante
+// FIX "el dibujo se sale del botín al rotar": antes esto giraba más de
+// 60° (0.95 a -0.15 rad). Combinado con un péndulo largo, cualquier
+// pequeño desfase entre posición y rotación se notaba muchísimo. Ahora es
+// un giro chico y sutil (~15°), como el tobillazo real de una patada, no
+// un aspa dando vueltas.
+const HS_BOOT_ROT_REST = 0.3;   // reposo: pie apuntando un poco hacia abajo/adelante
+const HS_BOOT_ROT_KICK = -0.25; // patada a fondo: pie extendido siguiendo el pique
 // FIX "se va a la mierda al mínimo toque": estos números estaban pensados
 // para cuando la patada llegaba DILUIDA (bug del promedio de impulsos que
 // arreglamos antes). Ahora que un solo toque aplica la potencia completa,
@@ -5752,6 +5757,7 @@ function hsLoop(now) {
 
   hsUpdatePlayer(hsState.left, dt, HS_KEYS_LEFT, now);
   hsUpdatePlayer(hsState.right, dt, HS_KEYS_RIGHT, now);
+  hsResolveHeadStanding();
   hsResolvePlayers();
   hsResolvePlayerVsGoalFrame(hsState.left);
   hsResolvePlayerVsGoalFrame(hsState.right);
@@ -6079,8 +6085,16 @@ function hsResolveCollisions(now) {
         b.x = bootPose.x + nx * minBootDist;
         b.y = bootPose.y + ny * minBootDist;
         const speedIn = Math.hypot(b.vx, b.vy);
+        // FIX "toco apenas y pica sola/rebota entre jugadores quietos":
+        // acá había un "- 40" FIJO sumado siempre, sin importar si la
+        // pelota venía casi parada. Contra un jugador QUIETO, eso inyectaba
+        // impulso hacia arriba de la nada, todos los frames que se
+        // tocaban - la pelota se auto-alimentaba rebotando entre los dos
+        // sin que nadie se moviera. Ahora solo se empuja en proporción a
+        // la velocidad que la pelota YA traía (un rebote/desvío de
+        // verdad); si casi no se mueve, casi no la afecta.
         vxSum += nx * speedIn * HS_PASSIVE_BOUNCE + p.vx * 0.2;
-        vySum += ny * Math.abs(b.vy) * HS_PASSIVE_BOUNCE - 40;
+        vySum += ny * speedIn * HS_PASSIVE_BOUNCE * 0.6;
         hits++;
         applied = true;
       }
@@ -6099,7 +6113,7 @@ function hsResolveCollisions(now) {
         b.y = legNear.y + ny * legMinDist;
         const speedIn = Math.hypot(b.vx, b.vy);
         vxSum += nx * speedIn * HS_PASSIVE_BOUNCE + p.vx * 0.2;
-        vySum += ny * Math.abs(b.vy) * HS_PASSIVE_BOUNCE - 30;
+        vySum += ny * speedIn * HS_PASSIVE_BOUNCE * 0.6;
         hits++;
       }
     }
@@ -6180,6 +6194,26 @@ function hsResolvePlayerVsGoalFrame(p) {
   });
 }
 
+// NUEVO (mecánica pedida): pararse arriba de la cabeza del rival para
+// alcanzar la pelota. Antes esto no existía como tal - lo único que había
+// era el empuje anti-superposición de hsResolvePlayers, que separa por el
+// eje horizontal nomás (nx = dx/dist) y con cualquier mínimo corrimiento
+// termina "resbalando" al de arriba en vez de sostenerlo. Ahora, si un
+// jugador cae bien centrado sobre la cabeza del otro, se le da una
+// posición de apoyo estable (como un piso más), con su propio salto
+// disponible desde ahí - se puede volver a saltar parado arriba del rival.
+function hsResolveHeadStanding() {
+  [[hsState.left, hsState.right], [hsState.right, hsState.left]].forEach(([a, b]) => {
+    const standY = b.y - HS_HEAD_R * 2 + 6; // pequeño solape para que no quede flotando un pelo arriba
+    const dx = a.x - b.x;
+    if (Math.abs(dx) < HS_HEAD_R * 1.1 && a.vy >= 0 && a.y >= standY - 14 && a.y <= standY + 46) {
+      a.y = standY;
+      a.vy = 0;
+      a.onGround = true;
+    }
+  });
+}
+
 function hsResolvePlayers() {
   const a = hsState.left, b = hsState.right;
   const aCY = a.y - HS_HEAD_OFFSET, bCY = b.y - HS_HEAD_OFFSET;
@@ -6187,7 +6221,14 @@ function hsResolvePlayers() {
   const dy = bCY - aCY;
   const dist = Math.hypot(dx, dy) || 0.001;
   const minDist = HS_HEAD_R * 2 + 6;
-  if (dist < minDist) {
+  // FIX "me resbalo al pararme arriba de la cabeza": este empuje horizontal
+  // se aplicaba SIEMPRE que las cabezas estuvieran cerca, incluso cuando
+  // un jugador está parado justo arriba del otro (ahí dy es grande y dx
+  // debería ser ~0, pero cualquier mínimo corrimiento generaba un empuje
+  // que de a poco lo iba deslizando hacia un costado). Ahora, si están
+  // apilados verticalmente (dy grande), este empuje lateral se salta del
+  // todo - de eso ya se encarga hsResolveHeadStanding.
+  if (dist < minDist && Math.abs(dy) < HS_HEAD_R * 1.1) {
     const nx = dx / dist;
     const overlap = minDist - dist;
     a.x -= nx * overlap * 0.5;
@@ -6531,6 +6572,15 @@ function hsDrawBoot(ctx, p, bootPose, color, dark) {
   ctx.save();
   ctx.translate(bootPose.x, bootPose.y);
   ctx.scale(p.facing, 1);
+  // FIX "figura geométrica/palo pegado" + "botín separado de la cabeza":
+  // rediseñado de cero como UNA sola silueta (antes había un cuff aparte
+  // que rotaba distinto del resto, y una "pierna" en otra función que
+  // rotaba distinto de las dos anteriores - de ahí las costuras raras).
+  // Ahora es una sola forma continua con el empeine bien alto, y el
+  // péndulo que la mueve es corto (ver HS_LEG_LEN/HS_LEG_LEN_KICK), así
+  // que siempre queda pegado justo debajo de la cabeza. La rotación
+  // también es mucho más chica que antes (antes giraba más de 60°, ahora
+  // como mucho ~15°) para que nunca se "salga" visualmente de su lugar.
   ctx.rotate(HS_BOOT_ROT_REST + (HS_BOOT_ROT_KICK - HS_BOOT_ROT_REST) * p.bootExtend);
   ctx.scale(HS_BOOT_VISUAL_SCALE, HS_BOOT_VISUAL_SCALE);
 
@@ -6539,33 +6589,26 @@ function hsDrawBoot(ctx, p, bootPose, color, dark) {
   ctx.globalAlpha = 0.25;
   ctx.fillStyle = "#000";
   ctx.beginPath();
-  ctx.ellipse(2, 10, 15, 3.6, 0, 0, Math.PI * 2);
+  ctx.ellipse(2, 9, 14, 3.4, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
-  // FIX "volvió la figura geométrica pegada al botín": acá había una
-  // tobillera (cuff) que giraba con SU PROPIA rotación (independiente de
-  // hacia dónde apunta la pierna real). Como la pierna (hsDrawLeg) y este
-  // cuff casi nunca apuntaban para el mismo lado, quedaba una formita
-  // sobrante en la unión. Sacada del todo - la pierna nueva ya conecta
-  // limpio directo al cuerpo del botín.
-
-  // Cuerpo del botín: talón redondeado atrás, empeine bajo, punta redondeada
-  // adelante - silueta bien definida de cana, no una cuña genérica.
+  // Silueta única: empeine alto (llega bien arriba, pegado a la cabeza),
+  // talón redondeado, punta con la curva típica de un botín de fútbol real.
   const body = new Path2D();
-  body.moveTo(-8, -6);
-  body.quadraticCurveTo(-13, 1, -9, 8);
-  body.quadraticCurveTo(-3, 11, 6, 10.5);
-  body.lineTo(14, 9);
-  body.quadraticCurveTo(19.5, 6.5, 18, -2);
-  body.quadraticCurveTo(15, -9, 5, -10);
-  body.quadraticCurveTo(-2, -11, -8, -6);
+  body.moveTo(-8, -14);
+  body.quadraticCurveTo(-14, -10, -13, -2);
+  body.quadraticCurveTo(-13, 6, -6, 10);
+  body.lineTo(15, 9.5);
+  body.quadraticCurveTo(20.5, 6, 18, -2);
+  body.quadraticCurveTo(16, -9.5, 8, -12.5);
+  body.quadraticCurveTo(0, -15.5, -8, -14);
   body.closePath();
 
-  const bodyShade = ctx.createLinearGradient(-10, -11, 18, 10);
-  bodyShade.addColorStop(0, "#40404a");
-  bodyShade.addColorStop(0.5, "#25252b");
-  bodyShade.addColorStop(1, "#131316");
+  const bodyShade = ctx.createLinearGradient(-13, -15, 18, 10);
+  bodyShade.addColorStop(0, "#454550");
+  bodyShade.addColorStop(0.55, "#232329");
+  bodyShade.addColorStop(1, "#0f0f12");
   ctx.fillStyle = bodyShade;
   ctx.fill(body);
   ctx.strokeStyle = "#0a0a0c";
@@ -6579,7 +6622,7 @@ function hsDrawBoot(ctx, p, bootPose, color, dark) {
   ctx.globalAlpha = 0.2;
   ctx.fillStyle = "#fff";
   ctx.beginPath();
-  ctx.ellipse(2, -6, 13, 3.4, -0.15, 0, Math.PI * 2);
+  ctx.ellipse(0, -8, 12, 3.2, -0.15, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
@@ -6588,87 +6631,45 @@ function hsDrawBoot(ctx, p, bootPose, color, dark) {
   ctx.clip(body);
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.moveTo(-4, -5);
-  ctx.lineTo(11, -6.5);
-  ctx.lineTo(12, -1.5);
-  ctx.lineTo(-3, 0);
+  ctx.moveTo(-6, -5);
+  ctx.lineTo(10, -7);
+  ctx.lineTo(11, -2);
+  ctx.lineTo(-5, 0);
   ctx.closePath();
   ctx.fill();
   ctx.restore();
 
-  // Cordones (líneas cruzadas, detalle caricaturesco)
+  // Cordones (detalle caricaturesco)
   ctx.strokeStyle = "#0a0a0c";
   ctx.lineWidth = 1 / HS_BOOT_VISUAL_SCALE;
   for (let i = 0; i < 3; i++) {
     const lx = -4 + i * 3;
     ctx.beginPath();
-    ctx.moveTo(lx, -8);
-    ctx.lineTo(lx + 2, -5.2);
+    ctx.moveTo(lx, -10);
+    ctx.lineTo(lx + 2, -7.2);
     ctx.stroke();
   }
 
-  // Suela clara + tapones (studs) bien marcados
+  // Suela clara + tapones bien marcados
   ctx.fillStyle = "#e7e2d6";
   ctx.beginPath();
-  ctx.moveTo(-8, 8);
-  ctx.quadraticCurveTo(3, 11.5, 15, 9);
+  ctx.moveTo(-7, 8.5);
+  ctx.quadraticCurveTo(4, 11.5, 15, 9);
   ctx.lineTo(14.5, 11);
-  ctx.quadraticCurveTo(3, 13.5, -8.5, 10.2);
+  ctx.quadraticCurveTo(4, 13.5, -7.5, 10.5);
   ctx.closePath();
   ctx.fill();
   ctx.fillStyle = "#0a0a0c";
-  for (let sx = -6; sx < 13; sx += 4.2) {
+  for (let sx = -5; sx < 13; sx += 4.2) {
     ctx.beginPath();
-    ctx.moveTo(sx, 10.2);
-    ctx.lineTo(sx + 1.6, 10.2);
-    ctx.lineTo(sx + 1.1, 12.4);
-    ctx.lineTo(sx + 0.5, 12.4);
+    ctx.moveTo(sx, 10.5);
+    ctx.lineTo(sx + 1.6, 10.5);
+    ctx.lineTo(sx + 1.1, 12.6);
+    ctx.lineTo(sx + 0.5, 12.6);
     ctx.closePath();
     ctx.fill();
   }
 
-  ctx.restore();
-}
-
-
-// FIX BUG RAÍZ ("el botín se sale/se mueve chueco al rotar"): en el código
-// había un comentario que decía "eso lo cubre hsDrawStandingLeg por
-// separado" - pero esa función NO EXISTÍA en ningún lado del archivo. O
-// sea: nunca hubo nada dibujando la pierna. El botín quedaba literalmente
-// flotando en el aire, sin nada que lo conecte a la cabeza, y cuando el
-// péndulo giraba se veía el hueco entre los dos moviéndose sin ningún
-// límite visual - de ahí la sensación de "se mueve chueco y se sale".
-// Esta es la pierna real: una media (tapered, más ancha arriba) que va
-// desde abajo de la cabeza hasta el tobillo del botín seleccionado.
-function hsDrawLeg(ctx, p, bootPose, color, dark) {
-  const headCX = p.x;
-  const headCY = p.y - HS_HEAD_OFFSET;
-  const ax = headCX, ay = headCY + HS_HEAD_R * 0.6;
-  const bx = bootPose.x, by = bootPose.y;
-  const dx = bx - ax, dy = by - ay;
-  const len = Math.hypot(dx, dy) || 0.001;
-  const nx = -dy / len, ny = dx / len;
-  const wTop = 10, wBot = 7;
-
-  ctx.save();
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(ax + nx * wTop, ay + ny * wTop);
-  ctx.lineTo(bx + nx * wBot, by + ny * wBot);
-  ctx.lineTo(bx - nx * wBot, by - ny * wBot);
-  ctx.lineTo(ax - nx * wTop, ay - ny * wTop);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = dark;
-  ctx.lineWidth = 1.4;
-  ctx.stroke();
-  // Raya de la media (detalle caricaturesco simple)
-  ctx.strokeStyle = "rgba(255,255,255,0.35)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(ax, ay);
-  ctx.lineTo(bx, by);
-  ctx.stroke();
   ctx.restore();
 }
 
@@ -6690,7 +6691,6 @@ function hsDrawPlayer(p) {
 
   const bootPose = hsBootPose(p);
 
-  hsDrawLeg(ctx, p, bootPose, color, dark);
   hsDrawBoot(ctx, p, bootPose, color, dark);
 
   if (bootPose.isStrike) {
