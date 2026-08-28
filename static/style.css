@@ -3364,7 +3364,7 @@ body.cursor-fx-off .mouse-spotlight { opacity: 0; }
   transform: rotateX(-90deg);
   border-radius: 0 0 3px 3px;
   background: linear-gradient(0deg, rgba(255, 255, 255, 0.12) 0%, #16121c 60%, #08060a 100%);
-
+}
 
 
   /* ================== MODO PES (Ronaldinho) ================== */
