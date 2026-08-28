@@ -3501,7 +3501,7 @@ body.cursor-fx-off .mouse-spotlight { opacity: 0; }
   transform-origin: 0% 50%;
   width: 44%;
   padding-left: 15%;
-  font-size: clamp(13px, 3.8vw, 18px);
+  font-size: clamp(15px, 4.6vw, 21px);
   color: #fff;
   text-shadow: 0 1px 3px rgba(0,0,0,0.7);
   white-space: nowrap;
