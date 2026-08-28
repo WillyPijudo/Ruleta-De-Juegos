@@ -3460,7 +3460,7 @@ body.cursor-fx-off .mouse-spotlight { opacity: 0; }
   font-size: 18px; cursor: pointer;
 }
 .pes-panel-ronaldinho {
-  width: 64px;
+  width: 76px;
   filter: drop-shadow(0 8px 14px rgba(0,0,0,0.6));
   animation: ronaldinho-dance 1s ease-in-out infinite;
 }
