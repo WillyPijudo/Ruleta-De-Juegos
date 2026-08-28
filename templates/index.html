@@ -55,7 +55,10 @@
       <div class="wheel-wrap" id="wheelWrap">
         <div class="desafiar-drop hidden" id="desafiarDrop">
           <button class="btn btn-duel desafiar-btn" id="desafiarBtn" type="button">⚔️ DESAFIAR</button>
-        </div>      
+        </div>
+        <button class="ronaldinho-fab" id="ronaldinhoModeBtn" type="button" title="Modo PES" aria-label="Modo PES">
+          <img src="/static/img/ronaldinho-bailando.png" alt="" class="ronaldinho-fab-img" width="46" height="46">
+        </button>        
         <div class="lights" id="lights"></div>
         <div class="wheel-trail wheel-trail-2" id="wheelTrail2"></div>
         <div class="wheel-trail wheel-trail-1" id="wheelTrail1"></div>
@@ -884,7 +887,6 @@
 <div id="toast" class="toast hidden"></div>
 <div id="confettiLayer" class="confetti-layer"></div>
 
-<script src="{{ url_for('static', filename='app.js') }}"></script>
 <!-- Splash de Ronaldinho -->
 <div class="ronaldinho-splash hidden" id="ronaldinhoSplash">
   <div class="ronaldinho-splash-inner">
@@ -933,8 +935,6 @@
     <p class="konami-hint">↑ ↑ ↓ ↓ ← → ← →</p>
   </div>
 </div>
-<button class="ronaldinho-fab" id="ronaldinhoModeBtn" type="button" title="Modo PES" aria-label="Modo PES">
-  <img src="/static/img/ronaldinho-bailando.png" alt="" class="ronaldinho-fab-img">
-</button>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
