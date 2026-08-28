@@ -7382,7 +7382,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const WEDGE_FONTS = ["var(--font-comic)", "var(--font-display)", "var(--font-marker)", "var(--font-bangers)", "var(--font-titan)", "var(--font-passion)"];
   // Animaciones de reposo: cada nombre "vive" a su manera mientras
   // no gira nadie todavía.
-  const WEDGE_IDLE_ANIMS = ["wedge-idle-pulse", "wedge-idle-wobble", "wedge-idle-glow"];
+  const WEDGE_IDLE_ANIMS = ["wedge-idle-pulse", "wedge-idle-wobble", "wedge-idle-glow", "wedge-idle-shake", "wedge-idle-rainbow"];
 
   let konamiListenerActive = false;
   let konamiProgress = 0;
@@ -7395,7 +7395,8 @@ document.addEventListener("DOMContentLoaded", () => {
     honorBadge.classList.toggle("honor-low", !high);
     honorBadge.classList.toggle("honor-high", high);
     if (honorLabel) honorLabel.textContent = high ? "HONOR ALTO" : "HONOR BAJO";
-    if (honorIcon) honorIcon.textContent = high ? "★" : "☠";
+    // El ícono ahora es el sprite (honor-sprite.png); el color/estado
+    // ya lo maneja la clase honor-high/honor-low en CSS.
     honorBadge.classList.add("honor-visible");
     honorBadge.classList.remove("honor-pop");
     void honorBadge.offsetWidth;
@@ -7431,6 +7432,7 @@ document.addEventListener("DOMContentLoaded", () => {
       renderNameChips();
       renderPesWheel();
       buildPesWheelLights();
+      syncPesSpinAvailability();
     } else {
       pesModeActive = false;
       exitPesMode();
@@ -7446,28 +7448,35 @@ document.addEventListener("DOMContentLoaded", () => {
     return mateoSoloUnlocked ? [...pesNames, "Mateo solo"] : [...pesNames];
   }
 
+  function syncPesSpinAvailability() {
+    if (pesSpinBtn) pesSpinBtn.disabled = currentPool().length < 2;
+  }
+
   function renderNameChips() {
     if (!pesNameChips) return;
     pesNameChips.innerHTML = "";
+    // Ya no hay piso de "mínimo 2 visibles acá": podés sacar todos y
+    // cargar los tuyos. El único límite real (no poder girar con
+    // menos de 2) se controla en syncPesSpinAvailability() y en
+    // spinPesWheel(), no bloqueando el botón ✕.
     pesNames.forEach((name, idx) => {
       const chip = document.createElement("span");
       chip.className = "pes-name-chip";
       const label = document.createElement("span");
       label.textContent = name;
       chip.appendChild(label);
-      if (pesNames.length > 2) {
-        const rm = document.createElement("button");
-        rm.type = "button";
-        rm.className = "pes-name-chip-remove";
-        rm.title = `Quitar a ${name}`;
-        rm.textContent = "✕";
-        rm.addEventListener("click", () => {
-          pesNames.splice(idx, 1);
-          renderNameChips();
-          renderPesWheel();
-        });
-        chip.appendChild(rm);
-      }
+      const rm = document.createElement("button");
+      rm.type = "button";
+      rm.className = "pes-name-chip-remove";
+      rm.title = `Quitar "${name}"`;
+      rm.textContent = "✕";
+      rm.addEventListener("click", () => {
+        pesNames.splice(idx, 1);
+        renderNameChips();
+        renderPesWheel();
+        syncPesSpinAvailability();
+      });
+      chip.appendChild(rm);
       pesNameChips.appendChild(chip);
     });
   }
@@ -7483,14 +7492,15 @@ document.addEventListener("DOMContentLoaded", () => {
       pesNameNewInput.value = "";
       return;
     }
-    if (pesNames.length >= 8) {
-      toast("Máximo 8 nombres en la rueda.");
+    if (pesNames.length >= 10) {
+      toast("Máximo 10 palabras en la rueda.");
       return;
     }
     pesNames.push(val);
     pesNameNewInput.value = "";
     renderNameChips();
     renderPesWheel();
+    syncPesSpinAvailability();
   }
   document.getElementById("pesNameAddBtn")?.addEventListener("click", addPesName);
   pesNameNewInput?.addEventListener("keydown", (e) => {
@@ -7542,6 +7552,22 @@ document.addEventListener("DOMContentLoaded", () => {
     if (pesWheelTrail1El) pesWheelTrail1El.style.background = pesWheelEl.style.background;
     if (pesWheelTrail2El) pesWheelTrail2El.style.background = pesWheelEl.style.background;
 
+    // Sorteo de estilo por nombre: cada vez que se redibuja la
+    // rueda, cada nombre saca fuente + animación al azar (evitando
+    // repetir la misma que el vecino), en vez del patrón fijo
+    // i % length de antes.
+    function pickRandomSequence(length, poolSize) {
+      const seq = [];
+      for (let i = 0; i < length; i++) {
+        let idx = Math.floor(Math.random() * poolSize);
+        if (poolSize > 1 && seq[i - 1] === idx) idx = (idx + 1) % poolSize;
+        seq.push(idx);
+      }
+      return seq;
+    }
+    const fontPicks = pickRandomSequence(n, WEDGE_FONTS.length);
+    const animPicks = pickRandomSequence(n, WEDGE_IDLE_ANIMS.length);
+
     pool.forEach((name, i) => {
       const centerAngle = i * wedgeAngle + wedgeAngle / 2;
       const label = document.createElement("div");
@@ -7550,10 +7576,9 @@ document.addEventListener("DOMContentLoaded", () => {
       label.dataset.index = String(i);
       label.style.setProperty("--wedge-rot", `${centerAngle - 90}deg`);
       label.style.transform = `rotate(${centerAngle - 90}deg)`;
-      label.style.fontFamily = WEDGE_FONTS[i % WEDGE_FONTS.length];
-      const idleAnim = WEDGE_IDLE_ANIMS[i % WEDGE_IDLE_ANIMS.length];
-      label.classList.add(idleAnim);
-      label.style.animationDelay = (i * 0.22).toFixed(2) + "s";
+      label.style.fontFamily = WEDGE_FONTS[fontPicks[i]];
+      label.classList.add(WEDGE_IDLE_ANIMS[animPicks[i]]);
+      label.style.animationDelay = (Math.random() * 1.3).toFixed(2) + "s";
       pesWheelEl.appendChild(label);
     });
 
@@ -7566,7 +7591,10 @@ document.addEventListener("DOMContentLoaded", () => {
   function spinPesWheel() {
     if (pesSpinning) return;
     const pool = currentPool();
-    if (pool.length < 2) return;
+    if (pool.length < 2) {
+      toast("Necesitás al menos 2 palabras cargadas para girar.");
+      return;
+    }
     pesSpinning = true;
     pesSpinBtn.disabled = true;
     setPesLightsMode("spinning");
@@ -7685,18 +7713,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (pesResultStage) pesResultStage.classList.add("show");
     revealWinnerName(name, () => {
-      setTimeout(() => announceResult(name), 700);
+      setTimeout(() => announceResult(), 700);
     }, { containerId: "pesResultName", stageId: "pesResultStage", shakeSelector: null });
   }
 
   pesSpinBtn?.addEventListener("click", spinPesWheel);
 
   // ---- Resultado final: cae el botón "Desafiar" ----
-  function announceResult(name) {
-    const label = name.toLowerCase().includes("mateo")
-      ? `🎮 ¡${name.toUpperCase()}!`
-      : `🎮 ¡${name.toUpperCase()} JUEGA CON MATEO!`;
-    if (desafiarBtn) desafiarBtn.textContent = label;
+  function announceResult() {
+    // Ya no arma ningún texto con el nombre - el botón siempre dice
+    // lo mismo, "⚔️ DESAFIAR" (definido en el HTML).
     pesModeSelect.classList.add("hidden");
     desafiarDrop.classList.remove("hidden");
     desafiarDrop.classList.remove("desafiar-fall");
@@ -7708,9 +7734,42 @@ document.addEventListener("DOMContentLoaded", () => {
     // A definir: qué pasa al tocar "Desafiar".
   });
 
+  // ---- Cinemática de vidrio roto: cubre toda la pantalla con
+  // pedazos que salen volando desde el centro. onDone se llama
+  // cuando termina, ahí es donde desbloqueamos la opción secreta. ----
+  function triggerGlassShatter(onDone) {
+    const overlay = document.createElement("div");
+    overlay.className = "glass-shatter-overlay";
+    const rows = 3, cols = 3;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const shard = document.createElement("div");
+        shard.className = "glass-shard";
+        shard.style.left = (c * 100 / cols) + "%";
+        shard.style.top = (r * 100 / rows) + "%";
+        shard.style.width = (100 / cols) + "%";
+        shard.style.height = (100 / rows) + "%";
+        const cx = c - (cols - 1) / 2;
+        const cy = r - (rows - 1) / 2;
+        shard.style.setProperty("--tx", (cx * 150 + (Math.random() - 0.5) * 100).toFixed(0) + "px");
+        shard.style.setProperty("--ty", (cy * 150 + (Math.random() - 0.5) * 100).toFixed(0) + "px");
+        shard.style.setProperty("--rot", ((Math.random() - 0.5) * 150).toFixed(0) + "deg");
+        shard.style.animationDelay = (Math.random() * 0.12).toFixed(2) + "s";
+        overlay.appendChild(shard);
+      }
+    }
+    document.body.appendChild(overlay);
+    void overlay.offsetWidth;
+    overlay.classList.add("break");
+    setTimeout(() => {
+      overlay.remove();
+      onDone && onDone();
+    }, 700);
+  }
+
   // ---- Botón secreto -> código estilo Konami ----
   function resetKonamiKeys() {
-    konamiBox.classList.remove("konami-wrong", "konami-correct", "konami-shatter");
+    konamiBox.classList.remove("konami-wrong", "konami-correct");
     konamiKeys.querySelectorAll(".konami-key").forEach(k => k.classList.remove("konami-key-active"));
   }
   document.getElementById("pesSecretBtn")?.addEventListener("click", () => {
@@ -7732,25 +7791,26 @@ document.addEventListener("DOMContentLoaded", () => {
     keyEls[konamiProgress]?.classList.add("konami-key-active");
     if (e.key === KONAMI_SEQUENCE[konamiProgress]) {
       konamiProgress++;
+      // Sonido en CADA tecla correcta, no solo al completar el código.
+      try { busPlaySound("/static/audio/konami-correcto.wav", 0.85); } catch (err) {}
       if (konamiProgress === KONAMI_SEQUENCE.length) {
         konamiListenerActive = false;
         konamiBox.classList.add("konami-correct");
-        try { busPlaySound("/static/audio/konami-correcto.wav", 0.9); } catch (e) {}
         setTimeout(() => {
-          konamiBox.classList.add("konami-shatter");
-          try { busPlaySound("/static/audio/konami-rotura.mp3", 0.9); } catch (e) {}
-        }, 500);
-        setTimeout(() => {
-          konamiModal.classList.add("hidden");
-          mateoSoloUnlocked = true;
-          renderPesWheel();
-          toast("🔓 Opción secreta desbloqueada: Mateo solo");
-        }, 1400);
+          try { busPlaySound("/static/audio/konami-rotura.mp3", 0.9); } catch (err) {}
+          triggerGlassShatter(() => {
+            konamiModal.classList.add("hidden");
+            mateoSoloUnlocked = true;
+            renderPesWheel();
+            syncPesSpinAvailability();
+            toast("🔓 Opción secreta desbloqueada: Mateo solo");
+          });
+        }, 350);
       }
     } else {
       konamiProgress = 0;
       konamiBox.classList.add("konami-wrong");
-      try { busPlaySound("/static/audio/konami-error.wav", 0.9); } catch (e) {}
+      try { busPlaySound("/static/audio/konami-error.wav", 0.9); } catch (err) {}
       setTimeout(() => {
         konamiBox.classList.remove("konami-wrong");
         resetKonamiKeys();
