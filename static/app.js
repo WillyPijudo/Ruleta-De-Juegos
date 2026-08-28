@@ -7219,3 +7219,31 @@ document.addEventListener("DOMContentLoaded", () => {
     hsOpenPickScreen();
   });
 });
+
+
+
+
+// ---- Efecto de mouse (spotlight) + toggle para desactivarlo ----
+(function initCursorFx() {
+  const spotlight = document.getElementById("mouseSpotlight");
+  const toggleBtn = document.getElementById("cursorFxToggle");
+  if (!spotlight) return;
+  let raf = null, mx = 50, my = 50;
+  window.addEventListener("mousemove", (e) => {
+    mx = (e.clientX / window.innerWidth) * 100;
+    my = (e.clientY / window.innerHeight) * 100;
+    if (!raf) {
+      raf = requestAnimationFrame(() => {
+        spotlight.style.setProperty("--mx", mx + "%");
+        spotlight.style.setProperty("--my", my + "%");
+        raf = null;
+      });
+    }
+  });
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", () => {
+      const isOff = document.body.classList.toggle("cursor-fx-off");
+      toggleBtn.textContent = isOff ? "✨ Cursor FX (apagado)" : "✨ Cursor FX";
+    });
+  }
+})();
