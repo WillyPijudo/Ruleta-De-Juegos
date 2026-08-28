@@ -201,6 +201,9 @@ function renderWheel() {
 
   if (n === 0) {
     wheelEl.style.background = "var(--surface)";
+    wheelEl.style.setProperty("--wedge-n", 0);
+    if (wheelTrail1El) wheelTrail1El.style.opacity = 0;
+    if (wheelTrail2El) wheelTrail2El.style.opacity = 0;
     return;
   }
 
