@@ -7336,3 +7336,134 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 })();
+
+
+
+// ================== MODO PES (Ronaldinho) ==================
+(function initPesMode() {
+  const ronaldinhoBtn = document.getElementById("ronaldinhoModeBtn");
+  const ronaldinhoSplash = document.getElementById("ronaldinhoSplash");
+  const pesModeSelect = document.getElementById("pesModeSelect");
+  const konamiModal = document.getElementById("konamiModal");
+  const konamiKeys = document.getElementById("konamiKeys");
+  const konamiBox = document.getElementById("konamiBox");
+  const honorBadge = document.getElementById("honorBadge");
+  const honorLabel = document.getElementById("honorLabel");
+  const desafiarDrop = document.getElementById("desafiarDrop");
+  const desafiarBtn = document.getElementById("desafiarBtn");
+  if (!ronaldinhoBtn) return;
+
+  let pesModeActive = false;
+  let konamiListenerActive = false;
+  let konamiProgress = 0;
+  const KONAMI_SEQUENCE = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight"];
+
+  function setHonor(high) {
+    if (!honorBadge) return;
+    honorBadge.classList.toggle("honor-low", !high);
+    honorBadge.classList.toggle("honor-high", high);
+    if (honorLabel) honorLabel.textContent = high ? "HONOR ALTO" : "HONOR BAJO";
+    honorBadge.classList.remove("honor-pop");
+    void honorBadge.offsetWidth;
+    honorBadge.classList.add("honor-pop");
+    try { busPlaySound(high ? "/static/audio/subehonor.wav" : "/static/audio/bajahonor.wav", 0.9); } catch (e) {}
+  }
+
+  function exitPesMode() {
+    pesModeSelect.classList.add("hidden");
+    desafiarDrop.classList.add("hidden");
+    setHonor(true);
+  }
+
+  ronaldinhoBtn.addEventListener("click", () => {
+    if (!pesModeActive) {
+      pesModeActive = true;
+      ronaldinhoBtn.textContent = "🕺 Modo PES (activo)";
+      ronaldinhoSplash.classList.remove("hidden");
+      setHonor(false);
+    } else {
+      pesModeActive = false;
+      ronaldinhoBtn.textContent = "🕺 Modo PES";
+      exitPesMode();
+    }
+  });
+
+  ronaldinhoSplash?.addEventListener("click", () => {
+    ronaldinhoSplash.classList.add("hidden");
+    pesModeSelect.classList.remove("hidden");
+  });
+
+  function showDesafiarDrop(names) {
+    if (!desafiarDrop) return;
+    const label = names.length === 1
+      ? `⚔️ ${names[0].toUpperCase()} SE LA BANCA SOLO`
+      : `⚔️ ${names[0].toUpperCase()} DESAFÍA A ${names[1].toUpperCase()}`;
+    if (desafiarBtn) desafiarBtn.textContent = label;
+    pesModeSelect.classList.add("hidden");
+    desafiarDrop.classList.remove("hidden");
+    desafiarDrop.classList.remove("desafiar-fall");
+    void desafiarDrop.offsetWidth;
+    desafiarDrop.classList.add("desafiar-fall");
+  }
+
+  document.getElementById("pesOptRomanMateo")?.addEventListener("click", () => showDesafiarDrop(["Román", "Mateo"]));
+  document.getElementById("pesOptLautyMateo")?.addEventListener("click", () => showDesafiarDrop(["Lauty", "Mateo"]));
+  document.getElementById("pesOptMateoSolo")?.addEventListener("click", () => showDesafiarDrop(["Mateo"]));
+
+  desafiarBtn?.addEventListener("click", () => {
+    // A definir: qué pasa al tocar "Desafiar". Por ahora no hace nada más.
+  });
+
+  // ---- Botón secreto -> código estilo Konami ----
+  function resetKonamiKeys() {
+    konamiBox.classList.remove("konami-wrong", "konami-correct", "konami-shatter");
+    konamiKeys.querySelectorAll(".konami-key").forEach(k => k.classList.remove("konami-key-active"));
+  }
+
+  document.getElementById("pesSecretBtn")?.addEventListener("click", () => {
+    konamiModal.classList.remove("hidden");
+    konamiProgress = 0;
+    resetKonamiKeys();
+    konamiListenerActive = true;
+  });
+
+  document.getElementById("konamiCloseBtn")?.addEventListener("click", () => {
+    konamiModal.classList.add("hidden");
+    konamiListenerActive = false;
+  });
+
+  window.addEventListener("keydown", (e) => {
+    if (!konamiListenerActive) return;
+    const arrowKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+    if (!arrowKeys.includes(e.key)) return;
+    e.preventDefault();
+
+    const keyEls = konamiKeys.querySelectorAll(".konami-key");
+    keyEls[konamiProgress]?.classList.add("konami-key-active");
+
+    if (e.key === KONAMI_SEQUENCE[konamiProgress]) {
+      konamiProgress++;
+      if (konamiProgress === KONAMI_SEQUENCE.length) {
+        konamiListenerActive = false;
+        konamiBox.classList.add("konami-correct");
+        try { busPlaySound("/static/audio/konami-correcto.mp3", 0.9); } catch (e) {}
+        setTimeout(() => {
+          konamiBox.classList.add("konami-shatter");
+          try { busPlaySound("/static/audio/konami-rotura.mp3", 0.9); } catch (e) {}
+        }, 500);
+        setTimeout(() => {
+          konamiModal.classList.add("hidden");
+          document.getElementById("pesOptMateoSolo")?.classList.remove("hidden");
+        }, 1400);
+      }
+    } else {
+      konamiProgress = 0;
+      konamiBox.classList.add("konami-wrong");
+      try { busPlaySound("/static/audio/konami-error.mp3", 0.9); } catch (e) {}
+      setTimeout(() => {
+        konamiBox.classList.remove("konami-wrong");
+        resetKonamiKeys();
+      }, 420);
+    }
+  });
+})();
