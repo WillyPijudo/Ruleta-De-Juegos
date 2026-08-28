@@ -7446,7 +7446,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (konamiProgress === KONAMI_SEQUENCE.length) {
         konamiListenerActive = false;
         konamiBox.classList.add("konami-correct");
-        try { busPlaySound("/static/audio/konami-correcto.mp3", 0.9); } catch (e) {}
+        try { busPlaySound("/static/audio/konami-correcto.wav", 0.9); } catch (e) {}
         setTimeout(() => {
           konamiBox.classList.add("konami-shatter");
           try { busPlaySound("/static/audio/konami-rotura.mp3", 0.9); } catch (e) {}
@@ -7459,7 +7459,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       konamiProgress = 0;
       konamiBox.classList.add("konami-wrong");
-      try { busPlaySound("/static/audio/konami-error.mp3", 0.9); } catch (e) {}
+      try { busPlaySound("/static/audio/konami-error.wav", 0.9); } catch (e) {}
       setTimeout(() => {
         konamiBox.classList.remove("konami-wrong");
         resetKonamiKeys();
