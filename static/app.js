@@ -7770,7 +7770,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---- Botón secreto -> código estilo Konami ----
   function resetKonamiKeys() {
     konamiBox.classList.remove("konami-wrong", "konami-correct");
-    konamiKeys.querySelectorAll(".konami-key").forEach(k => k.classList.remove("konami-key-active"));
+    konamiKeys.querySelectorAll(".konami-key").forEach(k => k.classList.remove("konami-key-done"));
+  }
+  function updateKonamiKeys() {
+    konamiKeys.querySelectorAll(".konami-key").forEach((k, idx) => {
+      k.classList.toggle("konami-key-done", idx < konamiProgress);
+    });
   }
   document.getElementById("pesSecretBtn")?.addEventListener("click", () => {
     konamiModal.classList.remove("hidden");
@@ -7787,10 +7792,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const arrowKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
     if (!arrowKeys.includes(e.key)) return;
     e.preventDefault();
-    const keyEls = konamiKeys.querySelectorAll(".konami-key");
-    keyEls[konamiProgress]?.classList.add("konami-key-active");
     if (e.key === KONAMI_SEQUENCE[konamiProgress]) {
       konamiProgress++;
+      updateKonamiKeys();
       // Sonido en CADA tecla correcta, no solo al completar el código.
       try { busPlaySound("/static/audio/konami-correcto.wav", 0.85); } catch (err) {}
       if (konamiProgress === KONAMI_SEQUENCE.length) {
@@ -7810,10 +7814,10 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       konamiProgress = 0;
       konamiBox.classList.add("konami-wrong");
+      updateKonamiKeys();
       try { busPlaySound("/static/audio/konami-error.wav", 0.9); } catch (err) {}
       setTimeout(() => {
         konamiBox.classList.remove("konami-wrong");
-        resetKonamiKeys();
       }, 420);
     }
   });
