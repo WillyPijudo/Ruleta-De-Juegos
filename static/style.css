@@ -838,6 +838,16 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   width: 170px; aspect-ratio: 2/3; border-radius: 10px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.55), 0 0 0 4px rgba(255,62,127,0.25);
 }
+.modal-cover-wrap.cover-suspense {
+  filter: blur(14px) brightness(0.4);
+  transform: scale(0.92);
+  transition: filter 0.4s ease, transform 0.4s ease;
+}
+.modal-cover-wrap.cover-reveal {
+  filter: blur(0) brightness(1);
+  transform: scale(1);
+  transition: filter 0.5s ease, transform 0.5s ease;
+}
 
 #winnerName {
   margin: 0 0 8px;
@@ -846,6 +856,30 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   color: var(--gold-bright);
   text-shadow: 0 0 14px rgba(217, 169, 78, 0.4);
   animation: title-wiggle 2.4s ease-in-out infinite;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+  perspective: 600px;
+  min-height: 1.3em;
+}
+
+.flip-letter {
+  display: inline-block;
+  transform-style: preserve-3d;
+}
+.flip-letter-inner {
+  display: inline-block;
+  transform: rotateX(90deg);
+  opacity: 0;
+}
+.flip-letter.flip-in .flip-letter-inner {
+  animation: flip-in-letter 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2) forwards;
+}
+@keyframes flip-in-letter {
+  0%   { transform: rotateX(90deg) translateY(-6px); opacity: 0; }
+  60%  { transform: rotateX(-14deg) translateY(1px); opacity: 1; }
+  100% { transform: rotateX(0deg) translateY(0); opacity: 1; }
 }
 @keyframes title-wiggle {
   0%, 100% { transform: rotate(0deg); }
@@ -859,7 +893,10 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   line-height: 1.5;
   color: var(--text);
   margin: 0 0 18px;
+  opacity: 0;
+  transition: opacity 0.4s ease;
 }
+.winner-message.show { opacity: 1; }
 .winner-who {
   background: linear-gradient(120deg, var(--pink), var(--gold-bright));
   -webkit-background-clip: text;
@@ -2654,3 +2691,82 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 
 /* ---------- NUEVA FUENTE ---------- */
 .font-arcade { font-family: "Rubik Mono One", var(--font-comic); letter-spacing: 0.5px; }
+
+
+/* ---------- Rincón del perdedor (gag post-ganador) ---------- */
+.loser-corner {
+  position: relative;
+  margin: 4px 0 18px;
+  padding: 14px 10px 10px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(14px) scale(0.96);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  background: linear-gradient(180deg, rgba(0,0,0,0.28), rgba(0,0,0,0.06));
+  border: 1px dashed rgba(255,255,255,0.14);
+}
+.loser-corner.hidden { display: none; }
+.loser-corner.show { opacity: 1; transform: translateY(0) scale(1); }
+
+.loser-stamp {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-family: var(--font-marker);
+  font-size: 10.5px;
+  color: var(--danger);
+  border: 2px solid var(--danger);
+  border-radius: 6px;
+  padding: 3px 6px;
+  transform: rotate(-9deg);
+  opacity: 0.85;
+  letter-spacing: 0.5px;
+  z-index: 2;
+}
+
+.loser-window {
+  position: absolute;
+  top: 6px; right: 10px;
+  width: 60px; height: 80px;
+  border-radius: 6px 6px 3px 3px;
+  background: linear-gradient(180deg, #9fd6ef, #4a90b8);
+  border: 4px solid #6b4a2b;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.35), 0 3px 8px rgba(0,0,0,0.4);
+}
+.loser-window::before,
+.loser-window::after {
+  content: "";
+  position: absolute;
+  background: #6b4a2b;
+}
+.loser-window::before { left: 50%; top: 0; bottom: 0; width: 4px; transform: translateX(-50%); }
+.loser-window::after { top: 50%; left: 0; right: 0; height: 4px; transform: translateY(-50%); }
+
+.loser-scene {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+  min-height: 90px;
+}
+.loser-chair {
+  height: 76px;
+  filter: drop-shadow(0 6px 6px rgba(0,0,0,0.4));
+}
+.loser-clown {
+  height: 90px;
+  filter: drop-shadow(0 6px 6px rgba(0,0,0,0.45));
+  animation: loser-clown-sob 2.4s ease-in-out infinite;
+}
+@keyframes loser-clown-sob {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(2px) rotate(-1.5deg); }
+}
+.loser-caption {
+  margin: 8px 0 0;
+  font-family: var(--font-marker);
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
