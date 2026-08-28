@@ -7536,6 +7536,20 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+
+  // Si la palabra es larga para el espacio del gajo, achica SU
+  // PROPIA letra hasta que entre entera, en vez de cortarla con "...".
+  const WEDGE_LABEL_MIN_FONT = 10;
+  function fitWedgeLabel(label) {
+    const maxWidth = label.clientWidth;
+    if (!maxWidth) return;
+    let fontSize = parseFloat(getComputedStyle(label).fontSize);
+    while (label.scrollWidth > maxWidth && fontSize > WEDGE_LABEL_MIN_FONT) {
+      fontSize -= 1;
+      label.style.fontSize = fontSize + "px";
+    }
+  }
+    
   // ---- Dibuja la ruleta circular de nombres (de verdad, no un botón) ----
   function renderPesWheel() {
     if (!pesWheelEl) return;
@@ -7580,6 +7594,7 @@ document.addEventListener("DOMContentLoaded", () => {
       label.classList.add(WEDGE_IDLE_ANIMS[animPicks[i]]);
       label.style.animationDelay = (Math.random() * 1.3).toFixed(2) + "s";
       pesWheelEl.appendChild(label);
+      fitWedgeLabel(label);
     });
 
     pesWheelEl.style.transform = `rotate(${pesRotationDeg}deg)`;
