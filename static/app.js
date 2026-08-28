@@ -5291,7 +5291,7 @@ const HS_BOOT_VISUAL_SCALE = 1.15;  // (antes 1.7, ahí estaba el problema real)
 // HS_HEAD_OFFSET, el botín quede EXACTO tocando el piso cuando no estás
 // pateando (antes de esto era matemáticamente imposible que llegara). El
 // de patada también subió para más alcance real hacia adelante.
-const HS_LEG_LEN = 33;              // (antes 52) FIX "separados": mucho más corto, el botín queda pegado justo debajo de la cabeza en reposo
+const HS_LEG_LEN = 27;              // (antes 33) FIX "cabeza flotando": todavía un poco más pegado
 // FIX "el botín se va al carajo lejos de la cabeza al patear": 112 era casi
 // el TRIPLE del radio de la cabeza (36) - con la pierna tan larga, apenas
 // rotaba un poco ya se veía como si el pie saliera disparado lejos del
@@ -6030,21 +6030,40 @@ function hsResolveCollisions(now) {
     // formas, solo el empujón de velocidad es único.
     let applied = false;
 
+    // FIX "no importa cómo la patee, nunca sale disparada": este alcance
+    // usaba bootPose.x/y, que es la posición VISUAL del botín - y esa la
+    // achicamos a propósito para que se vea pegado a la cabeza. Resultado:
+    // apenas arrancaba una patada real (isStrike), el botín recién estaba
+    // saliendo de reposo y la pelota quedaba FUERA de rango - la patada le
+    // pegaba al aire y el contacto real cataba en el "toque flojo" de
+    // reserva (por eso pegar de cabeza rendía más que patear). Ahora, para
+    // una patada real, el punto de alcance SIEMPRE usa el estiramiento
+    // MÁXIMO del pique (HS_LEG_LEN_KICK), sin importar en qué frame exacto
+    // de la animación estemos - así el golpe conecta de verdad todas las veces.
     if (!applied) {
+      const strikeX = headCX + Math.cos(bootPose.angle) * HS_LEG_LEN_KICK;
+      const strikeY = headCY + Math.sin(bootPose.angle) * HS_LEG_LEN_KICK;
       const reach = bootPose.isStrike ? HS_KICK_REACH : HS_BOOT_W * 0.5;
-      const bdx = b.x - bootPose.x, bdy = b.y - bootPose.y;
+      const px = bootPose.isStrike ? strikeX : bootPose.x;
+      const py = bootPose.isStrike ? strikeY : bootPose.y;
+      const bdx = b.x - px, bdy = b.y - py;
       const bdist = Math.hypot(bdx, bdy) || 0.001;
       const minBootDist = reach + HS_BALL_R * 0.7;
       if (bdist < minBootDist) {
         const nx = bdx / bdist, ny = bdy / bdist;
-        b.x = bootPose.x + nx * minBootDist;
-        b.y = bootPose.y + ny * minBootDist;
+        b.x = px + nx * minBootDist;
+        b.y = py + ny * minBootDist;
         if (bootPose.isStrike) {
           const kickT = Math.max(0, Math.min(1,
             (bootPose.extend - HS_BOOT_STRIKE_THRESHOLD) / (1 - HS_BOOT_STRIKE_THRESHOLD)));
           const power = HS_KICK_POWER * (0.75 + 0.45 * kickT);
           vxSum += p.facing * power + p.vx * 0.4;
-          vySum += -260 - 60 * kickT + ny * 120;
+          // Más variedad de tiro real: antes el punto de contacto (ny)
+          // apenas influía (x120). Ahora pesa mucho más, así PEGARLE
+          // ARRIBA/ABAJO de la pelota cambia de verdad la trayectoria -
+          // remaches rasantes si conectás por arriba, globos si conectás
+          // por abajo, no todos los tiros salen iguales.
+          vySum += -260 - 60 * kickT + ny * 220;
           hits++;
           applied = true;
           if (!p.bootCoolUntil || now > p.bootCoolUntil) {
@@ -6228,7 +6247,15 @@ function hsResolvePlayers() {
   // que de a poco lo iba deslizando hacia un costado). Ahora, si están
   // apilados verticalmente (dy grande), este empuje lateral se salta del
   // todo - de eso ya se encarga hsResolveHeadStanding.
-  if (dist < minDist && Math.abs(dy) < HS_HEAD_R * 1.1) {
+  // FIX "solo me puedo parar en los costados de la cabeza": este empuje
+  // lateral y el de "pararse arriba" (hsResolveHeadStanding) tenían rangos
+  // que se PISABAN (ambos activos cuando dy estaba entre ~20 y ~40) - en
+  // esa franja competían entre sí y el empuje lateral siempre terminaba
+  // ganando, tirándote hacia un costado antes de que pudieras asentarte en
+  // el centro. Bajado el corte para que ya no se solapen: este empuje
+  // ahora SOLO actúa si están prácticamente a la misma altura (de verdad
+  // lado a lado en el piso), nunca durante un salto/aterrizaje arriba.
+  if (dist < minDist && Math.abs(dy) < HS_HEAD_R * 0.5) {
     const nx = dx / dist;
     const overlap = minDist - dist;
     a.x -= nx * overlap * 0.5;
@@ -6243,7 +6270,16 @@ function hsResolvePlayers() {
   // de uno SÍ podía meterse dentro de la cabeza del otro al disputar la
   // pelota (se veía cómo se "pisaban"). Ahora el botín también empuja si
   // invade el círculo de la cabeza rival.
+  // FIX "le muevo la cabeza al otro jugador estando parado encima": este
+  // empuje (botín contra cabeza rival) no tenía NINGÚN filtro de altura -
+  // así que si estabas parado arriba de la cabeza del rival, tu propio
+  // botín (que cuelga cerca de tu cabeza, ya en las alturas) igual entraba
+  // en rango de "cabeza rival" de abajo y la empujaba cada vez que te
+  // movías. Ahora este empuje también se salta cuando están apilados -
+  // solo debe existir para disputas de pelota lado a lado en el piso.
+  const sameLevel = Math.abs(a.y - b.y) < HS_HEAD_R;
   [[a, b], [b, a]].forEach(([owner, rival]) => {
+    if (!sameLevel) return;
     const rivalCY = rival.y - HS_HEAD_OFFSET;
     const bp = hsBootPose(owner);
     const bdx = bp.x - rival.x, bdy = bp.y - rivalCY;
@@ -6581,7 +6617,14 @@ function hsDrawBoot(ctx, p, bootPose, color, dark) {
   // que siempre queda pegado justo debajo de la cabeza. La rotación
   // también es mucho más chica que antes (antes giraba más de 60°, ahora
   // como mucho ~15°) para que nunca se "salga" visualmente de su lugar.
-  ctx.rotate(HS_BOOT_ROT_REST + (HS_BOOT_ROT_KICK - HS_BOOT_ROT_REST) * p.bootExtend);
+  // FIX "te olvidaste de rotar el botín al moverlo de posición": esto
+  // giraba nomás ~15° (0.3 a -0.25) mientras la POSICIÓN del péndulo se
+  // mueve ~106° de reposo a patada a fondo - el botín se deslizaba por el
+  // arco casi sin girar, se veía clavado/pegado en el mismo ángulo. Ahora
+  // la rotación sigue una buena parte del giro real del péndulo (mismo
+  // ángulo que ya usa la posición, escalado), así que al cambiar de
+  // posición en el arco, el botín gira de verdad con él.
+  ctx.rotate((hsBootLocalAngle(p) - HS_BOOT_REST_ANGLE) * 0.55 + HS_BOOT_ROT_REST);
   ctx.scale(HS_BOOT_VISUAL_SCALE, HS_BOOT_VISUAL_SCALE);
 
   // Sombra de contacto (para que no parezca flotando)
