@@ -845,7 +845,7 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 }
 .modal-cover-wrap.cover-reveal {
   filter: none;
-  transform: scale(1);
+  transform: none;
   transition: filter 0.5s ease, transform 0.5s ease;
 }
 
@@ -3212,7 +3212,7 @@ body.cursor-fx-off .mouse-spotlight { opacity: 0; }
 /* ---- Estuche 3D del ganador: caja de verdad con volumen, no una
    tarjeta plana. El canto es grueso a propósito (34px) para que se
    note el plástico incluso sin mover el mouse. ---- */
-.poster-3d-stage { display: flex; justify-content: center; perspective: 850px; padding: 10px 0 22px; }
+.poster-3d-stage { display: flex; justify-content: center; perspective: 900px; padding: 10px 0 22px; }
 .poster-3d {
   position: relative;
   width: 170px; height: 255px;
@@ -3237,10 +3237,9 @@ body.cursor-fx-off .mouse-spotlight { opacity: 0; }
   position: absolute; inset: 0;
   background: linear-gradient(115deg, rgba(255,255,255,0.45) 0%, transparent 35%, transparent 65%, rgba(255,255,255,0.12) 100%);
   opacity: 0.65;
-  transform: translateZ(18px);
+  transform: translateZ(17.5px);
   border-radius: 10px;
   pointer-events: none;
-  mix-blend-mode: overlay;
 }
 
 /* Contratapa (se ve al girar fuerte) */
@@ -3248,47 +3247,43 @@ body.cursor-fx-off .mouse-spotlight { opacity: 0; }
   position: absolute; inset: 0;
   background: linear-gradient(160deg, #241a29, #0e0a11);
   border-radius: 10px;
-  transform: translateZ(-17px) rotateY(180deg);
+  transform: rotateY(180deg) translateZ(17px);
   box-shadow: inset 0 0 20px rgba(0,0,0,0.6);
 }
 
 /* Lomo derecho, tipo caja de videojuego física, con líneas de relieve */
 .poster-3d-spine {
-  position: absolute; top: 0; right: 0;
+  position: absolute; top: 0; right: -17px;
   width: 34px; height: 100%;
   background:
     repeating-linear-gradient(180deg, rgba(255,255,255,0.05) 0 2px, transparent 2px 10px),
     linear-gradient(180deg, #2a2030, #140e18 55%, #0a070c);
   border-radius: 0 10px 10px 0;
-  transform-origin: right center;
-  transform: rotateY(90deg) translateZ(17px);
+  transform: rotateY(90deg);
   box-shadow: inset 0 0 8px rgba(0,0,0,0.65);
 }
 /* Canto izquierdo (bisagra) */
 .poster-3d-left {
-  position: absolute; top: 0; left: 0;
+  position: absolute; top: 0; left: -17px;
   width: 34px; height: 100%;
   background: linear-gradient(180deg, #1c1420, #0a070c);
   border-radius: 10px 0 0 10px;
-  transform-origin: left center;
-  transform: rotateY(-90deg) translateZ(17px);
+  transform: rotateY(-90deg);
   box-shadow: inset 0 0 8px rgba(0,0,0,0.65);
 }
 /* Canto superior, con destello para que se lea como plástico */
 .poster-3d-top {
-  position: absolute; top: 0; left: 0;
+  position: absolute; top: -17px; left: 0;
   width: 100%; height: 34px;
   background: linear-gradient(180deg, rgba(255,255,255,0.4), rgba(255,255,255,0.05) 70%);
   border-radius: 10px 10px 0 0;
-  transform-origin: top center;
-  transform: rotateX(-90deg) translateZ(17px);
+  transform: rotateX(90deg);
 }
 /* Canto inferior, más oscuro (menos luz le pega) */
 .poster-3d-bottom {
-  position: absolute; bottom: 0; left: 0;
+  position: absolute; bottom: -17px; left: 0;
   width: 100%; height: 34px;
   background: linear-gradient(0deg, #100b13, #241a29 70%);
   border-radius: 0 0 10px 10px;
-  transform-origin: bottom center;
-  transform: rotateX(90deg) translateZ(17px);
+  transform: rotateX(-90deg);
 }
