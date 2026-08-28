@@ -7381,6 +7381,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!ronaldinhoBtn) return;
 
   let pesModeActive = false;
+  let lastPesWinnerName = "";
+  let momoTimers = [];
   let mateoSoloUnlocked = false;
   // Nombres por defecto, todos quitables (menos que quedar con < 2).
   let pesNames = ["Román", "Lauty"];
@@ -7724,6 +7726,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function finishPesSpin(name, winnerIndex) {
+    lastPesWinnerName = name; // para saber si hay que trollear a Lauty al tocar Desafiar
     pesSpinning = false;
     pesSpinBtn.disabled = false;
     setPesLightsMode("won");
@@ -7765,12 +7768,94 @@ document.addEventListener("DOMContentLoaded", () => {
   desafiarBtn?.addEventListener("click", () => {
     busPlayClick();
     document.getElementById("desafioConfirmOverlay")?.classList.remove("hidden");
+    if ((lastPesWinnerName || "").trim().toLowerCase() === "lauty") {
+      showMomoCinematic();
+    }
   });
+
+  // ---- Cinemática de Momo: "ángel guardián" trolo que aparece cuando
+  // pierde Lauty, incitando a tocar SÍ. Timestamps sacados directo del
+  // JSON que pasaste (palabra por palabra, nada inventado). ----
+  const MOMO_AUDIO_SRC = "/static/audio/momo-lauty.mp3";
+  const MOMO_TRANSCRIPT = [
+    { start: 0.059, end: 1.599, words: [
+        { t: "¿Qué", s: 0.059 }, { t: "onda,", s: 0.159 }, { t: "Lauty,", s: 0.419 },
+        { t: "pedazo", s: 0.799 }, { t: "de", s: 1.179 }, { t: "virgo?", s: 1.299 },
+    ]},
+    { start: 2.279, end: 4.639, words: [
+        { t: "Escuchame", s: 2.279 }, { t: "bien.", s: 2.779 }, { t: "Si", s: 3.439 },
+        { t: "no", s: 3.539 }, { t: "aceptás", s: 3.639 }, { t: "el", s: 4.079 }, { t: "desafío,", s: 4.179 },
+    ]},
+    { start: 4.719, end: 5.94, words: [
+        { t: "te", s: 4.719 }, { t: "permabaneo,", s: 5.0 }, { t: "bobi.", s: 5.659 },
+    ]},
+    { start: 6.679, end: 8.26, words: [
+        { t: "Dale,", s: 6.679 }, { t: "apretalo", s: 6.899 }, { t: "mientras", s: 7.399 },
+        { t: "me", s: 7.719 }, { t: "empomo", s: 7.799 }, { t: "a", s: 8.099 }, { t: "tu", s: 8.199 },
+    ]},
+    { start: 8.3, end: 8.679, words: [ { t: "vieja.", s: 8.3 } ] },
+  ];
+
+  function clearMomoTimers() {
+    momoTimers.forEach(clearTimeout);
+    momoTimers = [];
+  }
+
+  function showMomoCinematic() {
+    const cine = document.getElementById("momoCine");
+    const img = document.getElementById("momoImg");
+    const subEl = document.getElementById("momoSubtitle");
+    const bannedEl = document.getElementById("momoBannedText");
+    if (!cine || !img || !subEl || !bannedEl) return;
+
+    clearMomoTimers();
+    cine.classList.remove("hidden", "momo-exit");
+    cine.classList.add("momo-enter");
+    bannedEl.classList.remove("show");
+    img.classList.remove("momo-talk");
+    subEl.innerHTML = "";
+
+    busPlaySound(MOMO_AUDIO_SRC, 0.85);
+
+    MOMO_TRANSCRIPT.forEach((seg) => {
+      momoTimers.push(setTimeout(() => {
+        img.classList.add("momo-talk");
+        subEl.innerHTML = "";
+        seg.words.forEach((w) => {
+          const span = document.createElement("span");
+          span.className = "word";
+          span.textContent = w.t;
+          subEl.appendChild(span);
+          momoTimers.push(setTimeout(() => span.classList.add("show"), (w.s - seg.start) * 1000));
+        });
+      }, seg.start * 1000));
+      momoTimers.push(setTimeout(() => img.classList.remove("momo-talk"), seg.end * 1000));
+    });
+
+    // A los ~8.7s (justo después de que termina de hablar) se va volando
+    // y deja el sello de "BANEADO POR TROLO" pegado en su lugar.
+    momoTimers.push(setTimeout(() => {
+      subEl.innerHTML = "";
+      cine.classList.remove("momo-enter");
+      cine.classList.add("momo-exit");
+      bannedEl.classList.add("show");
+    }, 8700));
+
+    momoTimers.push(setTimeout(() => {
+      cine.classList.add("hidden");
+      cine.classList.remove("momo-exit");
+      bannedEl.classList.remove("show");
+    }, 10200));
+  }
 
   // ---- Ventana de confirmación "desafio.exe" ----
   const desafioConfirmOverlay = document.getElementById("desafioConfirmOverlay");
   function closeDesafioConfirm() {
     desafioConfirmOverlay?.classList.add("hidden");
+    // Si cerrás antes de que termine la cinemática de Momo, la cortamos
+    // de golpe en vez de dejar timers sueltos disparando en segundo plano.
+    clearMomoTimers();
+    document.getElementById("momoCine")?.classList.add("hidden");
   }
   document.getElementById("desafioConfirmX")?.addEventListener("click", closeDesafioConfirm);
   document.getElementById("desafioConfirmNo")?.addEventListener("click", () => {
