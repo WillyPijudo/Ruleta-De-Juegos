@@ -3161,3 +3161,48 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   transition: opacity 0.3s ease;
 }
 body.cursor-fx-off .mouse-spotlight { opacity: 0; }
+
+
+
+/* ---- Amuleto colgante con dado (decorativo, con balanceo tipo péndulo) ---- */
+.dice-charm {
+  position: absolute;
+  top: 0; right: 26px;
+  width: 40px;
+  transform-origin: top center;
+  animation: charm-swing 4.2s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+.charm-string {
+  display: block;
+  width: 2px; height: 22px;
+  margin: 0 auto;
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(217,169,78,0.55));
+}
+.charm-ring {
+  display: block;
+  width: 10px; height: 10px;
+  margin: -3px auto 0;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+  background: transparent;
+}
+.charm-dice {
+  display: block;
+  width: 34px; height: 34px;
+  margin: 2px auto 0;
+  filter: drop-shadow(0 4px 5px rgba(0,0,0,0.45));
+  animation: charm-dice-wobble 4.2s ease-in-out infinite;
+}
+@keyframes charm-swing {
+  0%, 100% { transform: rotate(-7deg); }
+  50%      { transform: rotate(7deg); }
+}
+@keyframes charm-dice-wobble {
+  0%, 100% { transform: rotate(2deg); }
+  50%      { transform: rotate(-2deg); }
+}
+@media (max-width: 720px) {
+  .dice-charm { display: none; } /* en mobile molesta más de lo que suma */
+}
