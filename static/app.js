@@ -5291,13 +5291,22 @@ const HS_BOOT_VISUAL_SCALE = 1.15;  // (antes 1.7, ahí estaba el problema real)
 // HS_HEAD_OFFSET, el botín quede EXACTO tocando el piso cuando no estás
 // pateando (antes de esto era matemáticamente imposible que llegara). El
 // de patada también subió para más alcance real hacia adelante.
-const HS_LEG_LEN = 27;              // (antes 33) FIX "cabeza flotando": todavía un poco más pegado
+// FIX "cabeza flotando" DE VERDAD esta vez: 27 era MENOR que el radio de
+// la cabeza (36) — matemáticamente el botín en reposo quedaba casi debajo
+// del CENTRO de la cabeza, ni siquiera llegaba a asomar fuera de su
+// silueta, y no tocaba el piso (con HS_HEAD_OFFSET=46 y ángulo de reposo
+// 2.0rad, el pie quedaba ~21px flotando arriba del pasto). 44 es justo lo
+// necesario para que el pie asome de la cabeza Y casi toque el piso.
+const HS_LEG_LEN = 44;
 // FIX "el botín se va al carajo lejos de la cabeza al patear": 112 era casi
 // el TRIPLE del radio de la cabeza (36) - con la pierna tan larga, apenas
 // rotaba un poco ya se veía como si el pie saliera disparado lejos del
 // cuerpo. Ahora se estira mucho menos, se mantiene pegado y sigue dando
 // buen alcance para conectar la pelota.
-const HS_LEG_LEN_KICK = 58;         // (antes 74) sigue dando alcance para patear, pero más pegado al cuerpo
+// Subido junto con HS_LEG_LEN de arriba, misma diferencia relativa que
+// antes (rest a kick), para que la patada siga extendiendo bien sin
+// quedar corta ahora que el reposo es más largo.
+const HS_LEG_LEN_KICK = 74;
 
 // Arco de ~129°: arranca abajo/atrás tocando el piso (reposo) y termina
 // bien ADELANTE de la cabeza y un poco por arriba del centro.
@@ -5321,8 +5330,11 @@ const HS_LEG_RADIUS = 24;
 // pequeño desfase entre posición y rotación se notaba muchísimo. Ahora es
 // un giro chico y sutil (~15°), como el tobillazo real de una patada, no
 // un aspa dando vueltas.
-const HS_BOOT_ROT_REST = 0.3;   // reposo: pie apuntando un poco hacia abajo/adelante
-const HS_BOOT_ROT_KICK = -0.25; // patada a fondo: pie extendido siguiendo el pique
+const HS_BOOT_ROT_REST = 0.38;  // reposo: pie apuntando un poco hacia abajo/adelante
+// Giro de patada MÁS grande (antes -0.25, ahora -0.62): pediste que la
+// patada se sienta con más punch/rotación - esto es directamente el
+// ángulo que gira el DIBUJO del botín (no toca el hitbox real).
+const HS_BOOT_ROT_KICK = -0.62;
 // FIX "se va a la mierda al mínimo toque": estos números estaban pensados
 // para cuando la patada llegaba DILUIDA (bug del promedio de impulsos que
 // arreglamos antes). Ahora que un solo toque aplica la potencia completa,
@@ -5833,9 +5845,16 @@ function hsUpdatePlayer(p, dt, keys, now) {
 // (si vas para adelante el botín se atrasa un toque, si vas para atrás se
 // adelanta un toque — como una zancada real).
 function hsBootLocalAngle(p) {
-  const base = HS_BOOT_REST_ANGLE + (HS_BOOT_MAX_ANGLE - HS_BOOT_REST_ANGLE) * p.bootExtend;
+  // FIX "el pateo se siente sin punch/velocidad": antes el ángulo avanzaba
+  // LINEAL con el tiempo que mantenés la tecla - se sentía parejo/plano
+  // todo el trayecto. Ahora es una curva "easeInCubic": arranca lento (así
+  // seguís teniendo control fino para un puntinazo corto) y ACELERA fuerte
+  // sobre el final - el pie se siente como si "latigazo"-ara justo al
+  // conectar, en vez de moverse a velocidad constante todo el tiempo.
+  const eased = p.bootExtend * p.bootExtend * p.bootExtend;
+  const base = HS_BOOT_REST_ANGLE + (HS_BOOT_MAX_ANGLE - HS_BOOT_REST_ANGLE) * eased;
   const moveT = Math.max(-1, Math.min(1, (p.vx * p.facing) / HS_MAX_SPEED));
-  const drag = moveT * 0.22 * (1 - p.bootExtend); // se apaga solo cuando ya estás pateando a fondo
+  const drag = moveT * 0.22 * (1 - p.bootExtend);
   return base + drag;
 }
 
@@ -5971,22 +5990,27 @@ function hsUpdateBall(dt) {
   // postes de abajo (hsResolveGoalBars) son los que de verdad frenan la
   // pelota, y por arriba del arco ahora es aire libre, como corresponde.
 
-  // FIX BUG "la pelota rebota abajo de la cancha y se teletransporta":
-  // mientras la pelota está dentro de la boca del arco (inGoalMouth), antes
-  // NO había ninguna pared que la frenara en X, así que si no llegaba a
-  // cruzar la línea de gol (hsCheckGoal) podía seguir de largo hacia
-  // coordenadas absurdas (negativas o mayores al ancho del canvas) y
-  // "reaparecer" de golpe en cualquier lado apenas volvía a tocar el piso o
-  // una pared normal. Ahora, aunque esté dentro del arco, hay una pared
-  // trasera (el fondo de la red) que SIEMPRE la frena.
-  if (b.x - HS_BALL_R < -HS_NET_DEPTH) {
-    b.x = -HS_NET_DEPTH + HS_BALL_R;
-    b.vx = Math.abs(b.vx) * HS_WALL_RESTITUTION * 0.6;
+  // FIX "la pelota se va de la pantalla por arriba del arco": antes esta
+  // pared lateral estaba SIEMPRE 46px (HS_NET_DEPTH) más allá del borde del
+  // canvas, sin importar la altura - pensada para dejar que la pelota entre
+  // "detrás" del arco cuando va a la altura de la red. Pero por ARRIBA del
+  // travesaño no hay arco ni red ahí, es cielo/cancha visible - la pelota
+  // no tiene por qué poder seguir 46px más allá del borde de pantalla.
+  // Ahora: si está por encima del travesaño, la pared está en el borde
+  // REAL de pantalla (0 / HS_CANVAS_W). Si está a la altura del arco (para
+  // poder entrar detrás de la red), sigue el margen extra de siempre.
+  const aboveGoalMouth = b.y < HS_PITCH_Y - HS_GOAL_H;
+  const leftWallX = aboveGoalMouth ? 0 : -HS_NET_DEPTH;
+  const rightWallX = aboveGoalMouth ? HS_CANVAS_W : HS_CANVAS_W + HS_NET_DEPTH;
+  const wallBounceMul = aboveGoalMouth ? 1 : 0.6;
+  if (b.x - HS_BALL_R < leftWallX) {
+    b.x = leftWallX + HS_BALL_R;
+    b.vx = Math.abs(b.vx) * HS_WALL_RESTITUTION * wallBounceMul;
     b.squash = Math.min(1, Math.abs(b.vx) / 700);
   }
-  if (b.x + HS_BALL_R > HS_CANVAS_W + HS_NET_DEPTH) {
-    b.x = HS_CANVAS_W + HS_NET_DEPTH - HS_BALL_R;
-    b.vx = -Math.abs(b.vx) * HS_WALL_RESTITUTION * 0.6;
+  if (b.x + HS_BALL_R > rightWallX) {
+    b.x = rightWallX - HS_BALL_R;
+    b.vx = -Math.abs(b.vx) * HS_WALL_RESTITUTION * wallBounceMul;
     b.squash = Math.min(1, Math.abs(b.vx) / 700);
   }
 
@@ -6057,30 +6081,30 @@ function hsResolveCollisions(now) {
           const kickT = Math.max(0, Math.min(1,
             (bootPose.extend - HS_BOOT_STRIKE_THRESHOLD) / (1 - HS_BOOT_STRIKE_THRESHOLD)));
 
-          // FAMILIA DE TIROS: ya no es una sola potencia graduada. `ny` es
-          // el punto de contacto vertical en la pelota (negativo = le
-          // pegaste por ABAJO, positivo = por ARRIBA) y ahora define el
-          // TIPO de tiro, no solo un ajuste fino de la trayectoria.
+          // FAMILIA DE TIROS v2: antes dependía casi solo de `ny` (punto de
+          // contacto), que en la práctica casi no cambiaba solo — la pelota
+          // suele estar siempre a una altura parecida respecto del pie, así
+          // que siempre salía el mismo tipo de tiro sin que el jugador
+          // pudiera elegir. Ahora el driver PRINCIPAL es algo que el
+          // jugador SÍ controla a propósito: si está en el aire (saltando)
+          // o parado cuando conecta. `ny` sigue sumando como variación
+          // fina arriba de eso, no como el único factor.
+          const airborne = !p.onGround;
           let vxPower, vyPower;
           if (kickT < 0.3) {
-            // PUNTINAZO: toque corto y controlado, casi sin importar dónde
-            // conectaste — para pases cortos o definiciones de precisión.
+            // PUNTINAZO: toque corto y controlado, para pases/definiciones de precisión.
             vxPower = HS_KICK_POWER * 0.42;
             vyPower = -90 + ny * 60;
-          } else if (ny > 0.12) {
-            // RASANTE: le pegaste por ARRIBA de la pelota → sale fuerte y
-            // bajo, pegado al piso.
-            vxPower = HS_KICK_POWER * (0.95 + 0.35 * kickT);
-            vyPower = -140 - 40 * kickT + ny * 90;
-          } else if (ny < -0.12) {
-            // GLOBO/LOFTED: le pegaste por ABAJO de la pelota → sale con
-            // mucho arco, menos potencia horizontal.
-            vxPower = HS_KICK_POWER * (0.55 + 0.3 * kickT);
-            vyPower = -420 - 140 * kickT + ny * 90;
+          } else if (airborne) {
+            // VOLEA/GLOBO: patada en el aire → sale con arco alto, ideal
+            // para pasar por arriba de un rival parado.
+            vxPower = HS_KICK_POWER * (0.6 + 0.35 * kickT);
+            vyPower = -430 - 150 * kickT + ny * 100;
           } else {
-            // TIRO MEDIO: contacto centrado, el "normal" equilibrado.
-            vxPower = HS_KICK_POWER * (0.8 + 0.45 * kickT);
-            vyPower = -260 - 70 * kickT + ny * 220;
+            // RASANTE: patada parado en el piso → tiro fuerte y bajo, el
+            // "de toda la vida", pegado al piso.
+            vxPower = HS_KICK_POWER * (0.95 + 0.4 * kickT);
+            vyPower = -150 - 50 * kickT + ny * 130;
           }
 
           vxSum += p.facing * vxPower + p.vx * 0.4;
@@ -6901,7 +6925,6 @@ function hsDraw() {
   hsDrawField();
   [hsState.left, hsState.right].forEach((p) => hsDrawPlayer(p));
   hsDrawBall();
-  hsDrawGoalFronts();
   ctx.restore();
 }
 
