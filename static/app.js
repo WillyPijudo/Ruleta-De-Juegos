@@ -14,7 +14,8 @@ const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)
 
 let spinBtn, playerNameInput, gameSearchInput, manualNameInput, manualCoverInput,
     manualAddBtn, manualToggleBtn, shareBtn, soundToggleBtn, closeModalBtn, removeWinnerBtn,
-    wheelEl, wheelWrapEl, clearHistoryBtn, clearGamesBtn, duelChallengeBtn;
+    wheelEl, wheelWrapEl, clearHistoryBtn, clearGamesBtn, duelChallengeBtn,
+    wheelTrail1El, wheelTrail2El, pointerEl;
 
 /* ---------------- helpers ---------------- */
 
@@ -210,6 +211,9 @@ function renderWheel() {
     stops.push(`${colors[i % colors.length]} ${i * wedgeAngle}deg ${(i + 1) * wedgeAngle}deg`);
   }
   wheelEl.style.background = `conic-gradient(${stops.join(",")})`;
+  wheelEl.style.setProperty("--wedge-n", n);
+  if (wheelTrail1El) wheelTrail1El.style.background = wheelEl.style.background;
+  if (wheelTrail2El) wheelTrail2El.style.background = wheelEl.style.background;
 
   const R = wheelEl.offsetWidth / 2;
   if (!R) {
@@ -524,6 +528,52 @@ function getAudioCtx() {
   return audioCtx;
 }
 
+/* ---- sfx precargados (buffers decodificados una sola vez) ----
+   Esto arregla el retraso: antes cada tecla hacía "new Audio(path)",
+   disparando una descarga/decodificación nueva cada vez. Acá el
+   archivo se descarga y decodifica UNA sola vez al cargar la
+   página, y después se reproduce desde memoria con latencia casi
+   nula. Si el archivo todavía no existe en /static/audio/,
+   playSfx() devuelve false y el que llama usa el sonido sintetizado
+   de siempre como respaldo (no rompe nada). */
+const sfxBuffers = {};
+const SFX_FILES = {
+  keyType: "/static/audio/key_typing.wav",
+  wheelTick: "/static/audio/wheel-tick.wav",
+  wheelWhoosh: "/static/audio/wheel-whoosh.wav",
+  wheelWin: "/static/audio/wheel-win.wav",
+};
+
+function preloadSfx() {
+  let ctx;
+  try {
+    ctx = getAudioCtx();
+  } catch (e) {
+    return;
+  }
+  Object.entries(SFX_FILES).forEach(([key, path]) => {
+    fetch(path)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject()))
+      .then((buf) => ctx.decodeAudioData(buf))
+      .then((decoded) => { sfxBuffers[key] = decoded; })
+      .catch(() => { /* todavía no subiste ese archivo: hay respaldo */ });
+  });
+}
+
+function playSfx(key, volume) {
+  if (!soundEnabled) return false;
+  const buffer = sfxBuffers[key];
+  if (!buffer) return false;
+  const ctx = getAudioCtx();
+  const src = ctx.createBufferSource();
+  const gain = ctx.createGain();
+  src.buffer = buffer;
+  gain.gain.value = volume != null ? volume : 0.6;
+  src.connect(gain).connect(ctx.destination);
+  src.start(0);
+  return true;
+}
+
 function playTick() {
   if (!soundEnabled) return;
   const ctx = getAudioCtx();
@@ -678,10 +728,8 @@ function spin() {
   const endRotation = currentRotationDeg + totalDelta;
   const duration = prefersReducedMotion ? 1600 : 5400;
 
-  playWhoosh(duration);
+  if (!playSfx("wheelWhoosh", 0.55)) playWhoosh(duration);
 
-  // Fast start, long slow tail - this is what makes the last couple of
-  // seconds feel like the wheel is "deciding" instead of just stopping.
   function ease(t) {
     return 1 - Math.pow(1 - t, 4);
   }
@@ -700,12 +748,33 @@ function spin() {
     if (!prefersReducedMotion) {
       const dt = Math.max(now - lastFrameTime, 1);
       const dRot = Math.abs(rotation - lastRotation);
-      const speed = dRot / dt; // degrees per ms
-      const blur = t < 0.85 ? Math.min(speed * 2.6, 16) : 0;
-      wheelWrapEl.style.filter = blur > 0.4 ? `blur(${blur.toFixed(2)}px)` : "";
+      const speed = dRot / dt; // grados por ms
 
-      // Suspense zoom: creeps in during the last quarter, then eases
-      // back to normal exactly as the wheel lands.
+      // El blur ahora se aplica SOLO al disco, nunca a la flecha ni
+      // al botón, y es bastante más sutil (antes llegaba a 16px
+      // parejo, se veía como una mancha).
+      const blur = t < 0.85 ? Math.min(speed * 1.1, 6) : 0;
+      wheelEl.style.filter = blur > 0.3 ? `blur(${blur.toFixed(2)}px)` : "";
+
+      // Estela de velocidad: discos fantasma detrás del real,
+      // desfasados en rotación con opacidad proporcional a la
+      // velocidad. Esto vende "se mueve rápido" mucho mejor que
+      // un blur plano.
+      const trailStrength = Math.min(speed / 3.2, 1);
+      if (wheelTrail1El && wheelTrail2El) {
+        if (trailStrength > 0.08) {
+          wheelTrail1El.style.opacity = (trailStrength * 0.35).toFixed(2);
+          wheelTrail2El.style.opacity = (trailStrength * 0.18).toFixed(2);
+          wheelTrail1El.style.transform = `rotate(${rotation - Math.min(speed * 5, 26)}deg)`;
+          wheelTrail2El.style.transform = `rotate(${rotation - Math.min(speed * 9, 46)}deg)`;
+        } else {
+          wheelTrail1El.style.opacity = 0;
+          wheelTrail2El.style.opacity = 0;
+        }
+      }
+
+      wheelWrapEl.style.setProperty("--speed-glow", trailStrength.toFixed(2));
+
       let zoom = 1;
       if (t > 0.75) {
         const zt = (t - 0.75) / 0.25;
@@ -718,7 +787,8 @@ function spin() {
 
     const boundary = Math.floor(rotation / wedgeAngle);
     if (boundary !== lastTickBoundary) {
-      playTick();
+      if (!playSfx("wheelTick", 0.35)) playTick();
+      bumpPointer();
       lastTickBoundary = boundary;
     }
 
@@ -728,13 +798,41 @@ function spin() {
     if (t < 1) {
       requestAnimationFrame(frame);
     } else {
-      wheelWrapEl.style.filter = "";
+      wheelEl.style.filter = "";
+      if (wheelTrail1El && wheelTrail2El) {
+        wheelTrail1El.style.opacity = 0;
+        wheelTrail2El.style.opacity = 0;
+      }
       wheelWrapEl.style.transform = "";
+      wheelWrapEl.style.setProperty("--speed-glow", 0);
       currentRotationDeg = endRotation;
-      finishSpin(winner);
+      settleWheel(endRotation, () => finishSpin(winner));
     }
   }
   requestAnimationFrame(frame);
+}
+
+// Rebote de frenado al terminar, como una ruleta física real que no
+// se detiene en seco. Es cosmético: no toca currentRotationDeg ni el
+// índice ganador, solo agrega 2-3 "clacks" antes de asentarse.
+function settleWheel(baseRotation, done) {
+  if (prefersReducedMotion) { done(); return; }
+  const wobble = [3.2, -1.6, 0.7, 0];
+  let i = 0;
+  function step() {
+    if (i >= wobble.length) { done(); return; }
+    wheelEl.style.transform = `rotate(${baseRotation + wobble[i]}deg)`;
+    i++;
+    setTimeout(step, 65);
+  }
+  step();
+}
+
+function bumpPointer() {
+  if (!pointerEl) return;
+  pointerEl.classList.remove("pointer-bump");
+  void pointerEl.offsetWidth;
+  pointerEl.classList.add("pointer-bump");
 }
 
 function finishSpin(winner) {
@@ -745,7 +843,7 @@ function finishSpin(winner) {
   setTimeout(() => setLightsMode(null), 1400);
   showWinnerModal(winner);
   launchConfetti();
-  playFanfare();
+  if (!playSfx("wheelWin", 0.6)) playFanfare();
   fetch("/api/history", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -2107,6 +2205,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (soundEnabled) getAudioCtx();
   });
 
+  wheelTrail1El = document.getElementById("wheelTrail1");
+  wheelTrail2El = document.getElementById("wheelTrail2");
+  pointerEl = document.getElementById("wheelPointer");
+
+  preloadSfx();
   buildLights();
   fetchGames();
   fetchHistory();
@@ -2164,7 +2267,7 @@ document.addEventListener("DOMContentLoaded", () => {
     e.target.classList.remove("challenger-input-bump");
     void e.target.offsetWidth;
     e.target.classList.add("challenger-input-bump");
-    busPlaySound("/static/audio/key_typing.wav", 0.5);
+    if (!playSfx("keyType", 0.5)) busPlaySound("/static/audio/key_typing.wav", 0.5);
   });
   document.getElementById("challengerNameInput").addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); confirmChallengerName(); }
@@ -2607,11 +2710,26 @@ function busCardBgPosition(card) {
   return `-${card.rankIdx * BUS_DECK_CELL.w * BUS_DECK_CELL.scale}px -${card.suitIdx * BUS_DECK_CELL.h * BUS_DECK_CELL.scale}px`;
 }
 
+const audioElementCache = {};
+function getCachedAudio(path) {
+  let base = audioElementCache[path];
+  if (!base) {
+    base = new Audio(path);
+    base.preload = "auto";
+    audioElementCache[path] = base;
+  }
+  return base;
+}
+
 function busPlaySound(path, volume) {
   try {
-    const a = new Audio(path);
-    a.volume = volume != null ? volume : 0.55;
-    a.play().catch(() => {});
+    const base = getCachedAudio(path);
+    // Si la base ya está sonando (tecleando rápido), clonamos en vez
+    // de cortarla: se pisan de forma natural en vez de sonar atrasados.
+    const player = base.paused || base.ended ? base : base.cloneNode();
+    player.volume = volume != null ? volume : 0.55;
+    player.currentTime = 0;
+    player.play().catch(() => {});
   } catch (e) {
     /* no rompe el juego si el navegador bloquea el audio */
   }
