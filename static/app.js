@@ -151,31 +151,47 @@ function posterInner(game) {
 
 
 
-// Arma un "estuche" 3D (tapa + lomo + brillo plástico) a partir de la
-// misma portada del juego, para que gire con el mouse tipo vitrina.
-// Si la imagen es más ancha que alta, se acuesta automáticamente.
+// Arma un "estuche" 3D de verdad (tapa + contratapa + lomo + canto
+// superior e inferior, todo con look plástico) a partir de la misma
+// portada del juego. Arranca en un ángulo fijo para que se vea el
+// volumen de entrada (no hace falta mover el mouse para notar que es
+// una caja), y después gira más según el cursor.
 function build3DCoverStage(game) {
   const stage = document.createElement("div");
   stage.className = "poster-3d-stage";
 
   const box = document.createElement("div");
   box.className = "poster-3d";
+  box.style.setProperty("--ry", "-22deg");
+  box.style.setProperty("--rx", "12deg");
 
   const front = posterInner(game); // reusa el .poster-frame de siempre
   front.classList.add("poster-3d-front");
 
+  const back = document.createElement("div");
+  back.className = "poster-3d-back";
+
   const spine = document.createElement("div");
   spine.className = "poster-3d-spine";
+
+  const left = document.createElement("div");
+  left.className = "poster-3d-left";
 
   const top = document.createElement("div");
   top.className = "poster-3d-top";
 
+  const bottom = document.createElement("div");
+  bottom.className = "poster-3d-bottom";
+
   const shine = document.createElement("div");
   shine.className = "poster-3d-shine";
 
-  box.appendChild(front);
+  box.appendChild(back);
+  box.appendChild(left);
   box.appendChild(spine);
   box.appendChild(top);
+  box.appendChild(bottom);
+  box.appendChild(front);
   box.appendChild(shine);
   stage.appendChild(box);
 
@@ -7306,16 +7322,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const rect = wrap.getBoundingClientRect();
     const px = (e.clientX - rect.left) / rect.width;
     const py = (e.clientY - rect.top) / rect.height;
-    const ry = (px - 0.5) * 34;
-    const rx = (0.5 - py) * 24;
+    const ry = (px - 0.5) * 75;   // giro izquierda/derecha, bien marcado
+    const rx = (0.5 - py) * 50;   // giro arriba/abajo
     box.style.setProperty("--ry", ry.toFixed(2) + "deg");
     box.style.setProperty("--rx", rx.toFixed(2) + "deg");
   });
   wrap.addEventListener("mouseleave", () => {
     const box = wrap.querySelector(".poster-3d");
     if (box) {
-      box.style.setProperty("--ry", "0deg");
-      box.style.setProperty("--rx", "0deg");
+      // Vuelve al ángulo "de vitrina", no queda plano.
+      box.style.setProperty("--ry", "-22deg");
+      box.style.setProperty("--rx", "12deg");
     }
   });
 })();
