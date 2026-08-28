@@ -7342,7 +7342,6 @@ document.addEventListener("DOMContentLoaded", () => {
 // ================== MODO PES (Ronaldinho) ==================
 (function initPesMode() {
   const ronaldinhoBtn = document.getElementById("ronaldinhoModeBtn");
-  const ronaldinhoSplash = document.getElementById("ronaldinhoSplash");
   const pesModeSelect = document.getElementById("pesModeSelect");
   const konamiModal = document.getElementById("konamiModal");
   const konamiKeys = document.getElementById("konamiKeys");
@@ -7351,9 +7350,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const honorLabel = document.getElementById("honorLabel");
   const desafiarDrop = document.getElementById("desafiarDrop");
   const desafiarBtn = document.getElementById("desafiarBtn");
+  const pesReelText = document.getElementById("pesReelText");
+  const pesSpinBtn = document.getElementById("pesSpinBtn");
   if (!ronaldinhoBtn) return;
 
   let pesModeActive = false;
+  let mateoSoloUnlocked = false;
+  let pesNames = ["Román", "Lauty"];
+
   let konamiListenerActive = false;
   let konamiProgress = 0;
   const KONAMI_SEQUENCE = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight"];
@@ -7370,38 +7374,50 @@ document.addEventListener("DOMContentLoaded", () => {
     honorBadge.classList.add("honor-pop");
     try { busPlaySound(high ? "/static/audio/subehonor.wav" : "/static/audio/bajahonor.wav", 0.9); } catch (e) {}
     clearTimeout(honorHideTimeout);
-    honorHideTimeout = setTimeout(() => {
-      honorBadge.classList.remove("honor-visible");
-    }, 2600);
+    honorHideTimeout = setTimeout(() => honorBadge.classList.remove("honor-visible"), 2600);
   }
 
   function exitPesMode() {
     pesModeSelect.classList.add("hidden");
     desafiarDrop.classList.add("hidden");
+    document.getElementById("pesCustomizeBox")?.classList.add("hidden");
     setHonor(true);
   }
 
+  // ---- Abrir / cerrar el modo con el mismo botón ----
   ronaldinhoBtn.addEventListener("click", () => {
     if (!pesModeActive) {
       pesModeActive = true;
-      ronaldinhoSplash.classList.remove("hidden");
+      pesModeSelect.classList.remove("hidden");
       setHonor(false);
     } else {
       pesModeActive = false;
       exitPesMode();
     }
   });
-
-  ronaldinhoSplash?.addEventListener("click", () => {
-    ronaldinhoSplash.classList.add("hidden");
-    pesModeSelect.classList.remove("hidden");
+  document.getElementById("pesPanelClose")?.addEventListener("click", () => {
+    pesModeActive = false;
+    exitPesMode();
   });
 
-  function showDesafiarDrop(names) {
-    if (!desafiarDrop) return;
-    const label = names.length === 1
-      ? `⚔️ ${names[0].toUpperCase()} SE LA BANCA SOLO`
-      : `⚔️ ${names[0].toUpperCase()} DESAFÍA A ${names[1].toUpperCase()}`;
+  // ---- Personalizar nombres ----
+  document.getElementById("pesCustomizeBtn")?.addEventListener("click", () => {
+    document.getElementById("pesCustomizeBox")?.classList.toggle("hidden");
+  });
+  document.getElementById("pesCustomizeSave")?.addEventListener("click", () => {
+    const a = document.getElementById("pesNameA").value.trim();
+    const b = document.getElementById("pesNameB").value.trim();
+    if (a) pesNames[0] = a;
+    if (b) pesNames[1] = b;
+    if (pesReelText) pesReelText.textContent = pesNames[0].toUpperCase();
+    document.getElementById("pesCustomizeBox").classList.add("hidden");
+  });
+
+  // ---- Girar la mini ruleta de texto (elección al azar de verdad) ----
+  function announceResult(name) {
+    const label = name.toLowerCase().includes("mateo")
+      ? `🎮 ¡${name.toUpperCase()}!`
+      : `🎮 ¡${name.toUpperCase()} JUEGA CON MATEO!`;
     if (desafiarBtn) desafiarBtn.textContent = label;
     pesModeSelect.classList.add("hidden");
     desafiarDrop.classList.remove("hidden");
@@ -7410,12 +7426,29 @@ document.addEventListener("DOMContentLoaded", () => {
     desafiarDrop.classList.add("desafiar-fall");
   }
 
-  document.getElementById("pesOptRomanMateo")?.addEventListener("click", () => showDesafiarDrop(["Román", "Mateo"]));
-  document.getElementById("pesOptLautyMateo")?.addEventListener("click", () => showDesafiarDrop(["Lauty", "Mateo"]));
-  document.getElementById("pesOptMateoSolo")?.addEventListener("click", () => showDesafiarDrop(["Mateo"]));
+  pesSpinBtn?.addEventListener("click", () => {
+    const pool = mateoSoloUnlocked ? [...pesNames, "Mateo solo"] : [...pesNames];
+    pesSpinBtn.disabled = true;
+    let tick = 0;
+    const totalTicks = 16;
+    function nextTick() {
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      pesReelText.textContent = pick.toUpperCase();
+      tick++;
+      if (tick < totalTicks) {
+        setTimeout(nextTick, 60 + tick * 12);
+      } else {
+        const finalPick = pool[Math.floor(Math.random() * pool.length)];
+        pesReelText.textContent = finalPick.toUpperCase();
+        pesSpinBtn.disabled = false;
+        setTimeout(() => announceResult(finalPick), 550);
+      }
+    }
+    nextTick();
+  });
 
   desafiarBtn?.addEventListener("click", () => {
-    // A definir: qué pasa al tocar "Desafiar". Por ahora no hace nada más.
+    // A definir: qué pasa al tocar "Desafiar".
   });
 
   // ---- Botón secreto -> código estilo Konami ----
@@ -7423,28 +7456,23 @@ document.addEventListener("DOMContentLoaded", () => {
     konamiBox.classList.remove("konami-wrong", "konami-correct", "konami-shatter");
     konamiKeys.querySelectorAll(".konami-key").forEach(k => k.classList.remove("konami-key-active"));
   }
-
   document.getElementById("pesSecretBtn")?.addEventListener("click", () => {
     konamiModal.classList.remove("hidden");
     konamiProgress = 0;
     resetKonamiKeys();
     konamiListenerActive = true;
   });
-
   document.getElementById("konamiCloseBtn")?.addEventListener("click", () => {
     konamiModal.classList.add("hidden");
     konamiListenerActive = false;
   });
-
   window.addEventListener("keydown", (e) => {
     if (!konamiListenerActive) return;
     const arrowKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
     if (!arrowKeys.includes(e.key)) return;
     e.preventDefault();
-
     const keyEls = konamiKeys.querySelectorAll(".konami-key");
     keyEls[konamiProgress]?.classList.add("konami-key-active");
-
     if (e.key === KONAMI_SEQUENCE[konamiProgress]) {
       konamiProgress++;
       if (konamiProgress === KONAMI_SEQUENCE.length) {
@@ -7457,7 +7485,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }, 500);
         setTimeout(() => {
           konamiModal.classList.add("hidden");
-          document.getElementById("pesOptMateoSolo")?.classList.remove("hidden");
+          mateoSoloUnlocked = true;
         }, 1400);
       }
     } else {
