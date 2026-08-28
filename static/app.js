@@ -149,6 +149,51 @@ function posterInner(game) {
   return frame;
 }
 
+
+
+// Arma un "estuche" 3D (tapa + lomo + brillo plástico) a partir de la
+// misma portada del juego, para que gire con el mouse tipo vitrina.
+// Si la imagen es más ancha que alta, se acuesta automáticamente.
+function build3DCoverStage(game) {
+  const stage = document.createElement("div");
+  stage.className = "poster-3d-stage";
+
+  const box = document.createElement("div");
+  box.className = "poster-3d";
+
+  const front = posterInner(game); // reusa el .poster-frame de siempre
+  front.classList.add("poster-3d-front");
+
+  const spine = document.createElement("div");
+  spine.className = "poster-3d-spine";
+
+  const top = document.createElement("div");
+  top.className = "poster-3d-top";
+
+  const shine = document.createElement("div");
+  shine.className = "poster-3d-shine";
+
+  box.appendChild(front);
+  box.appendChild(spine);
+  box.appendChild(top);
+  box.appendChild(shine);
+  stage.appendChild(box);
+
+  const imgEl = front.querySelector("img");
+  if (imgEl) {
+    const checkOrientation = () => {
+      if (imgEl.naturalWidth && imgEl.naturalHeight && imgEl.naturalWidth > imgEl.naturalHeight) {
+        box.classList.add("poster-3d-lying");
+      }
+    };
+    if (imgEl.complete && imgEl.naturalWidth) checkOrientation();
+    else imgEl.addEventListener("load", checkOrientation, { once: true });
+  }
+
+  return stage;
+}
+
+
 /* ---------------- lights (marquee bulbs) ---------------- */
 
 function buildLights() {
@@ -1148,7 +1193,7 @@ function showWinnerModal(winner) {
   gameLabelEl.classList.remove("show");
   gameLabelEl.textContent = "";
   wrap.innerHTML = "";
-  wrap.appendChild(posterInner(winner));
+  wrap.appendChild(build3DCoverStage(winner));
   wrap.classList.remove("cover-reveal");
   wrap.classList.add("cover-suspense");
   loserCorner.classList.remove("show");
@@ -7246,4 +7291,31 @@ document.addEventListener("DOMContentLoaded", () => {
       toggleBtn.textContent = isOff ? "✨ Cursor FX (apagado)" : "✨ Cursor FX";
     });
   }
+})();
+
+
+
+
+// ---- Estuche 3D del ganador: rota según la posición del mouse ----
+(function initCoverTilt() {
+  const wrap = document.getElementById("winnerCoverWrap");
+  if (!wrap) return;
+  wrap.addEventListener("mousemove", (e) => {
+    const box = wrap.querySelector(".poster-3d");
+    if (!box) return;
+    const rect = wrap.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width;
+    const py = (e.clientY - rect.top) / rect.height;
+    const ry = (px - 0.5) * 34;
+    const rx = (0.5 - py) * 24;
+    box.style.setProperty("--ry", ry.toFixed(2) + "deg");
+    box.style.setProperty("--rx", rx.toFixed(2) + "deg");
+  });
+  wrap.addEventListener("mouseleave", () => {
+    const box = wrap.querySelector(".poster-3d");
+    if (box) {
+      box.style.setProperty("--ry", "0deg");
+      box.style.setProperty("--rx", "0deg");
+    }
+  });
 })();
