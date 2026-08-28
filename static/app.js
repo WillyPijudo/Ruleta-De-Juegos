@@ -7358,15 +7358,21 @@ document.addEventListener("DOMContentLoaded", () => {
   let konamiProgress = 0;
   const KONAMI_SEQUENCE = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight"];
 
+  let honorHideTimeout = null;
   function setHonor(high) {
     if (!honorBadge) return;
     honorBadge.classList.toggle("honor-low", !high);
     honorBadge.classList.toggle("honor-high", high);
     if (honorLabel) honorLabel.textContent = high ? "HONOR ALTO" : "HONOR BAJO";
+    honorBadge.classList.add("honor-visible");
     honorBadge.classList.remove("honor-pop");
     void honorBadge.offsetWidth;
     honorBadge.classList.add("honor-pop");
     try { busPlaySound(high ? "/static/audio/subehonor.wav" : "/static/audio/bajahonor.wav", 0.9); } catch (e) {}
+    clearTimeout(honorHideTimeout);
+    honorHideTimeout = setTimeout(() => {
+      honorBadge.classList.remove("honor-visible");
+    }, 2600);
   }
 
   function exitPesMode() {
@@ -7378,12 +7384,10 @@ document.addEventListener("DOMContentLoaded", () => {
   ronaldinhoBtn.addEventListener("click", () => {
     if (!pesModeActive) {
       pesModeActive = true;
-      ronaldinhoBtn.textContent = "🕺 Modo PES (activo)";
       ronaldinhoSplash.classList.remove("hidden");
       setHonor(false);
     } else {
       pesModeActive = false;
-      ronaldinhoBtn.textContent = "🕺 Modo PES";
       exitPesMode();
     }
   });
