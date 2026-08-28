@@ -1003,9 +1003,14 @@ function finishSpin(winner) {
 // siempre el mismo flip repetido.
 const LETTER_REVEAL_STYLES = ["flip", "drop", "spin", "shake", "zoom"];
 
-function revealWinnerName(name, onDone) {
-  const container = document.getElementById("winnerName");
-  const stage = document.getElementById("winnerNameStage");
+function revealWinnerName(name, onDone, opts) {
+  opts = opts || {};
+  const containerId = opts.containerId || "winnerName";
+  const stageId = opts.stageId || "winnerNameStage";
+  const shakeSelector = opts.shakeSelector === undefined ? "#winnerModal .modal-card" : opts.shakeSelector;
+  const container = document.getElementById(containerId);
+  const stage = document.getElementById(stageId);
+  if (!container) { onDone && onDone(); return; }
   container.innerHTML = "";
   container.classList.remove("wn-climax");
   if (stage) {
@@ -1091,7 +1096,7 @@ function revealWinnerName(name, onDone) {
         stage.classList.remove("suspense");
         stage.classList.add("flash");
       }
-      const modalCard = document.querySelector("#winnerModal .modal-card");
+      const modalCard = shakeSelector ? document.querySelector(shakeSelector) : null;
       if (modalCard) {
         modalCard.classList.add("modal-shake");
         setTimeout(() => modalCard.classList.remove("modal-shake"), 450);
@@ -7348,30 +7353,63 @@ document.addEventListener("DOMContentLoaded", () => {
   const konamiBox = document.getElementById("konamiBox");
   const honorBadge = document.getElementById("honorBadge");
   const honorLabel = document.getElementById("honorLabel");
+  const honorIcon = document.getElementById("honorIcon");
+  const honorVignette = document.getElementById("honorVignette");
   const desafiarDrop = document.getElementById("desafiarDrop");
   const desafiarBtn = document.getElementById("desafiarBtn");
-  const pesReelText = document.getElementById("pesReelText");
+  const pesWheelEl = document.getElementById("pesWheel");
+  const pesWheelLightsEl = document.getElementById("pesWheelLights");
+  const pesWheelPointerEl = document.getElementById("pesWheelPointer");
+  const pesWheelTrail1El = document.getElementById("pesWheelTrail1");
+  const pesWheelTrail2El = document.getElementById("pesWheelTrail2");
   const pesSpinBtn = document.getElementById("pesSpinBtn");
+  const pesResultStage = document.getElementById("pesResultStage");
+  const pesResultName = document.getElementById("pesResultName");
+  const pesNameChips = document.getElementById("pesNameChips");
+  const pesNameNewInput = document.getElementById("pesNameNew");
   if (!ronaldinhoBtn) return;
 
   let pesModeActive = false;
   let mateoSoloUnlocked = false;
-  let pesNames = ["Román", "Lauty"];
+  // Nombres por defecto, todos quitables (menos que quedar con < 2).
+  let pesNames = ["Mateo", "Román", "Lauty"];
+  let pesSpinning = false;
+  let pesRotationDeg = 0;
+
+  // Paleta bien saturada, cancha-de-potrero / arcade PES.
+  const WEDGE_COLORS = ["#0e7c3f", "#144d8f", "#8a1f2b", "#6b3fa0", "#c07a12", "#1c8a86", "#a32b6b", "#2f6b1f"];
+  // Varias tipografías divertidas: cada nombre agarra una distinta.
+  const WEDGE_FONTS = ["var(--font-comic)", "var(--font-display)", "var(--font-marker)", "var(--font-bangers)", "var(--font-titan)", "var(--font-passion)"];
+  // Animaciones de reposo: cada nombre "vive" a su manera mientras
+  // no gira nadie todavía.
+  const WEDGE_IDLE_ANIMS = ["wedge-idle-pulse", "wedge-idle-wobble", "wedge-idle-glow"];
 
   let konamiListenerActive = false;
   let konamiProgress = 0;
   const KONAMI_SEQUENCE = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight"];
 
   let honorHideTimeout = null;
+  let honorVignetteTimeout = null;
   function setHonor(high) {
     if (!honorBadge) return;
     honorBadge.classList.toggle("honor-low", !high);
     honorBadge.classList.toggle("honor-high", high);
     if (honorLabel) honorLabel.textContent = high ? "HONOR ALTO" : "HONOR BAJO";
+    if (honorIcon) honorIcon.textContent = high ? "★" : "☠";
     honorBadge.classList.add("honor-visible");
     honorBadge.classList.remove("honor-pop");
     void honorBadge.offsetWidth;
     honorBadge.classList.add("honor-pop");
+    // Viñeta de color en toda la pantalla, tipo RDR2, por ENCIMA de
+    // cualquier panel abierto.
+    if (honorVignette) {
+      honorVignette.style.setProperty("--honor-vignette-color", high ? "rgba(245,205,118,0.26)" : "rgba(224,90,90,0.32)");
+      honorVignette.classList.remove("show");
+      void honorVignette.offsetWidth;
+      honorVignette.classList.add("show");
+      clearTimeout(honorVignetteTimeout);
+      honorVignetteTimeout = setTimeout(() => honorVignette.classList.remove("show"), 750);
+    }
     try { busPlaySound(high ? "/static/audio/subehonor.wav" : "/static/audio/bajahonor.wav", 0.9); } catch (e) {}
     clearTimeout(honorHideTimeout);
     honorHideTimeout = setTimeout(() => honorBadge.classList.remove("honor-visible"), 2600);
@@ -7390,6 +7428,9 @@ document.addEventListener("DOMContentLoaded", () => {
       pesModeActive = true;
       pesModeSelect.classList.remove("hidden");
       setHonor(false);
+      renderNameChips();
+      renderPesWheel();
+      buildPesWheelLights();
     } else {
       pesModeActive = false;
       exitPesMode();
@@ -7400,20 +7441,257 @@ document.addEventListener("DOMContentLoaded", () => {
     exitPesMode();
   });
 
-  // ---- Personalizar nombres ----
+  // ---- Personalizar nombres: chips + agregar/quitar ----
+  function currentPool() {
+    return mateoSoloUnlocked ? [...pesNames, "Mateo solo"] : [...pesNames];
+  }
+
+  function renderNameChips() {
+    if (!pesNameChips) return;
+    pesNameChips.innerHTML = "";
+    pesNames.forEach((name, idx) => {
+      const chip = document.createElement("span");
+      chip.className = "pes-name-chip";
+      const label = document.createElement("span");
+      label.textContent = name;
+      chip.appendChild(label);
+      if (pesNames.length > 2) {
+        const rm = document.createElement("button");
+        rm.type = "button";
+        rm.className = "pes-name-chip-remove";
+        rm.title = `Quitar a ${name}`;
+        rm.textContent = "✕";
+        rm.addEventListener("click", () => {
+          pesNames.splice(idx, 1);
+          renderNameChips();
+          renderPesWheel();
+        });
+        chip.appendChild(rm);
+      }
+      pesNameChips.appendChild(chip);
+    });
+  }
+
   document.getElementById("pesCustomizeBtn")?.addEventListener("click", () => {
     document.getElementById("pesCustomizeBox")?.classList.toggle("hidden");
   });
-  document.getElementById("pesCustomizeSave")?.addEventListener("click", () => {
-    const a = document.getElementById("pesNameA").value.trim();
-    const b = document.getElementById("pesNameB").value.trim();
-    if (a) pesNames[0] = a;
-    if (b) pesNames[1] = b;
-    if (pesReelText) pesReelText.textContent = pesNames[0].toUpperCase();
-    document.getElementById("pesCustomizeBox").classList.add("hidden");
+
+  function addPesName() {
+    const val = (pesNameNewInput?.value || "").trim();
+    if (!val) return;
+    if (pesNames.some((n) => n.toLowerCase() === val.toLowerCase())) {
+      pesNameNewInput.value = "";
+      return;
+    }
+    if (pesNames.length >= 8) {
+      toast("Máximo 8 nombres en la rueda.");
+      return;
+    }
+    pesNames.push(val);
+    pesNameNewInput.value = "";
+    renderNameChips();
+    renderPesWheel();
+  }
+  document.getElementById("pesNameAddBtn")?.addEventListener("click", addPesName);
+  pesNameNewInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); addPesName(); }
   });
 
-  // ---- Girar la mini ruleta de texto (elección al azar de verdad) ----
+  // ---- Luces alrededor de la ruleta de nombres (mismo look que la principal) ----
+  function buildPesWheelLights() {
+    if (!pesWheelLightsEl) return;
+    const rect = pesWheelLightsEl.getBoundingClientRect();
+    const R = rect.width / 2;
+    if (!R) { requestAnimationFrame(buildPesWheelLights); return; }
+    pesWheelLightsEl.innerHTML = "";
+    const count = 20;
+    const bulbR = R * 0.97;
+    for (let i = 0; i < count; i++) {
+      const angle = (360 / count) * i;
+      const rad = (angle * Math.PI) / 180;
+      const x = R + bulbR * Math.sin(rad);
+      const y = R - bulbR * Math.cos(rad);
+      const b = document.createElement("div");
+      b.className = "light-bulb";
+      b.style.left = x + "px";
+      b.style.top = y + "px";
+      b.style.animationDelay = (i * 0.09).toFixed(2) + "s";
+      pesWheelLightsEl.appendChild(b);
+    }
+  }
+  function setPesLightsMode(mode) {
+    pesWheelLightsEl?.querySelectorAll(".light-bulb").forEach((b) => {
+      b.classList.remove("spinning", "won");
+      if (mode) b.classList.add(mode);
+    });
+  }
+
+  // ---- Dibuja la ruleta circular de nombres (de verdad, no un botón) ----
+  function renderPesWheel() {
+    if (!pesWheelEl) return;
+    const pool = currentPool();
+    const n = pool.length;
+    pesWheelEl.innerHTML = "";
+    if (n === 0) return;
+    const wedgeAngle = 360 / n;
+    const stops = [];
+    for (let i = 0; i < n; i++) {
+      stops.push(`${WEDGE_COLORS[i % WEDGE_COLORS.length]} ${i * wedgeAngle}deg ${(i + 1) * wedgeAngle}deg`);
+    }
+    pesWheelEl.style.background = `conic-gradient(${stops.join(",")})`;
+    if (pesWheelTrail1El) pesWheelTrail1El.style.background = pesWheelEl.style.background;
+    if (pesWheelTrail2El) pesWheelTrail2El.style.background = pesWheelEl.style.background;
+
+    pool.forEach((name, i) => {
+      const centerAngle = i * wedgeAngle + wedgeAngle / 2;
+      const label = document.createElement("div");
+      label.className = "pes-wedge-label";
+      label.textContent = name;
+      label.dataset.index = String(i);
+      label.style.setProperty("--wedge-rot", `${centerAngle - 90}deg`);
+      label.style.transform = `rotate(${centerAngle - 90}deg)`;
+      label.style.fontFamily = WEDGE_FONTS[i % WEDGE_FONTS.length];
+      const idleAnim = WEDGE_IDLE_ANIMS[i % WEDGE_IDLE_ANIMS.length];
+      label.classList.add(idleAnim);
+      label.style.animationDelay = (i * 0.22).toFixed(2) + "s";
+      pesWheelEl.appendChild(label);
+    });
+
+    pesWheelEl.style.transform = `rotate(${pesRotationDeg}deg)`;
+  }
+
+  // ---- Girar la ruleta de nombres de verdad (misma física que la
+  // ruleta principal de juegos: aceleración, blur de velocidad,
+  // estela fantasma, ticks y rebote final al frenar) ----
+  function spinPesWheel() {
+    if (pesSpinning) return;
+    const pool = currentPool();
+    if (pool.length < 2) return;
+    pesSpinning = true;
+    pesSpinBtn.disabled = true;
+    setPesLightsMode("spinning");
+    if (pesResultStage) pesResultStage.classList.remove("show");
+    if (pesResultName) { pesResultName.innerHTML = ""; pesResultName.classList.remove("wn-climax"); }
+    pesWheelEl.querySelectorAll(".pes-wedge-label").forEach((l) => l.classList.remove("pes-wedge-winner"));
+
+    const n = pool.length;
+    const wedgeAngle = 360 / n;
+    const winnerIndex = Math.floor(Math.random() * n);
+    const winnerName = pool[winnerIndex];
+
+    const centerAngle = winnerIndex * wedgeAngle + wedgeAngle / 2;
+    const jitter = (Math.random() - 0.5) * wedgeAngle * 0.7;
+    const desiredMod = (((-(centerAngle + jitter)) % 360) + 360) % 360;
+    const currentMod = ((pesRotationDeg % 360) + 360) % 360;
+    const deltaToDesired = ((desiredMod - currentMod) % 360 + 360) % 360;
+    const extraTurns = 6 + Math.floor(Math.random() * 3);
+    const totalDelta = extraTurns * 360 + deltaToDesired;
+    const startRotation = pesRotationDeg;
+    const endRotation = pesRotationDeg + totalDelta;
+    const duration = prefersReducedMotion ? 1400 : 4600;
+
+    if (!playSfx("wheelWhoosh", 0.5)) playWhoosh(duration);
+
+    function ease(t) { return 1 - Math.pow(1 - t, 4); }
+
+    const startTime = performance.now();
+    let lastRotation = startRotation;
+    let lastFrameTime = startTime;
+    let lastTickBoundary = Math.floor(startRotation / wedgeAngle);
+
+    function frame(now) {
+      const elapsed = now - startTime;
+      const t = Math.min(elapsed / duration, 1);
+      const eased = ease(t);
+      const rotation = startRotation + totalDelta * eased;
+
+      if (!prefersReducedMotion) {
+        const dt = Math.max(now - lastFrameTime, 1);
+        const dRot = Math.abs(rotation - lastRotation);
+        const speed = dRot / dt;
+        const blur = t < 0.85 ? Math.min(speed * 1.1, 5) : 0;
+        pesWheelEl.style.filter = blur > 0.3 ? `blur(${blur.toFixed(2)}px)` : "";
+        const trailStrength = Math.min(speed / 3.2, 1);
+        if (pesWheelTrail1El && pesWheelTrail2El) {
+          if (trailStrength > 0.08) {
+            pesWheelTrail1El.style.opacity = (trailStrength * 0.35).toFixed(2);
+            pesWheelTrail2El.style.opacity = (trailStrength * 0.18).toFixed(2);
+            pesWheelTrail1El.style.transform = `rotate(${rotation - Math.min(speed * 5, 26)}deg)`;
+            pesWheelTrail2El.style.transform = `rotate(${rotation - Math.min(speed * 9, 46)}deg)`;
+          } else {
+            pesWheelTrail1El.style.opacity = 0;
+            pesWheelTrail2El.style.opacity = 0;
+          }
+        }
+      }
+
+      pesWheelEl.style.transform = `rotate(${rotation}deg)`;
+
+      const boundary = Math.floor(rotation / wedgeAngle);
+      if (boundary !== lastTickBoundary) {
+        if (!playSfx("wheelTick", 0.3)) playTick();
+        if (pesWheelPointerEl) {
+          pesWheelPointerEl.classList.remove("pointer-bump");
+          void pesWheelPointerEl.offsetWidth;
+          pesWheelPointerEl.classList.add("pointer-bump");
+        }
+        lastTickBoundary = boundary;
+      }
+
+      lastRotation = rotation;
+      lastFrameTime = now;
+
+      if (t < 1) {
+        requestAnimationFrame(frame);
+      } else {
+        pesWheelEl.style.filter = "";
+        if (pesWheelTrail1El && pesWheelTrail2El) {
+          pesWheelTrail1El.style.opacity = 0;
+          pesWheelTrail2El.style.opacity = 0;
+        }
+        pesRotationDeg = endRotation;
+        settlePesWheel(endRotation, () => finishPesSpin(winnerName, winnerIndex));
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function settlePesWheel(baseRotation, done) {
+    if (prefersReducedMotion) { done(); return; }
+    const wobble = [2.6, -1.3, 0.5, 0];
+    let i = 0;
+    function step() {
+      if (i >= wobble.length) { done(); return; }
+      pesWheelEl.style.transform = `rotate(${baseRotation + wobble[i]}deg)`;
+      i++;
+      setTimeout(step, 65);
+    }
+    step();
+  }
+
+  function finishPesSpin(name, winnerIndex) {
+    pesSpinning = false;
+    pesSpinBtn.disabled = false;
+    setPesLightsMode("won");
+    setTimeout(() => setPesLightsMode(null), 900);
+
+    // La porción ganadora pega su propio remate de victoria.
+    const winnerLabel = pesWheelEl.querySelector(`.pes-wedge-label[data-index="${winnerIndex}"]`);
+    if (winnerLabel) {
+      void winnerLabel.offsetWidth;
+      winnerLabel.classList.add("pes-wedge-winner");
+    }
+    if (!playSfx("wheelWin", 0.55)) playFanfare();
+
+    if (pesResultStage) pesResultStage.classList.add("show");
+    revealWinnerName(name, () => {
+      setTimeout(() => announceResult(name), 700);
+    }, { containerId: "pesResultName", stageId: "pesResultStage", shakeSelector: null });
+  }
+
+  pesSpinBtn?.addEventListener("click", spinPesWheel);
+
+  // ---- Resultado final: cae el botón "Desafiar" ----
   function announceResult(name) {
     const label = name.toLowerCase().includes("mateo")
       ? `🎮 ¡${name.toUpperCase()}!`
@@ -7425,27 +7703,6 @@ document.addEventListener("DOMContentLoaded", () => {
     void desafiarDrop.offsetWidth;
     desafiarDrop.classList.add("desafiar-fall");
   }
-
-  pesSpinBtn?.addEventListener("click", () => {
-    const pool = mateoSoloUnlocked ? [...pesNames, "Mateo solo"] : [...pesNames];
-    pesSpinBtn.disabled = true;
-    let tick = 0;
-    const totalTicks = 16;
-    function nextTick() {
-      const pick = pool[Math.floor(Math.random() * pool.length)];
-      pesReelText.textContent = pick.toUpperCase();
-      tick++;
-      if (tick < totalTicks) {
-        setTimeout(nextTick, 60 + tick * 12);
-      } else {
-        const finalPick = pool[Math.floor(Math.random() * pool.length)];
-        pesReelText.textContent = finalPick.toUpperCase();
-        pesSpinBtn.disabled = false;
-        setTimeout(() => announceResult(finalPick), 550);
-      }
-    }
-    nextTick();
-  });
 
   desafiarBtn?.addEventListener("click", () => {
     // A definir: qué pasa al tocar "Desafiar".
@@ -7486,6 +7743,8 @@ document.addEventListener("DOMContentLoaded", () => {
         setTimeout(() => {
           konamiModal.classList.add("hidden");
           mateoSoloUnlocked = true;
+          renderPesWheel();
+          toast("🔓 Opción secreta desbloqueada: Mateo solo");
         }, 1400);
       }
     } else {

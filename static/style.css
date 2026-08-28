@@ -27,6 +27,9 @@
   --font-body: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
   --font-fun: "Fredoka", "Inter", system-ui, sans-serif;
+  --font-bangers: "Bangers", "Luckiest Guy", cursive;
+  --font-titan: "Titan One", "Bungee", sans-serif;
+  --font-passion: "Passion One", "Luckiest Guy", cursive;
 }
 
 * { box-sizing: border-box; }
@@ -3369,28 +3372,59 @@ body.cursor-fx-off .mouse-spotlight { opacity: 0; }
 
   /* ================== MODO PES (Ronaldinho) ================== */
 
-/* Badge de honor fijo */
+/* Viñeta de pantalla completa, al estilo RDR2: un destello de color
+   que baña los bordes de la pantalla cuando cambia el honor. Se ve
+   POR ENCIMA de cualquier panel/modal (por eso el z-index tan alto),
+   que es justo lo que fallaba antes. */
+.honor-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 50%, var(--honor-vignette-color, rgba(224,90,90,0.32)) 100%);
+  transition: opacity 0.55s ease;
+}
+.honor-vignette.show { opacity: 1; }
+
+/* Badge de honor fijo. z-index bien alto a propósito: antes quedaba
+   TAPADO por el panel de "¿Quién juega con Mateo?" (que es opaco y
+   cubre toda la pantalla), por eso "no se veía" aunque el sonido sí
+   sonara - el badge estaba ahí, pero atrás de todo. */
 .honor-badge {
-  position: fixed; top: 74px; left: 16px; z-index: 40;
-  display: flex; align-items: center; gap: 8px;
-  background: rgba(10,6,10,0.55);
-  border: 1px solid rgba(217,169,78,0.3);
+  position: fixed; top: 74px; left: 16px; z-index: 120;
+  display: flex; align-items: center; gap: 9px;
+  background: linear-gradient(160deg, rgba(22,12,12,0.9), rgba(10,5,5,0.78));
+  border: 1.5px solid rgba(217,169,78,0.4);
   border-radius: 999px;
-  padding: 4px 12px 4px 4px;
+  padding: 5px 15px 5px 5px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,0,0,0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
 }
+.honor-badge.honor-visible { opacity: 1; }
 .honor-icon {
-  width: 26px; height: 26px; border-radius: 50%;
-  background-image: url("/static/img/honor-sprite.png");
-  background-size: 100% 200%;
-  background-position: 0% 0%;
-  transition: background-position 0.3s ease;
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  background: radial-gradient(circle, rgba(245,205,118,0.32), rgba(245,205,118,0.04));
+  border: 1px solid rgba(245,205,118,0.55);
+  color: var(--gold-bright);
+  text-shadow: 0 0 8px rgba(245,205,118,0.85);
   flex-shrink: 0;
+  transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease;
 }
-.honor-badge.honor-low .honor-icon { background-position: 0% 100%; }
-.honor-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.5px; color: var(--gold); }
-.honor-badge.honor-low .honor-label { color: #e05a5a; }
-.honor-pop { animation: honor-pop-anim 0.4s ease; }
-@keyframes honor-pop-anim { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
+.honor-badge.honor-low .honor-icon {
+  background: radial-gradient(circle, rgba(224,90,90,0.32), rgba(224,90,90,0.04));
+  border-color: rgba(224,90,90,0.65);
+  color: #ff6b6b;
+  text-shadow: 0 0 8px rgba(255,80,80,0.9);
+}
+.honor-label { font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; letter-spacing: 1px; color: var(--gold-bright); }
+.honor-badge.honor-low .honor-label { color: #ff6b6b; }
+.honor-pop { animation: honor-pop-anim 0.45s cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes honor-pop-anim { 0% { transform: scale(1); } 45% { transform: scale(1.3) rotate(-3deg); } 100% { transform: scale(1); } }
 
 /* Ronaldinho bailando (se reusa la animación en el ícono chico y en el panel) */
 @keyframes ronaldinho-dance {
@@ -3407,6 +3441,7 @@ body.cursor-fx-off .mouse-spotlight { opacity: 0; }
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
   padding: 20px;
   text-align: center;
+  overflow-y: auto;
 }
 .pes-panel.hidden { display: none; }
 .pes-panel-close {
@@ -3421,36 +3456,167 @@ body.cursor-fx-off .mouse-spotlight { opacity: 0; }
 }
 .pes-panel-title { font-family: var(--font-comic); font-size: 20px; color: var(--gold); letter-spacing: 0.5px; margin: 0; }
 
-.pes-reel {
-  background: linear-gradient(160deg, var(--surface), var(--surface-2));
-  border: 2px solid rgba(217,169,78,0.4);
-  border-radius: 12px;
-  padding: 18px 34px;
-  min-width: 200px;
+/* ---- La ruleta circular de nombres de verdad (no más botón-farsa) ---- */
+.pes-wheel-stage {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  margin: 4px auto 0;
 }
-.pes-reel-text { font-family: var(--font-arcade, var(--font-comic)); font-size: 22px; color: var(--text); letter-spacing: 1px; }
+.pes-wheel-lights {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.pes-wheel-trail {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+}
+.pes-wheel {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 5px solid rgba(217,169,78,0.55);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.55), inset 0 0 20px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+.pes-wedge-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-origin: 0% 50%;
+  width: 44%;
+  padding-left: 15%;
+  font-size: 12.5px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  letter-spacing: 0.3px;
+}
+.pes-wheel-pointer {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 26px;
+  z-index: 5;
+  filter: drop-shadow(0 3px 4px rgba(0,0,0,0.6));
+  transition: transform 0.1s ease;
+}
+.pes-wheel-pointer.pointer-bump { animation: pes-pointer-bump 0.12s ease; }
+@keyframes pes-pointer-bump {
+  0% { transform: translateX(-50%) rotate(0deg); }
+  50% { transform: translateX(-50%) rotate(-16deg); }
+  100% { transform: translateX(-50%) rotate(0deg); }
+}
+.pes-wheel-hub {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+}
+.pes-wheel-spin-btn {
+  width: 62px; height: 62px;
+  border-radius: 50%;
+  border: 3px solid rgba(217,169,78,0.65);
+  background: radial-gradient(circle at 35% 30%, #f5cd76, #b9822c 70%, #7a5217);
+  color: #2a1808;
+  font-family: var(--font-comic);
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  box-shadow: 0 6px 14px rgba(0,0,0,0.55);
+  transition: transform 0.15s ease;
+}
+.pes-wheel-spin-btn:active { transform: translate(0,1px) scale(0.96); }
+.pes-wheel-spin-btn:disabled { opacity: 0.6; cursor: default; }
 
-.pes-spin-btn { font-size: 15px; padding: 12px 26px; }
+/* Cada nombre de la rueda "vive" con su propia animación de reposo,
+   para que no se vean todos iguales y estáticos. */
+@keyframes wedge-idle-pulse { 0%, 100% { opacity: 0.92; } 50% { opacity: 1; text-shadow: 0 0 6px rgba(255,255,255,0.5); } }
+@keyframes wedge-idle-wobble { 0%, 100% { letter-spacing: 0.3px; } 50% { letter-spacing: 1.4px; } }
+@keyframes wedge-idle-glow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.25); } }
+.wedge-idle-pulse { animation: wedge-idle-pulse 2.6s ease-in-out infinite; }
+.wedge-idle-wobble { animation: wedge-idle-wobble 2.2s ease-in-out infinite; }
+.wedge-idle-glow { animation: wedge-idle-glow 2.4s ease-in-out infinite; }
+
+/* La porción ganadora pega SU propio remate al frenar la rueda. */
+.pes-wedge-label.pes-wedge-winner {
+  animation: pes-wedge-victory 0.8s cubic-bezier(0.2, 0.9, 0.25, 1.15);
+  color: var(--gold-bright);
+  z-index: 3;
+}
+@keyframes pes-wedge-victory {
+  0%   { transform: rotate(var(--wedge-rot, 0deg)) scale(1); filter: brightness(1); }
+  35%  { transform: rotate(var(--wedge-rot, 0deg)) scale(1.35); filter: brightness(1.6); }
+  60%  { transform: rotate(var(--wedge-rot, 0deg)) scale(0.96); }
+  100% { transform: rotate(var(--wedge-rot, 0deg)) scale(1.08); filter: brightness(1.3); }
+}
+
+.pes-result-stage {
+  min-height: 30px;
+  width: 100%;
+}
+.pes-result-stage #pesResultName {
+  margin: 0;
+  font-size: 22px;
+  color: var(--gold-bright);
+}
 
 .pes-customize-btn {
   background: none; border: none; color: var(--text-muted);
   font-size: 12px; text-decoration: underline; cursor: pointer;
 }
 .pes-customize-box.hidden { display: none; }
-.pes-customize-box { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.pes-customize-box {
+  display: flex; flex-direction: column; gap: 10px; align-items: center;
+  width: 100%; max-width: 280px;
+}
+.pes-name-chips {
+  display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+}
+.pes-name-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 999px; padding: 5px 6px 5px 12px;
+  font-size: 12.5px; color: var(--text);
+  font-family: var(--font-fun);
+}
+.pes-name-chip-remove {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: none; background: rgba(224,90,90,0.25); color: #ff8a8a;
+  font-size: 10px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.pes-name-chip-remove:hover { background: rgba(224,90,90,0.45); }
+.pes-name-add-row { display: flex; gap: 8px; width: 100%; }
+.pes-name-hint { margin: 0; font-size: 10.5px; color: var(--text-muted); max-width: 260px; }
 .pes-name-input {
-  width: 110px; padding: 8px 10px;
+  flex: 1;
+  padding: 8px 10px;
   background: var(--surface-2); border: 1px solid var(--border);
   border-radius: 8px; color: var(--text); font-size: 13px;
 }
 
+/* El botón secreto ahora vive DENTRO del flujo normal del panel (ya
+   no anclado a una esquina fija de la pantalla, donde en mobile
+   podía quedar tapado por la barra del navegador). Sigue siendo
+   discreto -es un secreto-, pero ahora se ve seguro. */
 .pes-secret-btn {
-  position: absolute; bottom: 18px; right: 18px; width: 28px; height: 28px;
-  border-radius: 50%; background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08); color: rgba(255,255,255,0.2);
-  font-size: 13px; cursor: pointer; animation: secret-pulse 3.5s ease-in-out infinite;
+  margin-top: 2px;
+  width: 30px; height: 30px;
+  border-radius: 50%; background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12); color: rgba(255,255,255,0.35);
+  font-size: 14px; cursor: pointer; animation: secret-pulse 3.2s ease-in-out infinite;
 }
-@keyframes secret-pulse { 0%,100% { opacity: 0.3; transform: scale(1); } 50% { opacity: 0.75; transform: scale(1.15); } }
+@keyframes secret-pulse { 0%,100% { opacity: 0.35; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.15); } }
 
 /* Modal código secreto (terror) */
 .konami-modal { position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,0.88); display: flex; align-items: center; justify-content: center; }
@@ -3503,11 +3669,3 @@ body.cursor-fx-off .mouse-spotlight { opacity: 0; }
   object-fit: cover; object-position: top center;
   animation: ronaldinho-dance 1s ease-in-out infinite;
 }
-
-/* Honor: aparece con la animación y se desvanece solo a los segundos */
-.honor-badge {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.6s ease;
-}
-.honor-badge.honor-visible { opacity: 1; }
