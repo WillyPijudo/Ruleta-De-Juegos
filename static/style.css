@@ -3875,3 +3875,103 @@ body.cursor-fx-off .mouse-spotlight { opacity: 0; }
   0%   { transform: translate(0,0) rotate(0deg) scale(1); opacity: 1; }
   100% { transform: translate(var(--tx), var(--ty)) rotate(var(--rot)) scale(0.65); opacity: 0; }
 }
+
+
+
+
+/* ============= Cinemática de Momo (ángel guardián trolo) ============= */
+.desafio-confirm-row { display: flex; align-items: center; gap: 16px; }
+
+.momo-cine { position: relative; display: flex; flex-direction: column; align-items: center; width: 170px; }
+.momo-cine.hidden { display: none; }
+.momo-cine.momo-enter { animation: momo-enter-anim 0.7s cubic-bezier(0.34,1.56,0.64,1) both; }
+.momo-cine.momo-exit { animation: momo-exit-anim 1s ease-in forwards; }
+@keyframes momo-enter-anim {
+  0%   { opacity: 0; transform: translate(-50px, -70px) rotate(-14deg) scale(0.6); }
+  100% { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+@keyframes momo-exit-anim {
+  0%   { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
+  100% { opacity: 0; transform: translateY(-260px) rotate(24deg) scale(0.45); }
+}
+
+.momo-float { position: relative; width: 150px; animation: momo-bob 2.4s ease-in-out infinite; }
+@keyframes momo-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-9px); }
+}
+
+.momo-img {
+  width: 100%; display: block; position: relative; z-index: 3;
+  filter: drop-shadow(0 10px 14px rgba(0,0,0,0.55));
+}
+.momo-img.momo-talk { animation: momo-talk-wiggle 0.32s ease-in-out infinite; }
+@keyframes momo-talk-wiggle {
+  0%, 100% { transform: rotate(-2deg); }
+  50%      { transform: rotate(2deg); }
+}
+
+/* Aureola simple - anillo dorado brillante flotando sobre la cabeza */
+.momo-halo {
+  position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
+  width: 58px; height: 16px; border-radius: 50%;
+  border: 4px solid #ffe27a;
+  box-shadow: 0 0 12px 3px rgba(255,226,122,0.85), inset 0 0 6px rgba(255,255,255,0.6);
+  z-index: 4;
+  animation: momo-halo-glow 1.6s ease-in-out infinite;
+}
+@keyframes momo-halo-glow {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1; box-shadow: 0 0 18px 5px rgba(255,226,122,1), inset 0 0 8px rgba(255,255,255,0.8); }
+}
+
+/* Nube tapando el corte del torso - varios círculos blancos superpuestos,
+   mismo truco visual que los aurora-blob que ya usás en el header. */
+.momo-cloud {
+  position: absolute; bottom: -14px; left: 50%; transform: translateX(-50%);
+  width: 168px; height: 56px; z-index: 5;
+}
+.momo-cloud-puff {
+  position: absolute; background: #fff; border-radius: 50%;
+  box-shadow: 0 6px 10px rgba(0,0,0,0.18);
+}
+.momo-cloud-puff.c1 { width: 68px; height: 46px; left: 0;   bottom: 0; }
+.momo-cloud-puff.c2 { width: 84px; height: 54px; left: 42px; bottom: 4px; }
+.momo-cloud-puff.c3 { width: 68px; height: 44px; left: 100px; bottom: 0; }
+.momo-cloud-puff.c4 { width: 46px; height: 32px; left: 14px; bottom: -8px; }
+.momo-cloud-puff.c5 { width: 46px; height: 32px; left: 108px; bottom: -8px; }
+
+/* Sello "BANEADO POR TROLO" que queda al final, cuando se va volando */
+.momo-banned-text {
+  position: absolute; bottom: 6px; left: 50%;
+  transform: translateX(-50%) scale(0.4) rotate(-8deg);
+  font-family: var(--font-bangers, var(--font-comic));
+  font-size: 18px; line-height: 1.05; text-align: center;
+  color: #ff3b3b; text-shadow: 0 2px 0 #000, 0 0 10px rgba(0,0,0,0.6);
+  opacity: 0; z-index: 6; white-space: nowrap;
+}
+.momo-banned-text.show { animation: momo-banned-pop 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+@keyframes momo-banned-pop {
+  0%   { opacity: 0; transform: translateX(-50%) scale(0.3) rotate(-8deg); }
+  70%  { opacity: 1; transform: translateX(-50%) scale(1.2) rotate(-8deg); }
+  100% { opacity: 1; transform: translateX(-50%) scale(1) rotate(-8deg); }
+}
+
+/* Subtítulos: cada palabra rebota al aparecer, sincronizada con el JSON */
+.momo-subtitle {
+  margin-top: 8px; min-height: 30px; max-width: 190px;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 4px;
+}
+.momo-subtitle .word {
+  opacity: 0; display: inline-block;
+  font-family: var(--font-comic); font-weight: 700; font-size: 12.5px;
+  color: #fff; background: rgba(0,0,0,0.6);
+  padding: 2px 6px; border-radius: 6px;
+  transform: translateY(12px) scale(0.5) rotate(-6deg);
+}
+.momo-subtitle .word.show { animation: momo-word-bounce 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+@keyframes momo-word-bounce {
+  0%   { opacity: 0; transform: translateY(14px) scale(0.5) rotate(-6deg); }
+  60%  { opacity: 1; transform: translateY(-4px) scale(1.18) rotate(3deg); }
+  100% { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
+}
