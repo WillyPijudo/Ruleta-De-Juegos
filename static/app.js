@@ -944,25 +944,32 @@ const LETTER_REVEAL_STYLES = ["flip", "drop", "spin", "shake", "zoom"];
 
 function revealWinnerName(name, onDone) {
   const container = document.getElementById("winnerName");
+  const stage = document.getElementById("winnerNameStage");
   container.innerHTML = "";
   container.classList.remove("wn-climax");
-  container.style.setProperty("--wn-progress", "0");
+  if (stage) {
+    stage.classList.remove("flash");
+    stage.classList.add("suspense");
+    stage.style.setProperty("--wn-progress", "0");
+  }
   const chars = name.split("");
   const total = chars.length;
   let i = 0;
   let lastStyle = null;
 
-  // Ritmo de suspenso: arranca lento (para que se note que algo está
-  // por pasar), toma velocidad y energía en el medio, y justo ANTES
-  // de la última letra hace una pausa larga y silenciosa -el clásico
-  // "y el ganador es..."- antes de soltar el golpe final.
+  // Ritmo de suspenso (más largo y marcado que antes): arranca lento,
+  // toma velocidad y energía en el medio, se frena de nuevo sobre el
+  // final, y justo ANTES de la última letra hace una pausa larga y
+  // silenciosa -el clásico "y el ganador es..."- antes de soltar el
+  // golpe final. Para un nombre de 6-9 letras esto dura entre 3 y 5
+  // segundos en total, no ~1 segundo como antes.
   function delayForNext(idx) {
     const remaining = total - idx;
-    if (idx === 0) return 320;
-    if (idx < 3) return 250;
-    if (remaining === 1) return 950; // la pausa antes del remate
-    if (remaining <= 3) return 360;
-    return 120 + Math.round(Math.random() * 60);
+    if (remaining === 1) return 1500; // la gran pausa antes del remate
+    if (idx <= 1) return 450;
+    if (idx === 2) return 320;
+    if (remaining <= 3) return 400;
+    return 160 + Math.round(Math.random() * 90);
   }
 
   function pickStyle() {
@@ -985,7 +992,7 @@ function revealWinnerName(name, onDone) {
     const isFirst = i === 0;
     const isLast = i === total - 1;
     const progress = total <= 1 ? 1 : i / (total - 1);
-    container.style.setProperty("--wn-progress", progress.toFixed(3));
+    if (stage) stage.style.setProperty("--wn-progress", progress.toFixed(3));
 
     const tile = document.createElement("span");
     tile.className = "flip-letter";
@@ -1017,6 +1024,12 @@ function revealWinnerName(name, onDone) {
 
     if (isLast) {
       container.classList.add("wn-climax");
+      if (stage) {
+        // Los focos que venían "buscando" dejan de barrer y en su
+        // lugar se dispara un flash grande: el misterio se resuelve.
+        stage.classList.remove("suspense");
+        stage.classList.add("flash");
+      }
       const modalCard = document.querySelector("#winnerModal .modal-card");
       if (modalCard) {
         modalCard.classList.add("modal-shake");
@@ -1098,7 +1111,20 @@ function showWinnerModal(winner) {
   const gameLabelEl = document.getElementById("winnerGameLabel");
   const wrap = document.getElementById("winnerCoverWrap");
   const loserCorner = document.getElementById("loserCorner");
+  const winnerNameEl = document.getElementById("winnerName");
+  const winnerNameStage = document.getElementById("winnerNameStage");
   const actionButtons = modal.querySelectorAll(".modal-actions button");
+
+  // OJO: esto se limpia ACÁ, antes de mostrar el modal, y no sólo
+  // dentro de revealWinnerName. Si no, durante el instante entre
+  // "se muestra el modal" y "arranca la animación letra por letra"
+  // se alcanza a ver flasheado el nombre del ganador anterior.
+  winnerNameEl.innerHTML = "";
+  winnerNameEl.classList.remove("wn-climax");
+  if (winnerNameStage) {
+    winnerNameStage.classList.remove("suspense", "flash");
+    winnerNameStage.style.setProperty("--wn-progress", "0");
+  }
 
   messageEl.classList.remove("show");
   messageEl.textContent = "";
