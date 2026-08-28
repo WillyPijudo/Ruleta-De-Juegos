@@ -6056,14 +6056,35 @@ function hsResolveCollisions(now) {
         if (bootPose.isStrike) {
           const kickT = Math.max(0, Math.min(1,
             (bootPose.extend - HS_BOOT_STRIKE_THRESHOLD) / (1 - HS_BOOT_STRIKE_THRESHOLD)));
-          const power = HS_KICK_POWER * (0.75 + 0.45 * kickT);
-          vxSum += p.facing * power + p.vx * 0.4;
-          // Más variedad de tiro real: antes el punto de contacto (ny)
-          // apenas influía (x120). Ahora pesa mucho más, así PEGARLE
-          // ARRIBA/ABAJO de la pelota cambia de verdad la trayectoria -
-          // remaches rasantes si conectás por arriba, globos si conectás
-          // por abajo, no todos los tiros salen iguales.
-          vySum += -260 - 60 * kickT + ny * 220;
+
+          // FAMILIA DE TIROS: ya no es una sola potencia graduada. `ny` es
+          // el punto de contacto vertical en la pelota (negativo = le
+          // pegaste por ABAJO, positivo = por ARRIBA) y ahora define el
+          // TIPO de tiro, no solo un ajuste fino de la trayectoria.
+          let vxPower, vyPower;
+          if (kickT < 0.3) {
+            // PUNTINAZO: toque corto y controlado, casi sin importar dónde
+            // conectaste — para pases cortos o definiciones de precisión.
+            vxPower = HS_KICK_POWER * 0.42;
+            vyPower = -90 + ny * 60;
+          } else if (ny > 0.12) {
+            // RASANTE: le pegaste por ARRIBA de la pelota → sale fuerte y
+            // bajo, pegado al piso.
+            vxPower = HS_KICK_POWER * (0.95 + 0.35 * kickT);
+            vyPower = -140 - 40 * kickT + ny * 90;
+          } else if (ny < -0.12) {
+            // GLOBO/LOFTED: le pegaste por ABAJO de la pelota → sale con
+            // mucho arco, menos potencia horizontal.
+            vxPower = HS_KICK_POWER * (0.55 + 0.3 * kickT);
+            vyPower = -420 - 140 * kickT + ny * 90;
+          } else {
+            // TIRO MEDIO: contacto centrado, el "normal" equilibrado.
+            vxPower = HS_KICK_POWER * (0.8 + 0.45 * kickT);
+            vyPower = -260 - 70 * kickT + ny * 220;
+          }
+
+          vxSum += p.facing * vxPower + p.vx * 0.4;
+          vySum += vyPower;
           hits++;
           applied = true;
           if (!p.bootCoolUntil || now > p.bootCoolUntil) {
@@ -6506,77 +6527,113 @@ function hsDrawField() {
     ctx.restore();
   });
 
-  // Arcos 3D: caño trasero + interior de red visible + dos postes delanteros
-  // (como en la referencia), en vez del rectángulo plano de antes.
+  // Arcos 3D reales: geometría RELLENA (polígonos, no solo trazos con
+  // lineWidth) — panel lateral que conecta el poste delantero con el caño
+  // trasero (esto es lo que antes faltaba del todo y hacía que se viera
+  // como un cartel plano), caño trasero fino/tenue vs. poste delantero
+  // grueso con degradé de luz, para que se note cuál está "atrás".
   const goalDepth = HS_NET_DEPTH;
+  const barT = HS_GOAL_BAR_THICK + 4; // grosor visual del caño (un poco más grueso que el de colisión, se ve mejor)
   [0, HS_CANVAS_W - HS_GOAL_W].forEach((gx, i) => {
     const isLeft = i === 0;
+    const dir = isLeft ? 1 : -1;
     const topY = HS_PITCH_Y - HS_GOAL_H;
     const backX = isLeft ? gx - goalDepth : gx + HS_GOAL_W + goalDepth;
-    const frontNearX = isLeft ? gx + HS_GOAL_W : gx;
+    const frontX = isLeft ? gx + HS_GOAL_W : gx; // poste delantero, el que mira a la mitad de cancha
+    const backTopY = topY - 12; // el caño trasero arranca más arriba: sugiere que está detrás y en alto
 
-    // Interior (fondo oscuro con la red)
-    ctx.fillStyle = "rgba(8,10,15,0.85)";
-    ctx.beginPath();
-    ctx.moveTo(gx, topY);
-    ctx.lineTo(gx + HS_GOAL_W, topY);
-    ctx.lineTo(gx + HS_GOAL_W, HS_PITCH_Y);
-    ctx.lineTo(gx, HS_PITCH_Y);
-    ctx.closePath();
-    ctx.fill();
+    // 1) Panel lateral (costado del arco visto en 3/4) — le da volumen de
+    // caja real, es lo que más faltaba en la referencia que mandaste.
+    ctx.save();
+    const side = new Path2D();
+    side.moveTo(frontX, topY);
+    side.lineTo(backX, backTopY);
+    side.lineTo(backX, HS_PITCH_Y - 2);
+    side.lineTo(frontX, HS_PITCH_Y);
+    side.closePath();
+    ctx.fillStyle = "rgba(10,12,18,0.6)";
+    ctx.fill(side);
+    ctx.clip(side);
+    ctx.strokeStyle = "rgba(255,255,255,0.16)";
+    ctx.lineWidth = 1;
+    for (let d = -20; d < goalDepth + HS_GOAL_H; d += 11) {
+      ctx.beginPath();
+      ctx.moveTo(frontX + dir * d, topY);
+      ctx.lineTo(frontX + dir * (d - 46), HS_PITCH_Y);
+      ctx.stroke();
+    }
+    ctx.restore();
 
-    // Red: malla diagonal (más parecida a una red real que la grilla recta de antes)
+    // 2) Fondo de red de frente (entre los dos postes delanteros)
+    ctx.fillStyle = "rgba(8,10,15,0.82)";
+    ctx.fillRect(gx, topY, HS_GOAL_W, HS_GOAL_H);
     ctx.save();
     ctx.beginPath();
     ctx.rect(gx, topY, HS_GOAL_W, HS_GOAL_H);
     ctx.clip();
-    ctx.strokeStyle = "rgba(255,255,255,0.22)";
+    ctx.strokeStyle = "rgba(255,255,255,0.20)";
     ctx.lineWidth = 1;
-    for (let d = -HS_GOAL_H; d < HS_GOAL_W + HS_GOAL_H; d += 12) {
+    for (let d = -HS_GOAL_H; d < HS_GOAL_W + HS_GOAL_H; d += 11) {
       ctx.beginPath(); ctx.moveTo(gx + d, topY); ctx.lineTo(gx + d - HS_GOAL_H, HS_PITCH_Y); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(gx + d, topY); ctx.lineTo(gx + d + HS_GOAL_H, HS_PITCH_Y); ctx.stroke();
     }
     ctx.restore();
 
-    // Caño trasero (fondo del arco, da la sensación de profundidad)
-    ctx.strokeStyle = "#e9e9e9";
-    ctx.lineWidth = 5;
+    // 3) Caño trasero: fino y tenue — antes era casi igual de blanco/grueso
+    // que el delantero y no se distinguía cuál estaba atrás.
+    ctx.strokeStyle = "#a9b0ba";
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.beginPath();
-    ctx.moveTo(backX, topY + 6);
-    ctx.lineTo(backX, HS_PITCH_Y - 4);
+    ctx.moveTo(backX, backTopY);
+    ctx.lineTo(backX, HS_PITCH_Y - 3);
     ctx.stroke();
-    ctx.strokeStyle = "rgba(180,190,200,0.6)";
     ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(gx + (isLeft ? 0 : HS_GOAL_W), topY + 3); ctx.lineTo(backX, topY + 6); ctx.stroke();
-    // NUEVO: caño trasero de PISO - conecta la base del palo de atrás con
-    // la base del palo de adelante. Antes faltaba esta barra y la "jaula"
-    // del arco quedaba abierta por abajo, se sentía como un cartel plano
-    // en vez de una estructura 3D real con varios palos.
-    ctx.strokeStyle = "rgba(200,205,212,0.5)";
-    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(backX, HS_PITCH_Y - 3); ctx.lineTo(frontX, HS_PITCH_Y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(backX, backTopY); ctx.lineTo(frontX, topY); ctx.stroke();
+
+    // 4) Poste + travesaño DELANTERO: ahora son barras SÓLIDAS con degradé
+    // (antes solo lineWidth = se veían como un trazo, no un caño real).
+    const postGrad = ctx.createLinearGradient(frontX - barT / 2, 0, frontX + barT / 2, 0);
+    postGrad.addColorStop(0, "#aeb4bc");
+    postGrad.addColorStop(0.5, "#ffffff");
+    postGrad.addColorStop(1, "#8b929c");
+    ctx.fillStyle = postGrad;
     ctx.beginPath();
-    ctx.moveTo(backX, HS_PITCH_Y - 4);
-    ctx.lineTo(frontNearX, HS_PITCH_Y - 1);
+    ctx.moveTo(frontX - barT / 2, topY - barT / 2);
+    ctx.lineTo(frontX + barT / 2, topY - barT / 2);
+    ctx.lineTo(frontX + barT / 2, HS_PITCH_Y);
+    ctx.lineTo(frontX - barT / 2, HS_PITCH_Y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.3)";
+    ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Palos delanteros (poste + travesaño) bien blancos y gruesos, arriba de todo
-    ctx.strokeStyle = "#fdfdfd";
-    ctx.lineWidth = 7;
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
+    const barGrad = ctx.createLinearGradient(0, topY - barT / 2, 0, topY + barT / 2);
+    barGrad.addColorStop(0, "#ffffff");
+    barGrad.addColorStop(0.55, "#dde0e4");
+    barGrad.addColorStop(1, "#868d97");
+    ctx.fillStyle = barGrad;
     ctx.beginPath();
-    ctx.moveTo(frontNearX, HS_PITCH_Y);
-    ctx.lineTo(frontNearX, topY);
-    ctx.lineTo(gx + (isLeft ? 0 : HS_GOAL_W), topY);
+    ctx.moveTo(gx, topY - barT / 2);
+    ctx.lineTo(gx + HS_GOAL_W, topY - barT / 2);
+    ctx.lineTo(gx + HS_GOAL_W, topY + barT / 2);
+    ctx.lineTo(gx, topY + barT / 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.3)";
     ctx.stroke();
-    // Sombra/volumen del poste (para que se vea cilíndrico, no plano)
-    ctx.strokeStyle = "rgba(0,0,0,0.25)";
-    ctx.lineWidth = 2.5;
+
+    // Sombra de contacto del poste contra el piso (para que no "flote")
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = "#000";
     ctx.beginPath();
-    ctx.moveTo(frontNearX + (isLeft ? -3 : 3), topY + 2);
-    ctx.lineTo(frontNearX + (isLeft ? -3 : 3), HS_PITCH_Y - 2);
-    ctx.stroke();
+    ctx.ellipse(frontX, HS_PITCH_Y + 2, barT * 1.3, barT * 0.35, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   });
 }
 
