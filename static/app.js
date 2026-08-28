@@ -5345,14 +5345,12 @@ const HS_GOALS_TO_WIN = 5;
 const HS_TIME_SECONDS = 60;
 const HS_MAX_BALL_SPEED = 1650;   // (antes 1500) para no capar los tiros largos nuevos
 const HS_PLAYER_PUSH = 44;
-// FIX "el movimiento del botín es muy rápido para apuntar": con 0.15s
-// llegaba a la extensión máxima casi al instante, así que era imposible
-// soltar a mitad de camino para un toque suave o un puntinazo - cualquier
-// toque de tecla, por corto que fuera, ya salía casi a full potencia.
-// Ahora hay una ventana real (~0.4s) para elegir CUÁNTO pateás: soltás
-// rápido = toque suave y controlado, aguantás = disparo a fondo.
-const HS_BOOT_EXTEND_TIME = 0.4;       // (antes 0.15)
-const HS_BOOT_RETRACT_TIME = 0.4;      // (antes 0.34) misma duración, se siente parejo ida y vuelta
+// Acortado (0.4 -> 0.3) para que la patada se sienta más rápida/con más
+// punch, como pediste - sigue habiendo ventana real para elegir cuánto
+// pateás (puntinazo vs a fondo), solo que ahora tarda menos en llegar al
+// máximo, se siente más ágil.
+const HS_BOOT_EXTEND_TIME = 0.3;
+const HS_BOOT_RETRACT_TIME = 0.26; // vuelta un poco más rápida que la ida, se siente más "snappy"
 const HS_BOOT_STRIKE_THRESHOLD = 0.22; // (antes 0.35) más bajo: ya un toque corto conecta con la pelota (flojo), no hace falta llegar casi al máximo para que "cuente"
 const HS_KICK_COOLDOWN = 190;
 const HS_KICK_REACH = HS_BOOT_W * 1.05;
@@ -5845,14 +5843,15 @@ function hsUpdatePlayer(p, dt, keys, now) {
 // (si vas para adelante el botín se atrasa un toque, si vas para atrás se
 // adelanta un toque — como una zancada real).
 function hsBootLocalAngle(p) {
-  // FIX "el pateo se siente sin punch/velocidad": antes el ángulo avanzaba
-  // LINEAL con el tiempo que mantenés la tecla - se sentía parejo/plano
-  // todo el trayecto. Ahora es una curva "easeInCubic": arranca lento (así
-  // seguís teniendo control fino para un puntinazo corto) y ACELERA fuerte
-  // sobre el final - el pie se siente como si "latigazo"-ara justo al
-  // conectar, en vez de moverse a velocidad constante todo el tiempo.
-  const eased = p.bootExtend * p.bootExtend * p.bootExtend;
-  const base = HS_BOOT_REST_ANGLE + (HS_BOOT_MAX_ANGLE - HS_BOOT_REST_ANGLE) * eased;
+  // FIX "la rotación se siente rara/entrecortada": la curva cúbica que
+  // había acá dejaba el pie CASI QUIETO durante el 70% del recorrido y
+  // recién "saltaba" al final - eso es lo que se sentía raro, no fluido.
+  // Vuelta a lineal: giro parejo y predecible de punta a punta, más
+  // rápido de percibir porque HS_BOOT_EXTEND_TIME también se acortó
+  // (ver más abajo) y el rango de giro (HS_BOOT_ROT_KICK) sigue siendo
+  // más grande que el original, así que el "punch" visual se mantiene
+  // sin el salto raro.
+  const base = HS_BOOT_REST_ANGLE + (HS_BOOT_MAX_ANGLE - HS_BOOT_REST_ANGLE) * p.bootExtend;
   const moveT = Math.max(-1, Math.min(1, (p.vx * p.facing) / HS_MAX_SPEED));
   const drag = moveT * 0.22 * (1 - p.bootExtend);
   return base + drag;
@@ -5965,16 +5964,21 @@ function hsUpdateBall(dt) {
   // no "pesada" como reportaste.
   if (b.y + HS_BALL_R > HS_PITCH_Y) {
     b.y = HS_PITCH_Y - HS_BALL_R;
-    if (Math.abs(b.vy) > 40) {
+    // FIX "se frena de golpe": el corte de acá estaba en 40 - un rebote de
+    // vy=41 seguía rebotando normal, pero vy=39 mataba TODA la velocidad
+    // vertical de un frame a otro, un precipicio visible. Bajado a 12 (así
+    // los últimos rebotitos, chiquitos de verdad, todavía sobreviven un
+    // par de veces más antes de asentarse) y agregado un escalón intermedio
+    // para que la transición a "rodando" sea una rampa, no un corte.
+    if (Math.abs(b.vy) > 12) {
       b.squash = Math.min(1, Math.abs(b.vy) / 650);
       b.vy = -Math.abs(b.vy) * HS_GROUND_RESTITUTION;
-      // FIX "no se pueden hacer tiros largos": acá había un extra
-      // b.vx *= 0.85 en CADA rebote, además de la restitución vertical.
-      // Un tiro raso que picara 2-3 veces perdía casi toda su velocidad de
-      // golpe (0.85*0.85*0.85 ≈ 61% de pérdida extra) - por eso la pelota
-      // se sentía plomiza y no llegaba lejos. Ahora el rebote solo pierde
-      // energía por la restitución de siempre, sin este impuesto extra.
       b.vx *= 0.97;
+    } else if (Math.abs(b.vy) > 3) {
+      // Rebotecito final, chico pero real, antes de asentarse del todo -
+      // evita el salto brusco de "rebotando" a "clavada en el piso".
+      b.vy = -Math.abs(b.vy) * 0.4;
+      b.vx *= 0.985;
     } else {
       b.vy = 0;
       b.vx *= 0.99; // rozamiento leve rodando por el piso
@@ -6127,8 +6131,22 @@ function hsResolveCollisions(now) {
         const nx = dx / dist, ny = dy / dist;
         b.x = headCX + nx * minDist;
         b.y = headCY + ny * minDist;
+        // FIX BUG GRAVE "ping-pong infinito entre dos cabezas quietas":
+        // `Math.max(HS_HEAD_POWER, ...)` de acá forzaba SIEMPRE un mínimo
+        // de 760 de potencia en CUALQUIER contacto, incluso si la pelota
+        // casi no se movía y el jugador estaba parado. Resultado: la
+        // pelota rebotaba entre las dos cabezas a potencia casi completa
+        // por SIEMPRE, sin perder energía nunca, sin que nadie se moviera.
+        // Ahora el cabezazo es como un rebote de verdad: la potencia sale
+        // de la energía que YA traía la pelota (o de cuánto se está
+        // moviendo el jugador que cabecea), con una pérdida real (0.82) en
+        // cada toque - así un cabezazo pasivo se va apagando solo en vez
+        // de perpetuarse, y solo un cabezazo con impulso real (saltando al
+        // encuentro, o la pelota viniendo rápido) pega fuerte de verdad.
         const speedIn = Math.hypot(b.vx, b.vy);
-        const power = Math.max(HS_HEAD_POWER, Math.min(speedIn * 1.1, HS_HEAD_POWER * 1.6));
+        const playerEnergy = Math.hypot(p.vx, p.vy - (p.onGround ? 0 : 200)); // saltar hacia la pelota suma empuje real
+        const incoming = Math.max(speedIn, playerEnergy);
+        const power = Math.min(Math.max(incoming * 0.82, 90), HS_HEAD_POWER * 1.6);
         vxSum += nx * power + p.vx * 0.5;
         vySum += ny * power - 60;
         hits++;
