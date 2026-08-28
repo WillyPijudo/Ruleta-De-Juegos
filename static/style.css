@@ -3480,15 +3480,13 @@ body.cursor-fx-off .mouse-spotlight { opacity: 0; }
   100% { top: 40%; transform: translateX(-50%) rotate(0deg); }
 }
 .desafiar-btn { font-size: 15px; padding: 14px 22px; box-shadow: 0 14px 26px rgba(0,0,0,0.5); }
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
-}
 
 
 
-/* Ronaldinho flotante (disparador del modo, ya no es un botón de texto) */
+/* Ronaldinho flotante (disparador del modo), pegado a la ruleta */
 .ronaldinho-fab {
-  position: fixed; bottom: 18px; left: 18px; z-index: 45;
-  width: 54px; height: 54px; border-radius: 50%;
+  position: absolute; bottom: -6px; right: -6px; z-index: 15;
+  width: 46px; height: 46px; border-radius: 50%;
   background: radial-gradient(circle, #241a29, #0a070c);
   border: 2px solid rgba(217,169,78,0.45);
   overflow: hidden; cursor: pointer; padding: 0;
