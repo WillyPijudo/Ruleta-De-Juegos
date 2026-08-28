@@ -545,6 +545,9 @@ const SFX_FILES = {
   wheelTick: "/static/audio/wheel-tick.wav",
   wheelWhoosh: "/static/audio/wheel-whoosh.wav",
   wheelWin: "/static/audio/wheel-win.wav",
+  drumroll: "/static/audio/drumroll.wav",
+  letterBlip: "/static/audio/letter-blip.wav",
+  sadTrumpet: "/static/audio/sad-trumpet.wav",
 };
 
 function preloadSfx() {
@@ -563,7 +566,7 @@ function preloadSfx() {
   });
 }
 
-function playSfx(key, volume) {
+function playSfx(key, volume, loop) {
   if (!soundEnabled) return false;
   const buffer = sfxBuffers[key];
   if (!buffer) return false;
@@ -571,10 +574,71 @@ function playSfx(key, volume) {
   const src = ctx.createBufferSource();
   const gain = ctx.createGain();
   src.buffer = buffer;
+  if (loop) src.loop = true;
   gain.gain.value = volume != null ? volume : 0.6;
   src.connect(gain).connect(ctx.destination);
   src.start(0);
-  return true;
+  return src; // truthy, y lo podemos frenar después con src.stop()
+}
+
+/* ---- respaldos sintetizados para la secuencia del ganador ----
+   Si todavía no subiste drumroll.wav / letter-blip.wav /
+   sad-trumpet.wav, esto se usa en su lugar (no se rompe nada). */
+let synthDrumrollTimer = null;
+function playSynthDrumroll() {
+  if (!soundEnabled) return;
+  const ctx = getAudioCtx();
+  synthDrumrollTimer = setInterval(() => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.value = 170 + Math.random() * 40;
+    gain.gain.setValueAtTime(0.06, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.05);
+  }, 55);
+}
+function stopSynthDrumroll() {
+  if (synthDrumrollTimer) { clearInterval(synthDrumrollTimer); synthDrumrollTimer = null; }
+}
+
+function playLetterBlip() {
+  if (!soundEnabled) return;
+  const ctx = getAudioCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const freq = 480 + Math.random() * 500;
+  osc.type = "square";
+  osc.frequency.setValueAtTime(freq, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(freq * 1.8, ctx.currentTime + 0.05);
+  gain.gain.setValueAtTime(0.12, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.07);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + 0.08);
+}
+
+function playSadTrumpetFallback() {
+  if (!soundEnabled) return;
+  const ctx = getAudioCtx();
+  const notes = [392, 370, 349, 330];
+  notes.forEach((freq, i) => {
+    setTimeout(() => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const isLast = i === notes.length - 1;
+      osc.type = "sawtooth";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.14, ctx.currentTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + (isLast ? 0.9 : 0.35));
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + (isLast ? 1 : 0.4));
+    }, i * 260);
+  });
 }
 
 function playTick() {
@@ -845,8 +909,6 @@ function finishSpin(winner) {
   setLightsMode("won");
   setTimeout(() => setLightsMode(null), 1400);
   showWinnerModal(winner);
-  launchConfetti();
-  if (!playSfx("wheelWin", 0.6)) playFanfare();
   fetch("/api/history", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -858,16 +920,93 @@ function finishSpin(winner) {
   }).then(() => fetchHistory());
 }
 
+function revealWinnerName(name, onDone) {
+  const container = document.getElementById("winnerName");
+  container.innerHTML = "";
+  const chars = name.split("");
+  let i = 0;
+
+  function revealNext() {
+    if (i >= chars.length) {
+      onDone && onDone();
+      return;
+    }
+    const ch = chars[i];
+    const tile = document.createElement("span");
+    tile.className = "flip-letter";
+    const inner = document.createElement("span");
+    inner.className = "flip-letter-inner";
+    inner.textContent = ch === " " ? "\u00A0" : ch;
+    tile.appendChild(inner);
+    container.appendChild(tile);
+    void tile.offsetWidth; // fuerza reflow para que la animación dispare siempre
+    tile.classList.add("flip-in");
+    if (ch !== " ") {
+      if (!playSfx("letterBlip", 0.4)) playLetterBlip();
+    }
+    i++;
+    setTimeout(revealNext, 85);
+  }
+  revealNext();
+}
+
+function showLoserCorner(winner) {
+  const candidates = Array.from(new Set(games.map((g) => g.added_by).filter(Boolean)))
+    .filter((name) => name.toLowerCase() !== (winner.added_by || "").toLowerCase());
+  if (candidates.length === 0) return; // no hay a quién cargarse, no mostramos nada
+  const loser = candidates[Math.floor(Math.random() * candidates.length)];
+  document.getElementById("loserName").textContent = loser;
+  const loserCorner = document.getElementById("loserCorner");
+  loserCorner.classList.remove("hidden");
+  void loserCorner.offsetWidth;
+  loserCorner.classList.add("show");
+  if (!playSfx("sadTrumpet", 0.55)) playSadTrumpetFallback();
+}
+
 function showWinnerModal(winner) {
   currentWinnerGame = winner;
-  document.getElementById("winnerName").textContent = winner.name;
   const who = winner.added_by || "Anónimo";
-  document.getElementById("winnerMessage").innerHTML =
-    `<span class="winner-who">${escapeHtml(who)}</span> ganó, los demás se la tienen que bancar <span class="laugh-emoji">😂</span>`;
+
+  const modal = document.getElementById("winnerModal");
+  const messageEl = document.getElementById("winnerMessage");
   const wrap = document.getElementById("winnerCoverWrap");
+  const loserCorner = document.getElementById("loserCorner");
+  const actionButtons = modal.querySelectorAll(".modal-actions button");
+
+  // Reset del estado de suspenso antes de arrancar
+  messageEl.classList.remove("show");
+  messageEl.textContent = "";
   wrap.innerHTML = "";
   wrap.appendChild(posterInner(winner));
-  document.getElementById("winnerModal").classList.remove("hidden");
+  wrap.classList.remove("cover-reveal");
+  wrap.classList.add("cover-suspense");
+  loserCorner.classList.remove("show");
+  loserCorner.classList.add("hidden");
+  actionButtons.forEach((b) => { b.disabled = true; });
+
+  modal.classList.remove("hidden");
+
+  const drumroll = playSfx("drumroll", 0.5, true);
+  if (!drumroll) playSynthDrumroll();
+
+  setTimeout(() => {
+    revealWinnerName(winner.name, () => {
+      if (drumroll && drumroll.stop) { try { drumroll.stop(); } catch (e) {} }
+      else stopSynthDrumroll();
+
+      wrap.classList.remove("cover-suspense");
+      wrap.classList.add("cover-reveal");
+      messageEl.innerHTML =
+        `<span class="winner-who">${escapeHtml(who)}</span> ganó, los demás se la tienen que bancar <span class="laugh-emoji">😂</span>`;
+      messageEl.classList.add("show");
+      actionButtons.forEach((b) => { b.disabled = false; });
+
+      launchConfetti();
+      if (!playSfx("wheelWin", 0.6)) playFanfare();
+
+      setTimeout(() => showLoserCorner(winner), 700);
+    });
+  }, 350);
 }
 
 /* ---------------- shared duel outcome messaging ----------------
