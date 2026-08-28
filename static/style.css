@@ -133,7 +133,7 @@ body::before {
   transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 .btn:hover { transform: translateY(-1px); }
-.btn:active { transform: translateY(0); }
+.btn:active { transform: translateY(0) scale(0.97); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
 .btn-ghost { background: transparent; border-color: var(--border); color: var(--text-muted); }
@@ -194,6 +194,9 @@ body::before {
   will-change: transform, filter;
 }
 
+.wheel-wrap {
+  --speed-glow: 0;
+}
 .wheel-wrap.is-spinning::after {
   content: "";
   position: absolute;
@@ -201,12 +204,14 @@ body::before {
   z-index: -1;
   border-radius: 50%;
   background: radial-gradient(circle, var(--pink-soft), transparent 70%);
-  animation: spin-glow 0.9s ease-in-out infinite;
+  /* Antes pulsaba siempre igual con una animación infinita. Ahora
+     reacciona a la velocidad real del giro (el JS actualiza
+     --speed-glow cuadro a cuadro): chico al arrancar, grande a
+     toda velocidad, se apaga al frenar. */
+  opacity: calc(0.22 + var(--speed-glow) * 0.55);
+  transform: scale(calc(1 + var(--speed-glow) * 0.14));
+  transition: opacity 0.09s linear, transform 0.09s linear;
   pointer-events: none;
-}
-@keyframes spin-glow {
-  0%, 100% { opacity: 0.25; transform: scale(1); }
-  50% { opacity: 0.65; transform: scale(1.07); }
 }
 
 .lights {
@@ -241,6 +246,16 @@ body::before {
   50% { opacity: 1; transform: scale(1.35); box-shadow: 0 0 12px 3px var(--pink-soft); }
 }
 
+.wheel-trail {
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+  filter: blur(2px) saturate(1.3);
+}
+
 .wheel {
   position: absolute;
   inset: 6%;
@@ -252,7 +267,23 @@ body::before {
     0 20px 60px rgba(0,0,0,0.6),
     inset 0 0 46px rgba(0,0,0,0.6);
   background: var(--surface);
-  will-change: transform;
+  will-change: transform, filter;
+}
+
+/* Líneas doradas finas entre cada gajo (antes solo se distinguían
+   por color, se veía plano). --wedge-n lo setea el JS. */
+.wheel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    from calc(360deg / var(--wedge-n, 8) / -2),
+    rgba(255, 224, 168, 0.65) 0deg 0.55deg,
+    transparent 0.55deg calc(360deg / var(--wedge-n, 8))
+  );
+  mix-blend-mode: overlay;
+  pointer-events: none;
 }
 
 .wheel-hub {
@@ -263,6 +294,8 @@ body::before {
 }
 
 .spin-btn {
+  position: relative;
+  overflow: hidden;
   width: 92px; height: 92px;
   border-radius: 50%;
   border: 4px solid var(--bg);
@@ -271,11 +304,27 @@ body::before {
   font-family: var(--font-comic);
   font-size: 16px;
   letter-spacing: 1px;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.35), 0 -1px 0 rgba(0,0,0,0.25);
   cursor: pointer;
-  box-shadow: 0 8px 22px rgba(0,0,0,0.55), 0 0 0 6px rgba(217,169,78,0.18);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.55), 0 0 0 6px rgba(217,169,78,0.18), inset 0 2px 4px rgba(255,255,255,0.35), inset 0 -6px 10px rgba(0,0,0,0.25);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
+.spin-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.4) 48%, transparent 65%);
+  transform: translateX(-120%);
+  animation: spin-btn-sheen 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes spin-btn-sheen {
+  0%, 55% { transform: translateX(-120%); }
+  85% { transform: translateX(120%); }
+  100% { transform: translateX(120%); }
+}
 .spin-btn:hover:not(:disabled) { transform: scale(1.05); }
+.spin-btn:active:not(:disabled) { transform: scale(0.94); }
 .spin-btn:disabled { filter: grayscale(0.5); opacity: 0.6; cursor: not-allowed; }
 .spin-btn:not(:disabled):not(.charging) { animation: spin-ready-pulse 2.6s ease-in-out infinite; }
 .spin-btn.charging { animation: spin-charge 0.5s ease; }
@@ -294,20 +343,49 @@ body::before {
 
 .pointer {
   position: absolute;
-  top: 2%;
+  top: 1%;
   left: 50%;
+  width: 34px;
+  height: 44px;
   transform: translateX(-50%);
-  width: 0; height: 0;
-  border-left: 14px solid transparent;
-  border-right: 14px solid transparent;
-  border-top: 26px solid var(--pink);
-  filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5)) drop-shadow(0 0 8px var(--pink-soft));
   z-index: 6;
   animation: pointer-pulse 1.6s ease-in-out infinite;
+  transform-origin: 50% 15%;
+}
+.pointer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(160deg, var(--gold-bright), var(--pink) 78%);
+  clip-path: polygon(50% 100%, 4% 28%, 26% 0%, 50% 20%, 74% 0%, 96% 28%);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+}
+.pointer::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bg-deep);
+  transform: translate(-50%, -50%);
+  box-shadow: inset 0 0 3px rgba(0,0,0,0.7);
 }
 @keyframes pointer-pulse {
-  0%, 100% { filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5)) drop-shadow(0 0 6px var(--pink-soft)); }
-  50% { filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5)) drop-shadow(0 0 14px var(--pink-soft)); }
+  0%, 100% { filter: drop-shadow(0 0 6px var(--pink-soft)); }
+  50% { filter: drop-shadow(0 0 14px var(--pink-soft)); }
+}
+/* La activa bumpPointer() en JS cada vez que un gajo pasa bajo la
+   flecha durante el giro: le da traqueteo real, no queda clavada. */
+.pointer.pointer-bump {
+  animation: pointer-pulse 1.6s ease-in-out infinite, pointer-bump 0.15s ease;
+}
+@keyframes pointer-bump {
+  0%   { transform: translateX(-50%) rotate(0deg) scaleY(1); }
+  35%  { transform: translateX(-50%) rotate(-12deg) scaleY(0.8); }
+  70%  { transform: translateX(-50%) rotate(8deg) scaleY(1.05); }
+  100% { transform: translateX(-50%) rotate(0deg) scaleY(1); }
 }
 
 .wedge-poster {
@@ -2570,3 +2648,9 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   color: var(--danger);
   animation: hs-sudden-death-text 1s ease-in-out infinite;
 }
+
+
+
+
+/* ---------- NUEVA FUENTE ---------- */
+.font-arcade { font-family: "Rubik Mono One", var(--font-comic); letter-spacing: 0.5px; }
