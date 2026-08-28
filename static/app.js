@@ -566,7 +566,7 @@ function preloadSfx() {
   });
 }
 
-function playSfx(key, volume, loop) {
+function playSfx(key, volume, loop, playbackRate) {
   if (!soundEnabled) return false;
   const buffer = sfxBuffers[key];
   if (!buffer) return false;
@@ -575,6 +575,7 @@ function playSfx(key, volume, loop) {
   const gain = ctx.createGain();
   src.buffer = buffer;
   if (loop) src.loop = true;
+  if (playbackRate) src.playbackRate.value = playbackRate;
   gain.gain.value = volume != null ? volume : 0.6;
   src.connect(gain).connect(ctx.destination);
   src.start(0);
@@ -619,12 +620,12 @@ function playSynthDrumrollHit() {
   osc.stop(ctx.currentTime + 0.45);
 }
 
-function playLetterBlip() {
+function playLetterBlip(pitchMult) {
   if (!soundEnabled) return;
   const ctx = getAudioCtx();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  const freq = 480 + Math.random() * 500;
+  const freq = (480 + Math.random() * 500) * (pitchMult || 1);
   osc.type = "square";
   osc.frequency.setValueAtTime(freq, ctx.currentTime);
   osc.frequency.exponentialRampToValueAtTime(freq * 1.8, ctx.currentTime + 0.05);
@@ -935,20 +936,44 @@ function finishSpin(winner) {
   }).then(() => fetchHistory());
 }
 
+// Estilos de entrada que se van sorteando letra a letra (la primera
+// siempre usa el flip clásico, la ÚLTIMA siempre usa "punch", el
+// remate grandote). Así cada tirada se ve un poco distinta y no es
+// siempre el mismo flip repetido.
+const LETTER_REVEAL_STYLES = ["flip", "drop", "spin", "shake", "zoom"];
+
 function revealWinnerName(name, onDone) {
   const container = document.getElementById("winnerName");
   container.innerHTML = "";
+  container.classList.remove("wn-climax");
+  container.style.setProperty("--wn-progress", "0");
   const chars = name.split("");
   const total = chars.length;
   let i = 0;
+  let lastStyle = null;
 
-  // Ritmo de suspenso: arranca lento, toma velocidad normal en el
-  // medio, y frena fuerte en las últimas letras para el remate.
+  // Ritmo de suspenso: arranca lento (para que se note que algo está
+  // por pasar), toma velocidad y energía en el medio, y justo ANTES
+  // de la última letra hace una pausa larga y silenciosa -el clásico
+  // "y el ganador es..."- antes de soltar el golpe final.
   function delayForNext(idx) {
     const remaining = total - idx;
-    if (idx < 2) return 260;
-    if (remaining <= 2) return 380;
-    return 160;
+    if (idx === 0) return 320;
+    if (idx < 3) return 250;
+    if (remaining === 1) return 950; // la pausa antes del remate
+    if (remaining <= 3) return 360;
+    return 120 + Math.round(Math.random() * 60);
+  }
+
+  function pickStyle() {
+    let style = LETTER_REVEAL_STYLES[Math.floor(Math.random() * LETTER_REVEAL_STYLES.length)];
+    // Evita que se repita el mismo estilo dos veces seguidas, para
+    // que se note más la variedad.
+    if (style === lastStyle) {
+      style = LETTER_REVEAL_STYLES[(LETTER_REVEAL_STYLES.indexOf(style) + 1) % LETTER_REVEAL_STYLES.length];
+    }
+    lastStyle = style;
+    return style;
   }
 
   function revealNext() {
@@ -957,8 +982,21 @@ function revealWinnerName(name, onDone) {
       return;
     }
     const ch = chars[i];
+    const isFirst = i === 0;
+    const isLast = i === total - 1;
+    const progress = total <= 1 ? 1 : i / (total - 1);
+    container.style.setProperty("--wn-progress", progress.toFixed(3));
+
     const tile = document.createElement("span");
     tile.className = "flip-letter";
+    const style = isFirst ? "flip" : isLast ? "punch" : pickStyle();
+    tile.classList.add(`style-${style}`);
+    if (isLast) tile.classList.add("style-climax");
+
+    const glow = document.createElement("span");
+    glow.className = "flip-letter-glow";
+    tile.appendChild(glow);
+
     const inner = document.createElement("span");
     inner.className = "flip-letter-inner";
     inner.textContent = ch === " " ? "\u00A0" : ch;
@@ -966,9 +1004,26 @@ function revealWinnerName(name, onDone) {
     container.appendChild(tile);
     void tile.offsetWidth;
     tile.classList.add("flip-in");
+
     if (ch !== " ") {
-      if (!playSfx("letterBlip", 0.4)) playLetterBlip();
+      // El tono va subiendo a medida que se acerca el final, y la
+      // última letra suena más fuerte y más aguda: el "remate".
+      const pitch = 0.85 + progress * 0.55;
+      const finalPitch = pitch * 1.2;
+      if (!playSfx("letterBlip", isLast ? 0.55 : 0.4, false, isLast ? finalPitch : pitch)) {
+        playLetterBlip(isLast ? finalPitch : pitch);
+      }
     }
+
+    if (isLast) {
+      container.classList.add("wn-climax");
+      const modalCard = document.querySelector("#winnerModal .modal-card");
+      if (modalCard) {
+        modalCard.classList.add("modal-shake");
+        setTimeout(() => modalCard.classList.remove("modal-shake"), 450);
+      }
+    }
+
     i++;
     setTimeout(revealNext, delayForNext(i));
   }
