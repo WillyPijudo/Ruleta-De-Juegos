@@ -54,9 +54,6 @@
 
     <section class="wheel-stage">
       <div class="wheel-wrap" id="wheelWrap">
-        <div class="desafiar-drop hidden" id="desafiarDrop">
-          <button class="btn btn-duel desafiar-btn" id="desafiarBtn" type="button">⚔️ DESAFIAR</button>
-        </div>
         <button class="ronaldinho-fab" id="ronaldinhoModeBtn" type="button" title="Modo PES" aria-label="Modo PES">
           <img src="/static/img/ronaldinho-bailando.png" alt="" class="ronaldinho-fab-img" width="46" height="46">
         </button>        
@@ -923,6 +920,14 @@
   </div>
 
   <button class="pes-secret-btn" id="pesSecretBtn" type="button" title="???">👁</button>
+
+  <!-- Cae acá adentro ahora, como un meteorito sobre la propia ventana -->
+  <div class="desafiar-drop hidden" id="desafiarDrop">
+    <span class="desafiar-meteor-trail" aria-hidden="true"></span>
+    <button class="btn btn-duel desafiar-btn" id="desafiarBtn" type="button">⚔️ DESAFIAR</button>
+    <span class="desafiar-impact-mark" id="desafiarImpactMark" aria-hidden="true"></span>
+  </div>
+</div>
 </div>
 
 <!-- Modal código secreto -->
@@ -941,6 +946,34 @@
       <span class="konami-key"></span>
     </div>
     <p class="konami-hint">🔒 Un codigo que solo el Goat puede lograr.</p>
+  </div>
+</div>
+
+<!-- Ventana de confirmación del Desafío: estilo cartoon/Windows 98 -->
+<div class="retro-modal-overlay hidden" id="desafioConfirmOverlay">
+  <div class="retro-window" id="desafioConfirmWindow" role="dialog" aria-modal="true" aria-labelledby="desafioConfirmTitle">
+    <div class="retro-window-titlebar">
+      <span class="retro-window-title" id="desafioConfirmTitle">⚠ desafio.exe</span>
+      <button class="retro-window-close" id="desafioConfirmX" type="button" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="retro-window-body">
+      <div class="retro-fire-bg" aria-hidden="true">
+        <span class="retro-flame f1"></span>
+        <span class="retro-flame f2"></span>
+        <span class="retro-flame f3"></span>
+        <span class="retro-flame f4"></span>
+        <span class="retro-flame f5"></span>
+        <span class="retro-flame f6"></span>
+      </div>
+      <div class="retro-window-content">
+        <div class="retro-icon">☠️</div>
+        <p class="retro-window-text">¿Seguro que aceptás<br>las consecuencias?</p>
+        <div class="retro-window-actions">
+          <button class="retro-btn retro-btn-yes" id="desafioConfirmYes" type="button">Sí</button>
+          <button class="retro-btn retro-btn-no" id="desafioConfirmNo" type="button">No</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
