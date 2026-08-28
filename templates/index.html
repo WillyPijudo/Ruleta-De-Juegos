@@ -888,11 +888,11 @@
 <div id="toast" class="toast hidden"></div>
 <div id="confettiLayer" class="confetti-layer"></div>
 
-<!-- Panel "¿Quién juega con Mateo?" -->
+<!-- Panel Ruleta Secreta -->
 <div class="pes-panel hidden" id="pesModeSelect">
   <button class="pes-panel-close" id="pesPanelClose" type="button" aria-label="Cerrar">✕</button>
   <img src="/static/img/ronaldinho-bailando.png" alt="" class="pes-panel-ronaldinho" onerror="this.remove()">
-  <h2 class="pes-panel-title">¿QUIÉN JUEGA CON MATEO?</h2>
+  <h2 class="pes-panel-title secret-title">🕵️‍♂️ RULETA SECRETA</h2>
 
   <div class="pes-wheel-stage" id="pesWheelStage">
     <div class="pes-wheel-lights" id="pesWheelLights"></div>
@@ -912,14 +912,14 @@
     <h3 id="pesResultName" class="font-arcade"></h3>
   </div>
 
-  <button class="pes-customize-btn" id="pesCustomizeBtn" type="button">✏️ Personalizar nombres</button>
+  <button class="pes-customize-btn" id="pesCustomizeBtn" type="button">✏️ Editar palabras</button>
   <div class="pes-customize-box hidden" id="pesCustomizeBox">
     <div class="pes-name-chips" id="pesNameChips"></div>
     <div class="pes-name-add-row">
-      <input type="text" id="pesNameNew" class="pes-name-input" placeholder="Agregar nombre..." maxlength="14">
+      <input type="text" id="pesNameNew" class="pes-name-input" placeholder="Agregar palabra o nombre..." maxlength="18">
       <button class="btn btn-ghost btn-small" id="pesNameAddBtn" type="button">+ Agregar</button>
     </div>
-    <p class="pes-name-hint">Mínimo 2 nombres en la rueda. Click en la ✕ de un nombre para sacarlo.</p>
+    <p class="pes-name-hint">Podés borrar todo y poner lo que quieras. Necesitás al menos 2 cargadas para girar.</p>
   </div>
 
   <button class="pes-secret-btn" id="pesSecretBtn" type="button" title="???">👁</button>
@@ -940,7 +940,7 @@
       <span class="konami-key">◀</span>
       <span class="konami-key">▶</span>
     </div>
-    <p class="konami-hint">↑ ↑ ↓ ↓ ← → ← →</p>
+    <p class="konami-hint">🔒 Un codigo que solo el Goat puede lograr.</p>
   </div>
 </div>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
