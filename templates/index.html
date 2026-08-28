@@ -130,6 +130,17 @@
     <div class="modal-cover-wrap" id="winnerCoverWrap"></div>
     <h3 id="winnerName" class="font-arcade"></h3>
     <p class="winner-message" id="winnerMessage"></p>
+
+    <div class="loser-corner hidden" id="loserCorner">
+      <span class="loser-stamp">PERDEDOR DE LA NOCHE</span>
+      <div class="loser-window"></div>
+      <div class="loser-scene">
+        <img src="/static/img/silla-del-perdedor.png" alt="" class="loser-chair" onerror="this.remove()">
+        <img src="/static/img/payaso-perdedor.png" alt="" class="loser-clown" onerror="this.remove()">
+      </div>
+      <p class="loser-caption">🤡 <span id="loserName">-</span> se banca la vista desde la silla del perdedor</p>
+    </div>
+
     <div class="modal-actions">
       <button id="duelChallengeBtn" class="btn btn-duel btn-small" type="button">⚔️ Desafiar al ganador</button>
     </div>
