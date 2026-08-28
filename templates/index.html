@@ -6,7 +6,7 @@
 <title>Ruleta de Juegos</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Luckiest+Guy&family=Permanent+Marker&family=Fredoka:wght@500;600;700&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Luckiest+Guy&family=Permanent+Marker&family=Fredoka:wght@500;600;700&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&&family=Rubik+Mono+Onedisplay=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -31,8 +31,10 @@
     <section class="wheel-stage">
       <div class="wheel-wrap" id="wheelWrap">
         <div class="lights" id="lights"></div>
+        <div class="wheel-trail wheel-trail-2" id="wheelTrail2"></div>
+        <div class="wheel-trail wheel-trail-1" id="wheelTrail1"></div>
         <div class="wheel" id="wheel"></div>
-        <div class="pointer"></div>
+        <div class="pointer" id="wheelPointer"></div>
         <div class="wheel-hub">
           <button id="spinBtn" class="spin-btn" type="button" disabled>GIRAR</button>
         </div>
