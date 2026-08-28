@@ -492,6 +492,7 @@ function setupPlayerSelect() {
   const pills = document.querySelectorAll(".player-pill");
   pills.forEach((pill) => {
     pill.addEventListener("click", () => {
+      busPlayClick();
       pills.forEach((p) => p.classList.remove("active"));
       pill.classList.add("active");
       const key = pill.dataset.player;
@@ -609,6 +610,7 @@ const SFX_FILES = {
   drumroll: "/static/audio/drumroll.wav",
   letterBlip: "/static/audio/letter-blip.wav",
   sadTrumpet: "/static/audio/sad-trumpet.wav",
+  clickMouse: "/static/audio/clickmouse.mp3",
 };
 
 function preloadSfx() {
@@ -3115,6 +3117,15 @@ function busPlaySound(path, volume) {
     player.play().catch(() => {});
   } catch (e) {
     /* no rompe el juego si el navegador bloquea el audio */
+  }
+}
+
+// Sonido de click de mouse, para botones puntuales (no todos, así no
+// satura). Usa el buffer precargado (playSfx) para que suene al toque,
+// sin el delay de crear un Audio() nuevo cada vez.
+function busPlayClick() {
+  if (!playSfx("clickMouse", 0.35)) {
+    busPlaySound("/static/audio/clickmouse.mp3", 0.35);
   }
 }
 
@@ -7752,6 +7763,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   desafiarBtn?.addEventListener("click", () => {
+    busPlayClick();
     document.getElementById("desafioConfirmOverlay")?.classList.remove("hidden");
   });
 
@@ -7761,8 +7773,12 @@ document.addEventListener("DOMContentLoaded", () => {
     desafioConfirmOverlay?.classList.add("hidden");
   }
   document.getElementById("desafioConfirmX")?.addEventListener("click", closeDesafioConfirm);
-  document.getElementById("desafioConfirmNo")?.addEventListener("click", closeDesafioConfirm);
+  document.getElementById("desafioConfirmNo")?.addEventListener("click", () => {
+    busPlayClick();
+    closeDesafioConfirm();
+  });
   document.getElementById("desafioConfirmYes")?.addEventListener("click", () => {
+    busPlayClick();
     closeDesafioConfirm();
     pesModeActive = false;
     exitPesMode();      // cerramos la ruleta secreta detrás
