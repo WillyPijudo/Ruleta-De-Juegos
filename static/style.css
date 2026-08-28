@@ -3206,3 +3206,51 @@ body.cursor-fx-off .mouse-spotlight { opacity: 0; }
 @media (max-width: 720px) {
   .dice-charm { display: none; } /* en mobile molesta más de lo que suma */
 }
+
+
+
+/* ---- Estuche 3D del ganador (tapa + lomo + brillo plástico) ---- */
+.poster-3d-stage { display: flex; justify-content: center; perspective: 900px; }
+.poster-3d {
+  position: relative;
+  width: 170px; height: 255px;
+  transform-style: preserve-3d;
+  transition: transform 0.15s ease-out;
+  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+}
+.poster-3d.poster-3d-lying {
+  transform: rotateZ(90deg) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+}
+.modal-cover-wrap .poster-3d-front {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  transform: translateZ(8px);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.55), 0 0 0 4px rgba(255,62,127,0.25);
+}
+.poster-3d-spine {
+  position: absolute; top: 0; right: 0;
+  width: 16px; height: 100%;
+  background: linear-gradient(180deg, #201824, #0d0910 60%, #050308);
+  border-radius: 0 10px 10px 0;
+  transform-origin: right center;
+  transform: rotateY(90deg) translateZ(8px);
+  box-shadow: inset 0 0 6px rgba(0,0,0,0.6);
+}
+.poster-3d-top {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 16px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0.06));
+  transform-origin: top center;
+  transform: rotateX(-90deg) translateZ(8px);
+  border-radius: 10px 10px 0 0;
+}
+.poster-3d-shine {
+  position: absolute; inset: 0;
+  background: linear-gradient(115deg, rgba(255,255,255,0.4), transparent 45%);
+  opacity: 0.5;
+  transform: translateZ(9px);
+  border-radius: 10px;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+}
