@@ -5297,7 +5297,15 @@ const HS_BOOT_VISUAL_SCALE = 1.15;  // (antes 1.7, ahí estaba el problema real)
 // silueta, y no tocaba el piso (con HS_HEAD_OFFSET=46 y ángulo de reposo
 // 2.0rad, el pie quedaba ~21px flotando arriba del pasto). 44 es justo lo
 // necesario para que el pie asome de la cabeza Y casi toque el piso.
-const HS_LEG_LEN = 44;
+// FIX "el botín está mal hecho/no se ve": el problema real no era el dibujo
+// del botín sino su POSICIÓN en reposo. Con ángulo 2.0rad quedaba casi todo
+// detrás/debajo del mentón (mayormente tapado por la cabeza, que se dibuja
+// encima) - solo asomaba una punta chiquita. Bajado a 1.72rad: ahora cuelga
+// casi derecho hacia abajo, centrado bajo la cabeza, bien visible en vez de
+// escondido hacia atrás. Subido también HS_LEG_LEN a 46 (igual a
+// HS_HEAD_OFFSET) para que con este ángulo más vertical siga tocando el
+// piso justo, como antes.
+const HS_LEG_LEN = 46;
 // FIX "el botín se va al carajo lejos de la cabeza al patear": 112 era casi
 // el TRIPLE del radio de la cabeza (36) - con la pierna tan larga, apenas
 // rotaba un poco ya se veía como si el pie saliera disparado lejos del
@@ -5310,7 +5318,7 @@ const HS_LEG_LEN_KICK = 74;
 
 // Arco de ~129°: arranca abajo/atrás tocando el piso (reposo) y termina
 // bien ADELANTE de la cabeza y un poco por arriba del centro.
-const HS_BOOT_REST_ANGLE = 2.0;
+const HS_BOOT_REST_ANGLE = 1.72;
 const HS_BOOT_MAX_ANGLE = 0.12; // (antes -0.25, que quedaba ARRIBA de la cabeza) ahora el pique a fondo se queda siempre por debajo del centro de la cabeza
 const HS_LEG_RADIUS = 24;
 // FIX BUG PRINCIPAL ("botines despegados/mal posicionados"): el dibujo del
@@ -6195,14 +6203,25 @@ function hsResolveCollisions(now) {
         // cooldown, el cabezazo pasa a ser un choque pasivo (pierde energía
         // de verdad) en vez de repetir el golpe completo.
         const onHeadCooldown = p.headCoolUntil && now < p.headCoolUntil;
+        // FIX "sigue rebotando cabeza-cabeza-cabeza a máxima velocidad":
+        // el cooldown (arriba) ya evita que UN MISMO jugador reinyecte
+        // impulso frame tras frame, pero con dos cabezas muy cerca, cada
+        // una individualmente sí podía devolver casi TODA la velocidad de
+        // la otra (hasta 1.6x el HS_HEAD_POWER base) - eso seguía dando un
+        // peloteo rápido de pared a pared aunque cada cabeza solo tocara
+        // una vez por cooldown. Bajado el techo a 1.15x (ya no amplifica
+        // por encima de lo que traía) y el cooldown de 180 a 240ms, así
+        // cada cabezazo real pierde algo de energía neta en vez de
+        // conservarla casi toda - el intercambio se apaga solo en unos
+        // pocos rebotes en vez de mantenerse indefinidamente.
         const power = onHeadCooldown
-          ? Math.min(speedIn * 0.35, HS_HEAD_POWER * 0.6)
-          : Math.min(Math.max(incoming * 0.82, 90), HS_HEAD_POWER * 1.6);
+          ? Math.min(speedIn * 0.3, HS_HEAD_POWER * 0.5)
+          : Math.min(Math.max(incoming * 0.7, 90), HS_HEAD_POWER * 1.15);
         vxSum += nx * power + p.vx * 0.5;
         vySum += ny * power - 60;
         hits++;
         applied = true;
-        if (!onHeadCooldown) p.headCoolUntil = now + 180;
+        if (!onHeadCooldown) p.headCoolUntil = now + 240;
       }
     }
 
@@ -6529,12 +6548,20 @@ function hsDrawField() {
   for(let i=0; i<40; i++) { ctx.fillRect(Math.random() * HS_CANVAS_W, HS_PITCH_Y - 100 + Math.random() * 90, 3, 3); }
 
   // Carteles LED
+  // FIX "el botín se ve mal / no se ve": este cartel vivía pegado al piso
+  // (HS_PITCH_Y-18 a HS_PITCH_Y), justo en la franja vertical donde cuelgan
+  // las piernas y botines de los jugadores (el botín llega a colgar hasta
+  // ~10px del piso). Como el botín es casi todo negro y el cartel también,
+  // se camuflaban - el botín no estaba mal dibujado, estaba invisible
+  // contra el fondo. Ahora el cartel va arriba, pegado al borde superior de
+  // la tribuna, lejos de donde se mueven cabezas/piernas/botines.
+  const ledY = HS_PITCH_Y - 100;
   ctx.fillStyle = "#000";
-  ctx.fillRect(0, HS_PITCH_Y - 18, HS_CANVAS_W, 18);
+  ctx.fillRect(0, ledY, HS_CANVAS_W, 18);
   ctx.fillStyle = "#f5cd76";
   ctx.font = "bold 12px 'JetBrains Mono', monospace";
   ctx.textAlign = "center";
-  for(let i=0; i<8; i++) { ctx.fillText("RULETA JUEGOS", i*140 + 70, HS_PITCH_Y - 5); }
+  for(let i=0; i<8; i++) { ctx.fillText("RULETA JUEGOS", i*140 + 70, ledY + 13); }
 
   // REDISEÑO CANCHA: antes las franjas de pasto eran rectángulos verticales
   // rectos (sin sensación de profundidad) y la línea/círculo del medio
@@ -6797,11 +6824,18 @@ function hsDrawBoot(ctx, p, bootPose, color, dark) {
   body.closePath();
 
   const bodyShade = ctx.createLinearGradient(-13, -15, 18, 10);
-  bodyShade.addColorStop(0, "#454550");
-  bodyShade.addColorStop(0.55, "#232329");
-  bodyShade.addColorStop(1, "#0f0f12");
+  bodyShade.addColorStop(0, "#6a6c78"); // (antes #454550) más claro: contraste garantizado contra fondos oscuros
+  bodyShade.addColorStop(0.55, "#37373f"); // (antes #232329)
+  bodyShade.addColorStop(1, "#18181d"); // (antes #0f0f12)
   ctx.fillStyle = bodyShade;
   ctx.fill(body);
+  // Contorno de luz fino: dibuja el borde SIEMPRE legible aunque el fondo
+  // detrás sea igual de oscuro que el botín (antes solo tenía un contorno
+  // #0a0a0c casi negro, que se fundía con fondos oscuros como el cartel).
+  ctx.strokeStyle = "rgba(255,255,255,0.45)";
+  ctx.lineWidth = 1.1 / HS_BOOT_VISUAL_SCALE;
+  ctx.lineJoin = "round";
+  ctx.stroke(body);
   ctx.strokeStyle = "#0a0a0c";
   ctx.lineWidth = 1.6 / HS_BOOT_VISUAL_SCALE;
   ctx.lineJoin = "round";
