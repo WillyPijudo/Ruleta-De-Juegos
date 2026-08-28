@@ -128,7 +128,12 @@
   <div class="modal-card">
     <p class="modal-eyebrow">¡Tenemos ganador!</p>
     <div class="modal-cover-wrap" id="winnerCoverWrap"></div>
-    <h3 id="winnerName" class="font-arcade"></h3>
+    <div class="winner-name-stage" id="winnerNameStage">
+      <span class="wn-beam wn-beam-a"></span>
+      <span class="wn-beam wn-beam-b"></span>
+      <span class="wn-flash"></span>
+      <h3 id="winnerName" class="font-arcade"></h3>
+    </div>
     <p class="winner-game-label" id="winnerGameLabel"></p>
     <p class="winner-message" id="winnerMessage"></p>
 
@@ -137,7 +142,15 @@
       <div class="loser-window"></div>
       <div class="loser-scene">
         <img src="/static/img/silla-del-perdedor.png" alt="" class="loser-chair" onerror="this.remove()">
-        <img src="/static/img/payaso-perdedor.png" alt="" class="loser-clown" onerror="this.remove()">
+        <div class="loser-clown-wrap">
+          <img src="/static/img/payaso-perdedor.png" alt="" class="loser-clown" onerror="this.remove()">
+          <span class="loser-tear"></span>
+          <div class="loser-raincloud">
+            <span class="raindrop"></span>
+            <span class="raindrop"></span>
+            <span class="raindrop"></span>
+          </div>
+        </div>
       </div>
       <p class="loser-caption">🤡 <span id="loserName">-</span> se banca la vista desde la silla del perdedor</p>
     </div>
