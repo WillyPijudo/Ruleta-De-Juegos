@@ -1594,7 +1594,15 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 }
 
 
-/* ===================== La Velada (boxeo) ===================== */
+/* ===================== Estilos compartidos de modal/HUD de duelo =====================
+   (antes era "La Velada (boxeo)" - se borró el minijuego de pelea entero,
+   PERO estas clases NO son solo de boxeo: Ride the Bus, Gambeta y
+   Cabezones reusan las mismas fight-modal/fight-shell/fight-hud/etc para
+   no repetir CSS. Por eso se dejan estas reglas y se sacan solo las que
+   eran 100% exclusivas del ring (fight-arena, fight-fighter, las
+   animaciones de golpe/esquiva, el choque de puños, las barras de
+   vida/energía y el selector de peleador). Si tocás esto, fijate que no
+   rompa el modal de Bus/Gambeta/Cabezones. */
 .fight-modal {
   position: fixed;
   inset: 0;
@@ -1632,7 +1640,6 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   flex-shrink: 0;
 }
 .fight-brand { display: flex; align-items: center; gap: 10px; }
-.fight-brand-logo { height: 34px; max-width: 220px; object-fit: contain; }
 .fight-brand-fallback {
   font-family: var(--font-comic);
   font-size: 16px;
@@ -1657,22 +1664,12 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   text-align: center;
 }
 
-.fight-controls-legend {
-  display: flex;
-  justify-content: center;
-  gap: 36px;
-  margin: 16px 0 18px;
-  flex-wrap: wrap;
-}
-.fight-controls-col { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-
 .fight-pick-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 18px;
   margin: 20px 0;
 }
-.fight-pick-card,
 .hs-pick-card {
   background: var(--bg-alt);
   border: 2px solid var(--border-bright);
@@ -1686,16 +1683,15 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   color: var(--text);
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
-.fight-pick-card:hover,
 .hs-pick-card:hover {
   transform: translateY(-4px) scale(1.02);
   border-color: var(--pink);
   box-shadow: 0 10px 30px rgba(255, 62, 127, 0.3);
 }
-.fight-pick-card img, .hs-pick-card img { width: 100%; max-width: 200px; aspect-ratio: 3/4; object-fit: cover; border-radius: 10px; }
-.fight-pick-card span, .hs-pick-card span { font-family: var(--font-comic); font-size: 18px; color: var(--gold-bright); }
+.hs-pick-card img { width: 100%; max-width: 200px; aspect-ratio: 3/4; object-fit: cover; border-radius: 10px; }
+.hs-pick-card span { font-family: var(--font-comic); font-size: 18px; color: var(--gold-bright); }
 
-/* --- El combate --- */
+/* --- HUD compartido (marcador arriba del juego) --- */
 .fight-hud {
   display: flex;
   align-items: center;
@@ -1714,37 +1710,6 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
 
-/* Barras con "fantasma": el daño se ve como una mordida dorada que
-   tarda un toque en asentarse, como en los juegos de pelea de toda la vida. */
-.fight-bar {
-  position: relative;
-  width: 100%;
-  height: 13px;
-  border-radius: 999px;
-  background: var(--bg-deep);
-  border: 1px solid var(--border);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-}
-.fight-hud-side-right .fight-bar { direction: rtl; }
-.fight-bar-fill { position: absolute; inset: 0; height: 100%; width: 100%; }
-.fight-bar-main { transition: width 0.2s ease; z-index: 2; }
-.fight-bar-ghost { transition: width 0.6s ease 0.35s; z-index: 1; }
-
-.fight-bar-health .fight-bar-main { background: linear-gradient(180deg, #ff8fa8, var(--danger) 55%, #a13246); box-shadow: 0 0 10px rgba(255, 62, 127, 0.4); }
-.fight-bar-health .fight-bar-ghost { background: #f5cd76; }
-
-.fight-bar-energy {
-  height: 9px;
-  background-image: repeating-linear-gradient(90deg, transparent 0 calc(20% - 2px), rgba(0, 0, 0, 0.55) calc(20% - 2px) 20%);
-}
-.fight-bar-energy .fight-bar-main {
-  background: linear-gradient(180deg, #7fe3d8, var(--teal-bright) 55%, var(--teal));
-  box-shadow: 0 0 8px rgba(47, 143, 176, 0.5);
-}
-.fight-bar-energy.energy-low .fight-bar-main { animation: energy-pulse 0.7s ease-in-out infinite; }
-@keyframes energy-pulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.6); } }
-
 .fight-hud-center { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; }
 .fight-round { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .fight-timer {
@@ -1752,120 +1717,6 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   font-size: 26px;
   color: var(--gold-bright);
   text-shadow: 0 0 10px rgba(245, 205, 118, 0.4);
-}
-
-.fight-arena {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  align-items: stretch;
-  justify-content: center;
-  gap: 0;
-  padding: 10px 24px 0;
-  position: relative;
-  overflow: hidden;
-  border-radius: 0 0 18px 18px;
-  background:
-    radial-gradient(65% 60% at 50% 28%, rgba(255, 255, 255, 0.06), transparent 70%),
-    linear-gradient(180deg, rgba(20, 12, 22, 0) 0%, rgba(59, 15, 29, 0.35) 68%, rgba(12, 6, 12, 0.95) 100%);
-}
-/* sogas del ring */
-.fight-arena::before {
-  content: "";
-  position: absolute;
-  left: 4%; right: 4%; top: 6%;
-  height: 0;
-  border-top: 3px solid rgba(217, 169, 78, 0.45);
-  box-shadow: 0 34px 0 -1px rgba(217, 169, 78, 0.3), 0 66px 0 -1px rgba(217, 169, 78, 0.2);
-}
-/* lona/borde del ring — esto es lo que tapa las piernas cortadas */
-.fight-arena::after {
-  content: "";
-  position: absolute;
-  left: 0; right: 0; bottom: 0; height: 24%;
-  background: linear-gradient(180deg, transparent, rgba(8, 4, 9, 0.97) 65%);
-  border-top: 2px solid rgba(217, 169, 78, 0.35);
-  pointer-events: none;
-}
-
-.fight-fighter {
-  flex: 1;
-  max-width: 300px;
-  min-height: 0;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  position: relative;
-  z-index: 1;
-}
-.fight-fighter-left { justify-content: flex-end; margin-right: -18px; }
-.fight-fighter-right { justify-content: flex-start; margin-left: -18px; }
-
-.fight-fighter img {
-  max-height: 100%;
-  max-width: 100%;
-  object-fit: contain;
-  filter: drop-shadow(0 14px 20px rgba(0, 0, 0, 0.5));
-  transform: scaleX(var(--facing, 1)) scale(var(--char-scale, 1));
-  transform-origin: bottom center;
-}
-
-/* Corrección de tamaño por personaje — tocá el número si hace falta.
-   No depende del lado que ocupe cada uno, es propio del personaje. */
-#fightLeftImg[data-fighter-id="momo"], #fightRightImg[data-fighter-id="momo"] { --char-scale: 1; }
-#fightLeftImg[data-fighter-id="viruzz"], #fightRightImg[data-fighter-id="viruzz"] { --char-scale: 0.86; }
-
-.fight-vs {
-  font-family: var(--font-comic);
-  font-size: 20px;
-  color: var(--text-muted);
-  flex-shrink: 0;
-  align-self: center;
-  z-index: 2;
-  text-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
-}
-
-/* Golpes / esquivas / hit / knockback — ahora un solo set para los dos
-   lados, compuesto con --facing así nunca "desespeja" al personaje. */
-.fight-fighter.fight-anim-punch img { animation: fight-punch 0.32s ease; }
-@keyframes fight-punch {
-  0%   { transform: scaleX(var(--facing, 1)) scale(var(--char-scale, 1)) translateX(0); }
-  45%  { transform: scaleX(var(--facing, 1)) scale(calc(var(--char-scale, 1) * 1.05)) translateX(calc(var(--facing, 1) * 26px)); }
-  100% { transform: scaleX(var(--facing, 1)) scale(var(--char-scale, 1)) translateX(0); }
-}
-
-.fight-fighter.fight-anim-dodge img { animation: fight-dodge 0.4s ease; }
-@keyframes fight-dodge {
-  0%   { transform: scaleX(var(--facing, 1)) scale(var(--char-scale, 1)) translateX(0) rotate(0deg); }
-  40%  { transform: scaleX(var(--facing, 1)) scale(var(--char-scale, 1)) translateX(calc(var(--facing, 1) * -16px)) rotate(calc(var(--facing, 1) * -6deg)); }
-  100% { transform: scaleX(var(--facing, 1)) scale(var(--char-scale, 1)) translateX(0) rotate(0deg); }
-}
-
-.fight-fighter.fight-anim-hit img {
-  animation: fight-hit 0.35s ease;
-  filter: drop-shadow(0 14px 20px rgba(0, 0, 0, 0.5)) brightness(1.6) saturate(0.3) drop-shadow(0 0 14px rgba(224, 90, 90, 0.8));
-}
-@keyframes fight-hit {
-  0%   { transform: scaleX(var(--facing, 1)) scale(var(--char-scale, 1)) translateX(0); }
-  30%  { transform: scaleX(var(--facing, 1)) scale(var(--char-scale, 1)) translateX(calc(var(--facing, 1) * 12px)) rotate(3deg); }
-  60%  { transform: scaleX(var(--facing, 1)) scale(var(--char-scale, 1)) translateX(calc(var(--facing, 1) * -7px)) rotate(-2deg); }
-  100% { transform: scaleX(var(--facing, 1)) scale(var(--char-scale, 1)) translateX(0) rotate(0deg); }
-}
-
-.fight-fighter.fight-anim-knockback img { animation: fight-knockback 0.5s cubic-bezier(0.2, 0.8, 0.3, 1); }
-@keyframes fight-knockback {
-  0%   { transform: scaleX(var(--facing, 1)) scale(var(--char-scale, 1)) translateX(0) rotate(0deg); }
-  25%  { transform: scaleX(var(--facing, 1)) scale(calc(var(--char-scale, 1) * 0.94)) translateX(calc(var(--facing, 1) * -34px)) rotate(calc(var(--facing, 1) * -10deg)); }
-  100% { transform: scaleX(var(--facing, 1)) scale(var(--char-scale, 1)) translateX(0) rotate(0deg); }
-}
-
-.fight-arena.fight-shake { animation: fight-arena-shake 0.35s ease; }
-@keyframes fight-arena-shake {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-6px); }
-  40% { transform: translateX(5px); }
-  60% { transform: translateX(-4px); }
-  80% { transform: translateX(3px); }
 }
 
 .fight-status {
@@ -1901,75 +1752,9 @@ input[type="text"]::placeholder { color: var(--text-muted); }
 }
 .fight-result-sub { color: var(--text-muted); margin: 0 0 8px; max-width: 420px; }
 
-/* ---------- Choque de golpes (estilo Budokai Tenkaichi 3) ---------- */
-.fight-clash {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  background: radial-gradient(circle at 50% 45%, rgba(217, 169, 78, 0.18), rgba(5, 2, 6, 0.75) 70%);
-  animation: clash-flash-in 0.15s ease;
-}
-.fight-clash.hidden { display: none; }
-@keyframes clash-flash-in { from { background-color: rgba(255, 255, 255, 0.85); } to { background-color: transparent; } }
-
-.fight-clash-spark {
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 64px;
-  animation: clash-spark-pulse 0.5s ease-in-out infinite;
-  filter: drop-shadow(0 0 20px rgba(255, 205, 100, 0.7));
-}
-@keyframes clash-spark-pulse {
-  0%, 100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); }
-  50% { transform: translate(-50%, -50%) scale(1.25) rotate(-8deg); }
-}
-
-.fight-clash-bar-wrap { display: flex; align-items: center; gap: 10px; width: min(80%, 520px); z-index: 1; }
-.fight-clash-fist { font-size: 30px; animation: clash-fist-shake 0.25s ease-in-out infinite; }
-.fight-clash-fist-right { animation-name: clash-fist-shake-r; }
-@keyframes clash-fist-shake { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
-@keyframes clash-fist-shake-r { 0%, 100% { transform: scaleX(-1) translateY(0); } 50% { transform: scaleX(-1) translateY(-4px); } }
-
-.fight-clash-track {
-  position: relative;
-  flex: 1;
-  height: 18px;
-  border-radius: 999px;
-  background: var(--bg-deep);
-  border: 1px solid var(--border-bright);
-  overflow: hidden;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
-}
-.fight-clash-fill {
-  position: absolute; inset: 0; left: 50%; width: 0%;
-  background: linear-gradient(90deg, var(--teal-bright), var(--gold-bright));
-  transition: left 0.08s linear, width 0.08s linear;
-}
-.fight-clash-mid { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px; background: var(--text); transform: translateX(-1px); }
-.fight-clash-label {
-  font-family: var(--font-comic);
-  font-size: 16px;
-  color: var(--gold-bright);
-  text-shadow: 0 0 12px rgba(245, 205, 118, 0.6);
-  animation: clash-label-shake 0.18s ease-in-out infinite;
-}
-@keyframes clash-label-shake { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
-
 @media (max-width: 720px) {
-  .fight-arena { padding: 6px 10px 0; }
-  .fight-fighter { max-width: 45%; }
-  .fight-fighter-left { margin-right: -8px; }
-  .fight-fighter-right { margin-left: -8px; }
   .fight-hud { padding: 10px 12px 4px; }
   .fight-timer { font-size: 20px; }
-  .fight-controls-legend { gap: 18px; }
-  .fight-clash-spark { font-size: 44px; }
 }
 
 
