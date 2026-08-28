@@ -951,6 +951,25 @@
 
 <!-- Ventana de confirmación del Desafío: estilo cartoon/Windows 98 -->
 <div class="retro-modal-overlay hidden" id="desafioConfirmOverlay">
+  <div class="desafio-confirm-row">
+
+  <!-- Momo, "ángel guardián" trolo, solo aparece cuando el que pierde es Lauty -->
+  <div class="momo-cine hidden" id="momoCine" aria-hidden="true">
+    <div class="momo-float">
+      <div class="momo-halo"></div>
+      <img src="/static/img/momo-angel.png" alt="" class="momo-img" id="momoImg" onerror="this.closest('.momo-cine').classList.add('hidden')">
+      <div class="momo-cloud" aria-hidden="true">
+        <span class="momo-cloud-puff c1"></span>
+        <span class="momo-cloud-puff c2"></span>
+        <span class="momo-cloud-puff c3"></span>
+        <span class="momo-cloud-puff c4"></span>
+        <span class="momo-cloud-puff c5"></span>
+      </div>
+      <div class="momo-banned-text" id="momoBannedText">BANEADO<br>POR TROLO</div>
+    </div>
+    <div class="momo-subtitle" id="momoSubtitle"></div>
+  </div>
+
   <div class="retro-window" id="desafioConfirmWindow" role="dialog" aria-modal="true" aria-labelledby="desafioConfirmTitle">
     <div class="retro-window-titlebar">
       <span class="retro-window-title" id="desafioConfirmTitle">⚠ desafio.exe</span>
@@ -974,6 +993,7 @@
         </div>
       </div>
     </div>
+  </div>
   </div>
 </div>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
