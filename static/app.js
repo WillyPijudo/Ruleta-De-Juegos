@@ -162,8 +162,8 @@ function build3DCoverStage(game) {
 
   const box = document.createElement("div");
   box.className = "poster-3d";
-  box.style.setProperty("--ry", "-22deg");
-  box.style.setProperty("--rx", "12deg");
+  box.style.setProperty("--ry", "24deg"); // Cambiado a positivo para mostrar el lomo
+  box.style.setProperty("--rx", "8deg");
 
   const front = posterInner(game); // reusa el .poster-frame de siempre
   front.classList.add("poster-3d-front");
@@ -7312,32 +7312,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
-// ---- Estuche 3D del ganador: rota con física suave según el mouse ----
+// ---- Estuche 3D del ganador: rotación interactiva con mouse ----
 (function initCoverTilt() {
   const wrap = document.getElementById("winnerCoverWrap");
   if (!wrap) return;
-  
   wrap.addEventListener("mousemove", (e) => {
     const box = wrap.querySelector(".poster-3d");
     if (!box) return;
     const rect = wrap.getBoundingClientRect();
     const px = (e.clientX - rect.left) / rect.width;
     const py = (e.clientY - rect.top) / rect.height;
-    
-    // Rango de giro natural (muestra el lomo o el canto sin romper la perspectiva)
-    const ry = (px - 0.5) * 55;
-    const rx = (0.5 - py) * 35;
-    
+    // Permite balancear la caja para inspeccionar el lomo o el canto
+    const ry = (px - 0.5) * 60 + 10;
+    const rx = (0.5 - py) * 35 + 4;
     box.style.setProperty("--ry", ry.toFixed(2) + "deg");
     box.style.setProperty("--rx", rx.toFixed(2) + "deg");
   });
-  
   wrap.addEventListener("mouseleave", () => {
     const box = wrap.querySelector(".poster-3d");
     if (box) {
-      // Ángulo de vitrina perfecto por defecto
-      box.style.setProperty("--ry", "-20deg");
-      box.style.setProperty("--rx", "10deg");
+      box.style.setProperty("--ry", "24deg");
+      box.style.setProperty("--rx", "8deg");
     }
   });
 })();
