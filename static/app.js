@@ -7328,31 +7328,97 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
-// ---- Estuche 3D del ganador: rotación interactiva con mouse ----
+// ---- Estuche 3D del ganador: rotación LIBRE con click+arrastre ----
+// Rehecho de cero: antes giraba solo con hover (sin click), con rango
+// fijo y sin inercia - se sentía "pegoteado"/errático. Ahora es drag de
+// verdad (como girar un objeto físico), con inercia al soltar, y ADEMÁS
+// simula una luz fija en el espacio: el brillo se desliza por la
+// superficie según el ángulo (no rota pegado a la tapa), cada cara se
+// oscurece/aclara según si mira hacia la luz o no, y la sombra de
+// contacto se angosta cuando ves la caja más "de canto".
 (function initCoverTilt() {
   const wrap = document.getElementById("winnerCoverWrap");
   if (!wrap) return;
-  wrap.addEventListener("mousemove", (e) => {
+
+  let rx = 8, ry = 24;   // ángulo actual
+  let vrx = 0, vry = 0;  // velocidad angular (inercia)
+  let dragging = false;
+  let lastX = 0, lastY = 0;
+  let inertiaRaf = null;
+
+  function applyAngles() {
     const box = wrap.querySelector(".poster-3d");
     if (!box) return;
-    const rect = wrap.getBoundingClientRect();
-    const px = (e.clientX - rect.left) / rect.width;
-    const py = (e.clientY - rect.top) / rect.height;
-    // Permite balancear la caja para inspeccionar el lomo o el canto
-    const ry = (px - 0.5) * 60 + 10;
-    const rx = (0.5 - py) * 35 + 4;
     box.style.setProperty("--ry", ry.toFixed(2) + "deg");
     box.style.setProperty("--rx", rx.toFixed(2) + "deg");
-  });
-  wrap.addEventListener("mouseleave", () => {
-    const box = wrap.querySelector(".poster-3d");
-    if (box) {
-      box.style.setProperty("--ry", "24deg");
-      box.style.setProperty("--rx", "8deg");
-    }
-  });
-})();
 
+    const ryRad = (ry * Math.PI) / 180;
+    const rxRad = (rx * Math.PI) / 180;
+
+    // Luz fija arriba-izquierda del espectador: el punto de brillo se
+    // corre por la superficie a medida que gira la caja.
+    box.style.setProperty("--shine-x", (50 - Math.sin(ryRad) * 55).toFixed(1) + "%");
+    box.style.setProperty("--shine-y", (40 - Math.sin(rxRad) * 35).toFixed(1) + "%");
+
+    // Sombra de contacto: se angosta cuando la caja se ve más de canto.
+    box.style.setProperty("--shadow-scale", (0.55 + 0.45 * Math.abs(Math.cos(ryRad))).toFixed(2));
+
+    // Sombreado barato por cara: cada panel se aclara/oscurece según
+    // qué tan de frente le pega la luz - da sensación de volumen real
+    // sin necesitar three.js ni ninguna librería.
+    const lightFront = Math.cos(ryRad); // 1 = tapa mirando de frente a la luz
+    box.style.setProperty("--face-front", (0.78 + 0.35 * Math.max(0, lightFront)).toFixed(2));
+    box.style.setProperty("--face-back", (0.78 + 0.35 * Math.max(0, -lightFront)).toFixed(2));
+    box.style.setProperty("--face-left", (0.7 + 0.5 * Math.max(0, Math.sin(ryRad))).toFixed(2));
+    box.style.setProperty("--face-right", (0.7 + 0.5 * Math.max(0, -Math.sin(ryRad))).toFixed(2));
+  }
+
+  function startDrag(x, y) {
+    dragging = true;
+    lastX = x; lastY = y;
+    vrx = 0; vry = 0;
+    if (inertiaRaf) cancelAnimationFrame(inertiaRaf);
+    wrap.classList.add("dragging");
+  }
+  function moveDrag(x, y) {
+    if (!dragging) return;
+    const dx = x - lastX, dy = y - lastY;
+    lastX = x; lastY = y;
+    vry = dx * 0.4;
+    vrx = -dy * 0.4;
+    ry += vry;
+    rx = Math.max(-70, Math.min(70, rx + vrx));
+    applyAngles();
+  }
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+    wrap.classList.remove("dragging");
+    // Sigue girando y se va frenando solo, como un objeto real soltado
+    // en movimiento - esto es lo que pediste de "rotar mejor" al soltar.
+    function spin() {
+      vry *= 0.94; vrx *= 0.94;
+      ry += vry;
+      rx = Math.max(-70, Math.min(70, rx + vrx));
+      applyAngles();
+      if (Math.abs(vry) > 0.05 || Math.abs(vrx) > 0.05) {
+        inertiaRaf = requestAnimationFrame(spin);
+      }
+    }
+    inertiaRaf = requestAnimationFrame(spin);
+  }
+
+  wrap.addEventListener("mousedown", (e) => { startDrag(e.clientX, e.clientY); e.preventDefault(); });
+  window.addEventListener("mousemove", (e) => moveDrag(e.clientX, e.clientY));
+  window.addEventListener("mouseup", endDrag);
+
+  // Soporte táctil, mismo gesto en celular.
+  wrap.addEventListener("touchstart", (e) => { const t = e.touches[0]; startDrag(t.clientX, t.clientY); }, { passive: true });
+  wrap.addEventListener("touchmove", (e) => { const t = e.touches[0]; moveDrag(t.clientX, t.clientY); }, { passive: true });
+  wrap.addEventListener("touchend", endDrag);
+
+  applyAngles();
+})();
 
 
 // ================== MODO PES (Ronaldinho) ==================
