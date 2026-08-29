@@ -152,32 +152,141 @@ function posterInner(game) {
 
 
 // ================== Estuche 3D real con Three.js (WebGL) ==================
-// La versión CSS anterior era una ilusión (planos con translateZ) - por
-// eso a ciertos ángulos se veía "de canto" como si desapareciera: no
-// había volumen real, era una lámina. Esto es geometría 3D de verdad
-// (una caja con 6 caras reales) con luces reales calculando el brillo
-// píxel por píxel - nunca se aplana ni desaparece, mires desde donde
-// mires. No usa ningún archivo .gltf: la caja se arma con código.
 let coverScene = null, coverCamera = null, coverRenderer = null, coverControls = null;
 let coverRenderLoopId = null;
+let coverDisc = null, coverDiscOut = false, coverDiscAnimId = null;
 
 function disposeCoverScene() {
   if (coverRenderLoopId) cancelAnimationFrame(coverRenderLoopId);
-  coverRenderLoopId = null;
+  if (coverDiscAnimId) cancelAnimationFrame(coverDiscAnimId);
+  coverRenderLoopId = coverDiscAnimId = null;
   if (coverRenderer) {
     coverRenderer.dispose();
     coverRenderer.domElement.remove();
   }
-  coverScene = coverCamera = coverRenderer = coverControls = null;
+  coverScene = coverCamera = coverRenderer = coverControls = coverDisc = null;
+  coverDiscOut = false;
+}
+
+// Compone la tapa frontal de verdad: tu portada de fondo + el marco real
+// de PS2 (logo, ícono de control, cartel de edad) encima, con la ventana
+// del medio transparente - por eso se llama "overlay".
+function buildFrontTexture(coverUrl, onReady) {
+  const CW = 332, CH = 480;
+  const canvas = document.createElement("canvas");
+  canvas.width = CW; canvas.height = CH;
+  const ctx = canvas.getContext("2d");
+  const coverImg = new Image();
+  coverImg.crossOrigin = "anonymous";
+  const overlayImg = new Image();
+  overlayImg.crossOrigin = "anonymous";
+  let loaded = 0;
+  function finish() {
+    loaded++;
+    if (loaded < 2) return;
+    if (coverImg.complete && coverImg.naturalWidth) {
+      const scale = Math.max(CW / coverImg.naturalWidth, CH / coverImg.naturalHeight);
+      const dw = coverImg.naturalWidth * scale, dh = coverImg.naturalHeight * scale;
+      ctx.drawImage(coverImg, (CW - dw) / 2, (CH - dh) / 2, dw, dh);
+    } else {
+      ctx.fillStyle = "#141018";
+      ctx.fillRect(0, 0, CW, CH);
+    }
+    ctx.drawImage(overlayImg, 0, 0, CW, CH);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    onReady(tex);
+  }
+  coverImg.onload = finish; coverImg.onerror = finish;
+  overlayImg.onload = finish; overlayImg.onerror = finish;
+  coverImg.src = coverUrl || "";
+  overlayImg.src = "/static/img/ps2-front-overlay.png";
+}
+
+// Lomo: plástico negro liso + la etiqueta vertical "PlayStation.2" real
+// pegada arriba (igual que en un estuche de verdad).
+function buildSpineTexture(onReady) {
+  const CW = 60, CH = 480;
+  const canvas = document.createElement("canvas");
+  canvas.width = CW; canvas.height = CH;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#0a0810";
+  ctx.fillRect(0, 0, CW, CH);
+  const label = new Image();
+  label.crossOrigin = "anonymous";
+  label.onload = () => {
+    const lw = CW * 0.84, lh = lw * (label.naturalHeight / label.naturalWidth);
+    ctx.drawImage(label, (CW - lw) / 2, 18, lw, lh);
+    onReady(new THREE.CanvasTexture(canvas));
+  };
+  label.onerror = () => onReady(new THREE.CanvasTexture(canvas));
+  label.src = "/static/img/ps2-spine-label.png";
+}
+
+// Cara "impresa" del disco: tu portada recortada en círculo, como la
+// etiqueta real de un DVD/CD quemado.
+function buildDiscLabelTexture(coverUrl, onReady) {
+  const S = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = S; canvas.height = S;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#e9e9ef";
+  ctx.beginPath(); ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2); ctx.fill();
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  function draw() {
+    if (img.complete && img.naturalWidth) {
+      ctx.save();
+      ctx.beginPath(); ctx.arc(S / 2, S / 2, S / 2 - 6, 0, Math.PI * 2); ctx.clip();
+      const scale = Math.max(S / img.naturalWidth, S / img.naturalHeight);
+      const dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
+      ctx.drawImage(img, (S - dw) / 2, (S - dh) / 2, dw, dh);
+      ctx.restore();
+    }
+    ctx.fillStyle = "#111";
+    ctx.beginPath(); ctx.arc(S / 2, S / 2, S * 0.07, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(S / 2, S / 2, S * 0.16, 0, Math.PI * 2); ctx.stroke();
+    onReady(new THREE.CanvasTexture(canvas));
+  }
+  img.onload = draw; img.onerror = draw;
+  img.src = coverUrl || "";
+}
+
+// Cara reflectante del disco: anillos concéntricos con el matiz rotando
+// (así se ve la difracción arcoíris de un CD real) + un brillo cruzado -
+// combinado con metalness/roughness bajo, da el efecto "de vidrio".
+function buildDiscShineTexture() {
+  const S = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = S; canvas.height = S;
+  const ctx = canvas.getContext("2d");
+  const cx = S / 2, cy = S / 2;
+  for (let r = S / 2; r > S * 0.08; r -= 2) {
+    const hue = (r * 3.2) % 360;
+    ctx.strokeStyle = `hsla(${hue}, 90%, 60%, 0.5)`;
+    ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+  }
+  const grad = ctx.createLinearGradient(0, 0, S, S);
+  grad.addColorStop(0, "rgba(255,255,255,0.55)");
+  grad.addColorStop(0.5, "rgba(255,255,255,0)");
+  grad.addColorStop(1, "rgba(255,255,255,0.35)");
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(cx, cy, S / 2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#050505";
+  ctx.beginPath(); ctx.arc(cx, cy, S * 0.07, 0, Math.PI * 2); ctx.fill();
+  return new THREE.CanvasTexture(canvas);
 }
 
 function build3DCoverStage(game) {
   const stage = document.createElement("div");
   stage.className = "poster-3d-stage";
+  disposeCoverScene();
 
-  disposeCoverScene(); // por si quedaba una escena vieja de un ganador anterior
-
-  const WIDTH = 210, HEIGHT = 300;
+  // Cancha más grande + cámara más lejos: antes se veía "pegado" a la
+  // pantalla, ahora entra todo con margen y se aprecia bien.
+  const WIDTH = 260, HEIGHT = 380;
   coverRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   coverRenderer.setSize(WIDTH, HEIGHT);
   coverRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -187,68 +296,103 @@ function build3DCoverStage(game) {
   stage.appendChild(coverRenderer.domElement);
 
   coverScene = new THREE.Scene();
-  coverCamera = new THREE.PerspectiveCamera(30, WIDTH / HEIGHT, 0.1, 100);
-  coverCamera.position.set(0, 0.35, 6.4);
+  coverCamera = new THREE.PerspectiveCamera(28, WIDTH / HEIGHT, 0.1, 100);
+  coverCamera.position.set(0, 0.4, 9.5); // zoom out real (antes 6.4)
 
-  // Luz ambiente pareja + una direccional "clave" que arma el brillo
-  // plástico + una de relleno tenue del otro lado para que no quede negro.
   coverScene.add(new THREE.AmbientLight(0xffffff, 0.55));
-  const keyLight = new THREE.DirectionalLight(0xffffff, 1.15);
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1.25);
   keyLight.position.set(3, 4, 5);
   keyLight.castShadow = true;
   coverScene.add(keyLight);
-  const fillLight = new THREE.DirectionalLight(0x88aaff, 0.35);
+  const fillLight = new THREE.DirectionalLight(0x88aaff, 0.4);
   fillLight.position.set(-4, -1, 3);
   coverScene.add(fillLight);
+  const rimLight = new THREE.PointLight(0xffffff, 0.6, 20);
+  rimLight.position.set(-2, 2, -4);
+  coverScene.add(rimLight);
 
-  // Proporción real de un estuche - con GROSOR de verdad, no una lámina.
   const caseW = 2.5, caseH = 3.5, caseD = 0.42;
   const geo = new THREE.BoxGeometry(caseW, caseH, caseD);
-  const plasticMat = () => new THREE.MeshStandardMaterial({ color: 0x0d0b12, roughness: 0.35, metalness: 0.15 });
-  // Orden de BoxGeometry: [+X canto derecho, -X lomo izq., +Y arriba, -Y abajo, +Z FRENTE, -Z atrás]
+  // MeshPhysicalMaterial con "clearcoat" simula la lámina brillante de
+  // plástico transparente real de un estuche - reacciona a las luces
+  // con un brillo especular marcado, no un plástico mate genérico.
+  const plasticMat = () => new THREE.MeshPhysicalMaterial({
+    color: 0x0a0810, roughness: 0.4, metalness: 0.05,
+    clearcoat: 0.65, clearcoatRoughness: 0.22,
+  });
   const materials = [plasticMat(), plasticMat(), plasticMat(), plasticMat(), plasticMat(), plasticMat()];
   const box = new THREE.Mesh(geo, materials);
-  box.rotation.y = 0.42; // ángulo inicial de vitrina
+  box.rotation.y = 0.42;
   box.rotation.x = -0.12;
   box.castShadow = true;
   coverScene.add(box);
 
-  // Piso invisible que solo recibe sombra - contacto real bajo la caja.
   const shadowPlane = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.ShadowMaterial({ opacity: 0.35 }));
   shadowPlane.rotation.x = -Math.PI / 2;
   shadowPlane.position.y = -caseH / 2 - 0.35;
   shadowPlane.receiveShadow = true;
   coverScene.add(shadowPlane);
 
-  // Portada del juego como textura de la cara frontal (índice 4 = +Z).
   const url = game.cover || game.cover_fallback;
-  if (url) {
-    new THREE.TextureLoader().load(
-      url,
-      (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        materials[4].map = tex;
-        materials[4].color.set(0xffffff);
-        materials[4].needsUpdate = true;
-      },
-      undefined,
-      () => {} // si falla la carga, queda el plástico negro liso de respaldo
-    );
+  buildFrontTexture(url, (tex) => { materials[4].map = tex; materials[4].color.set(0xffffff); materials[4].needsUpdate = true; });
+  buildSpineTexture((tex) => { materials[1].map = tex; materials[1].color.set(0xffffff); materials[1].needsUpdate = true; });
+
+  // ---- Disco 3D: sale al hacer click en el estuche ----
+  const discR = 1.5, discThick = 0.035;
+  const discGeo = new THREE.CylinderGeometry(discR, discR, discThick, 72);
+  const discEdgeMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.6, roughness: 0.3 });
+  const discLabelMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.1 });
+  const discShineMat = new THREE.MeshStandardMaterial({ map: buildDiscShineTexture(), metalness: 1, roughness: 0.1 });
+  coverDisc = new THREE.Mesh(discGeo, [discEdgeMat, discLabelMat, discShineMat]);
+  coverDisc.rotation.x = Math.PI / 2; // caras del disco mirando hacia la cámara (+Z)
+  coverDisc.position.set(0, 0, caseD / 2 + 0.02);
+  coverDisc.scale.setScalar(0.001);
+  coverDisc.castShadow = true;
+  coverScene.add(coverDisc);
+  buildDiscLabelTexture(url, (tex) => { discLabelMat.map = tex; discLabelMat.color.set(0xffffff); discLabelMat.needsUpdate = true; });
+
+  function animateDiscToggle() {
+    if (coverDiscAnimId) cancelAnimationFrame(coverDiscAnimId);
+    const start = performance.now();
+    const fromScale = coverDisc.scale.x;
+    const fromZ = coverDisc.position.z;
+    const toScale = coverDiscOut ? 1 : 0.001;
+    const toZ = coverDiscOut ? caseD / 2 + 1.7 : caseD / 2 + 0.02;
+    function step(now) {
+      const t = Math.min(1, (now - start) / 420);
+      const eased = 1 - Math.pow(1 - t, 3);
+      const s = fromScale + (toScale - fromScale) * eased;
+      coverDisc.scale.setScalar(Math.max(s, 0.001));
+      coverDisc.position.z = fromZ + (toZ - fromZ) * eased;
+      if (t < 1) coverDiscAnimId = requestAnimationFrame(step);
+    }
+    coverDiscAnimId = requestAnimationFrame(step);
   }
 
-  // OrbitControls: click+arrastre para girar, con inercia/damping ya
-  // resuelto por la librería (mucho más prolijo que reinventarlo a mano).
+  // Distingue click (togglea el disco) de arrastre (rotar el estuche).
+  let pointerDownPos = null;
+  coverRenderer.domElement.addEventListener("pointerdown", (e) => { pointerDownPos = { x: e.clientX, y: e.clientY }; });
+  coverRenderer.domElement.addEventListener("pointerup", (e) => {
+    if (!pointerDownPos) return;
+    const moved = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+    pointerDownPos = null;
+    if (moved > 6) return; // fue un drag para rotar, no un click
+    coverDiscOut = !coverDiscOut;
+    animateDiscToggle();
+  });
+
   coverControls = new THREE.OrbitControls(coverCamera, coverRenderer.domElement);
   coverControls.enableZoom = false;
   coverControls.enablePan = false;
   coverControls.enableDamping = true;
   coverControls.dampingFactor = 0.08;
   coverControls.autoRotate = true;
-  coverControls.autoRotateSpeed = 1.4; // gira solo un toque hasta que lo tocás
+  coverControls.autoRotateSpeed = 1.4;
   coverControls.addEventListener("start", () => { coverControls.autoRotate = false; });
 
   function animate() {
     coverControls.update();
+    if (coverDiscOut) coverDisc.rotation.y += 0.018; // el disco sigue girando solo, como flotando
     coverRenderer.render(coverScene, coverCamera);
     coverRenderLoopId = requestAnimationFrame(animate);
   }
@@ -256,7 +400,6 @@ function build3DCoverStage(game) {
 
   return stage;
 }
-
 
 /* ---------------- lights (marquee bulbs) ---------------- */
 
