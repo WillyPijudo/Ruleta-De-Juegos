@@ -996,6 +996,11 @@
   </div>
   </div>
 </div>
+<!-- Three.js: motor 3D real (WebGL). Se carga desde un CDN, no hay nada
+     que descargar de tu lado - la caja del estuche se arma con código
+     (BoxGeometry), no hace falta ningún archivo .gltf. -->
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
