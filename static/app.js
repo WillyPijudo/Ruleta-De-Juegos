@@ -151,60 +151,108 @@ function posterInner(game) {
 
 
 
-// Arma un "estuche" 3D de verdad (tapa + contratapa + lomo + canto
-// superior e inferior, todo con look plástico) a partir de la misma
-// portada del juego. Arranca en un ángulo fijo para que se vea el
-// volumen de entrada (no hace falta mover el mouse para notar que es
-// una caja), y después gira más según el cursor.
+// ================== Estuche 3D real con Three.js (WebGL) ==================
+// La versión CSS anterior era una ilusión (planos con translateZ) - por
+// eso a ciertos ángulos se veía "de canto" como si desapareciera: no
+// había volumen real, era una lámina. Esto es geometría 3D de verdad
+// (una caja con 6 caras reales) con luces reales calculando el brillo
+// píxel por píxel - nunca se aplana ni desaparece, mires desde donde
+// mires. No usa ningún archivo .gltf: la caja se arma con código.
+let coverScene = null, coverCamera = null, coverRenderer = null, coverControls = null;
+let coverRenderLoopId = null;
+
+function disposeCoverScene() {
+  if (coverRenderLoopId) cancelAnimationFrame(coverRenderLoopId);
+  coverRenderLoopId = null;
+  if (coverRenderer) {
+    coverRenderer.dispose();
+    coverRenderer.domElement.remove();
+  }
+  coverScene = coverCamera = coverRenderer = coverControls = null;
+}
+
 function build3DCoverStage(game) {
   const stage = document.createElement("div");
   stage.className = "poster-3d-stage";
 
-  const box = document.createElement("div");
-  box.className = "poster-3d";
-  box.style.setProperty("--ry", "24deg"); // Cambiado a positivo para mostrar el lomo
-  box.style.setProperty("--rx", "8deg");
+  disposeCoverScene(); // por si quedaba una escena vieja de un ganador anterior
 
-  const front = posterInner(game); // reusa el .poster-frame de siempre
-  front.classList.add("poster-3d-front");
+  const WIDTH = 210, HEIGHT = 300;
+  coverRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  coverRenderer.setSize(WIDTH, HEIGHT);
+  coverRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  coverRenderer.shadowMap.enabled = true;
+  coverRenderer.outputColorSpace = THREE.SRGBColorSpace;
+  coverRenderer.domElement.style.cursor = "grab";
+  stage.appendChild(coverRenderer.domElement);
 
-  const back = document.createElement("div");
-  back.className = "poster-3d-back";
+  coverScene = new THREE.Scene();
+  coverCamera = new THREE.PerspectiveCamera(30, WIDTH / HEIGHT, 0.1, 100);
+  coverCamera.position.set(0, 0.35, 6.4);
 
-  const spine = document.createElement("div");
-  spine.className = "poster-3d-spine";
+  // Luz ambiente pareja + una direccional "clave" que arma el brillo
+  // plástico + una de relleno tenue del otro lado para que no quede negro.
+  coverScene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const keyLight = new THREE.DirectionalLight(0xffffff, 1.15);
+  keyLight.position.set(3, 4, 5);
+  keyLight.castShadow = true;
+  coverScene.add(keyLight);
+  const fillLight = new THREE.DirectionalLight(0x88aaff, 0.35);
+  fillLight.position.set(-4, -1, 3);
+  coverScene.add(fillLight);
 
-  const left = document.createElement("div");
-  left.className = "poster-3d-left";
+  // Proporción real de un estuche - con GROSOR de verdad, no una lámina.
+  const caseW = 2.5, caseH = 3.5, caseD = 0.42;
+  const geo = new THREE.BoxGeometry(caseW, caseH, caseD);
+  const plasticMat = () => new THREE.MeshStandardMaterial({ color: 0x0d0b12, roughness: 0.35, metalness: 0.15 });
+  // Orden de BoxGeometry: [+X canto derecho, -X lomo izq., +Y arriba, -Y abajo, +Z FRENTE, -Z atrás]
+  const materials = [plasticMat(), plasticMat(), plasticMat(), plasticMat(), plasticMat(), plasticMat()];
+  const box = new THREE.Mesh(geo, materials);
+  box.rotation.y = 0.42; // ángulo inicial de vitrina
+  box.rotation.x = -0.12;
+  box.castShadow = true;
+  coverScene.add(box);
 
-  const top = document.createElement("div");
-  top.className = "poster-3d-top";
+  // Piso invisible que solo recibe sombra - contacto real bajo la caja.
+  const shadowPlane = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.ShadowMaterial({ opacity: 0.35 }));
+  shadowPlane.rotation.x = -Math.PI / 2;
+  shadowPlane.position.y = -caseH / 2 - 0.35;
+  shadowPlane.receiveShadow = true;
+  coverScene.add(shadowPlane);
 
-  const bottom = document.createElement("div");
-  bottom.className = "poster-3d-bottom";
-
-  const shine = document.createElement("div");
-  shine.className = "poster-3d-shine";
-
-  box.appendChild(back);
-  box.appendChild(left);
-  box.appendChild(spine);
-  box.appendChild(top);
-  box.appendChild(bottom);
-  box.appendChild(front);
-  box.appendChild(shine);
-  stage.appendChild(box);
-
-  const imgEl = front.querySelector("img");
-  if (imgEl) {
-    const checkOrientation = () => {
-      if (imgEl.naturalWidth && imgEl.naturalHeight && imgEl.naturalWidth > imgEl.naturalHeight) {
-        box.classList.add("poster-3d-lying");
-      }
-    };
-    if (imgEl.complete && imgEl.naturalWidth) checkOrientation();
-    else imgEl.addEventListener("load", checkOrientation, { once: true });
+  // Portada del juego como textura de la cara frontal (índice 4 = +Z).
+  const url = game.cover || game.cover_fallback;
+  if (url) {
+    new THREE.TextureLoader().load(
+      url,
+      (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        materials[4].map = tex;
+        materials[4].color.set(0xffffff);
+        materials[4].needsUpdate = true;
+      },
+      undefined,
+      () => {} // si falla la carga, queda el plástico negro liso de respaldo
+    );
   }
+
+  // OrbitControls: click+arrastre para girar, con inercia/damping ya
+  // resuelto por la librería (mucho más prolijo que reinventarlo a mano).
+  coverControls = new THREE.OrbitControls(coverCamera, coverRenderer.domElement);
+  coverControls.enableZoom = false;
+  coverControls.enablePan = false;
+  coverControls.enableDamping = true;
+  coverControls.dampingFactor = 0.08;
+  coverControls.autoRotate = true;
+  coverControls.autoRotateSpeed = 1.4; // gira solo un toque hasta que lo tocás
+  coverControls.addEventListener("start", () => { coverControls.autoRotate = false; });
+
+  function animate() {
+    coverControls.update();
+    coverRenderer.render(coverScene, coverCamera);
+    coverRenderLoopId = requestAnimationFrame(animate);
+  }
+  animate();
 
   return stage;
 }
@@ -2632,11 +2680,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   closeModalBtn.addEventListener("click", () => {
     document.getElementById("winnerModal").classList.add("hidden");
+    disposeCoverScene();
   });
 
   removeWinnerBtn.addEventListener("click", () => {
     if (currentWinnerGame) deleteGame(currentWinnerGame.id);
     document.getElementById("winnerModal").classList.add("hidden");
+    disposeCoverScene();
   });
 
   duelChallengeBtn.addEventListener("click", () => {
@@ -7331,97 +7381,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
-// ---- Estuche 3D del ganador: rotación LIBRE con click+arrastre ----
-// Rehecho de cero: antes giraba solo con hover (sin click), con rango
-// fijo y sin inercia - se sentía "pegoteado"/errático. Ahora es drag de
-// verdad (como girar un objeto físico), con inercia al soltar, y ADEMÁS
-// simula una luz fija en el espacio: el brillo se desliza por la
-// superficie según el ángulo (no rota pegado a la tapa), cada cara se
-// oscurece/aclara según si mira hacia la luz o no, y la sombra de
-// contacto se angosta cuando ves la caja más "de canto".
-(function initCoverTilt() {
-  const wrap = document.getElementById("winnerCoverWrap");
-  if (!wrap) return;
-
-  let rx = 8, ry = 24;   // ángulo actual
-  let vrx = 0, vry = 0;  // velocidad angular (inercia)
-  let dragging = false;
-  let lastX = 0, lastY = 0;
-  let inertiaRaf = null;
-
-  function applyAngles() {
-    const box = wrap.querySelector(".poster-3d");
-    if (!box) return;
-    box.style.setProperty("--ry", ry.toFixed(2) + "deg");
-    box.style.setProperty("--rx", rx.toFixed(2) + "deg");
-
-    const ryRad = (ry * Math.PI) / 180;
-    const rxRad = (rx * Math.PI) / 180;
-
-    // Luz fija arriba-izquierda del espectador: el punto de brillo se
-    // corre por la superficie a medida que gira la caja.
-    box.style.setProperty("--shine-x", (50 - Math.sin(ryRad) * 55).toFixed(1) + "%");
-    box.style.setProperty("--shine-y", (40 - Math.sin(rxRad) * 35).toFixed(1) + "%");
-
-    // Sombra de contacto: se angosta cuando la caja se ve más de canto.
-    box.style.setProperty("--shadow-scale", (0.55 + 0.45 * Math.abs(Math.cos(ryRad))).toFixed(2));
-
-    // Sombreado barato por cara: cada panel se aclara/oscurece según
-    // qué tan de frente le pega la luz - da sensación de volumen real
-    // sin necesitar three.js ni ninguna librería.
-    const lightFront = Math.cos(ryRad); // 1 = tapa mirando de frente a la luz
-    box.style.setProperty("--face-front", (0.78 + 0.35 * Math.max(0, lightFront)).toFixed(2));
-    box.style.setProperty("--face-back", (0.78 + 0.35 * Math.max(0, -lightFront)).toFixed(2));
-    box.style.setProperty("--face-left", (0.7 + 0.5 * Math.max(0, Math.sin(ryRad))).toFixed(2));
-    box.style.setProperty("--face-right", (0.7 + 0.5 * Math.max(0, -Math.sin(ryRad))).toFixed(2));
-  }
-
-  function startDrag(x, y) {
-    dragging = true;
-    lastX = x; lastY = y;
-    vrx = 0; vry = 0;
-    if (inertiaRaf) cancelAnimationFrame(inertiaRaf);
-    wrap.classList.add("dragging");
-  }
-  function moveDrag(x, y) {
-    if (!dragging) return;
-    const dx = x - lastX, dy = y - lastY;
-    lastX = x; lastY = y;
-    vry = dx * 0.4;
-    vrx = -dy * 0.4;
-    ry += vry;
-    rx = Math.max(-70, Math.min(70, rx + vrx));
-    applyAngles();
-  }
-  function endDrag() {
-    if (!dragging) return;
-    dragging = false;
-    wrap.classList.remove("dragging");
-    // Sigue girando y se va frenando solo, como un objeto real soltado
-    // en movimiento - esto es lo que pediste de "rotar mejor" al soltar.
-    function spin() {
-      vry *= 0.94; vrx *= 0.94;
-      ry += vry;
-      rx = Math.max(-70, Math.min(70, rx + vrx));
-      applyAngles();
-      if (Math.abs(vry) > 0.05 || Math.abs(vrx) > 0.05) {
-        inertiaRaf = requestAnimationFrame(spin);
-      }
-    }
-    inertiaRaf = requestAnimationFrame(spin);
-  }
-
-  wrap.addEventListener("mousedown", (e) => { startDrag(e.clientX, e.clientY); e.preventDefault(); });
-  window.addEventListener("mousemove", (e) => moveDrag(e.clientX, e.clientY));
-  window.addEventListener("mouseup", endDrag);
-
-  // Soporte táctil, mismo gesto en celular.
-  wrap.addEventListener("touchstart", (e) => { const t = e.touches[0]; startDrag(t.clientX, t.clientY); }, { passive: true });
-  wrap.addEventListener("touchmove", (e) => { const t = e.touches[0]; moveDrag(t.clientX, t.clientY); }, { passive: true });
-  wrap.addEventListener("touchend", endDrag);
-
-  applyAngles();
-})();
 
 
 // ================== MODO PES (Ronaldinho) ==================
