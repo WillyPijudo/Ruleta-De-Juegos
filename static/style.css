@@ -836,21 +836,30 @@ input[type="text"]::placeholder { color: var(--text-muted); }
   margin: 0 0 14px;
 }
 
-.modal-cover-wrap { display: flex; justify-content: center; margin-bottom: 16px; }
+/* IMPORTANTE: este contenedor es ancestro directo de .poster-3d-stage
+   (el estuche 3D real). NUNCA le pongas filter/transform CON transición
+   acá - eso es justo lo que aplanaba la caja 3D a una imagen plana
+   (cualquier navegador "hornea" un preserve-3d a una textura 2D en
+   cuanto un ancestro tiene un filter/transform animado). El efecto de
+   suspenso ahora vive en un overlay APARTE (.cover-suspense-overlay),
+   que tapa por encima sin tocar este contenedor. */
+.modal-cover-wrap { display: flex; justify-content: center; margin-bottom: 16px; position: relative; }
 .modal-cover-wrap .poster-frame {
   width: 170px; aspect-ratio: 2/3; border-radius: 10px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.55), 0 0 0 4px rgba(255,62,127,0.25);
 }
-.modal-cover-wrap.cover-suspense {
-  filter: blur(14px) brightness(0.4);
-  transform: scale(0.92);
-  transition: filter 0.4s ease, transform 0.4s ease;
+.cover-suspense-overlay {
+  position: absolute; inset: 0;
+  border-radius: 10px;
+  background: rgba(10, 6, 14, 0.5);
+  backdrop-filter: blur(14px) brightness(0.55);
+  -webkit-backdrop-filter: blur(14px) brightness(0.55);
+  opacity: 1;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+  z-index: 20;
 }
-.modal-cover-wrap.cover-reveal {
-  filter: none;
-  transform: none;
-  transition: filter 0.5s ease, transform 0.5s ease;
-}
+.cover-suspense-overlay.hide { opacity: 0; }
 
 .winner-name-stage {
   position: relative;
