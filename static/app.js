@@ -1217,8 +1217,12 @@ function showWinnerModal(winner) {
   gameLabelEl.textContent = "";
   wrap.innerHTML = "";
   wrap.appendChild(build3DCoverStage(winner));
-  wrap.classList.remove("cover-reveal");
-  wrap.classList.add("cover-suspense");
+  // El "suspenso" (blur+achique) va en un overlay APARTE que tapa por
+  // encima - poner el filter/transform directo en `wrap` es lo que
+  // rompía el 3D (ver comentario largo en el CSS, .modal-cover-wrap).
+  const suspenseOverlay = document.createElement("div");
+  suspenseOverlay.className = "cover-suspense-overlay";
+  wrap.appendChild(suspenseOverlay);
   loserCorner.classList.remove("show");
   loserCorner.classList.add("hidden");
   actionButtons.forEach((b) => { b.disabled = true; });
@@ -1233,8 +1237,7 @@ function showWinnerModal(winner) {
     revealWinnerName(whoName, () => {
       stopDrumrollAndPlayHit(drumroll);
 
-      wrap.classList.remove("cover-suspense");
-      wrap.classList.add("cover-reveal");
+      wrap.querySelector(".cover-suspense-overlay")?.classList.add("hide");
 
       gameLabelEl.innerHTML = `Se quedó con: <strong>${escapeHtml(winner.name)}</strong>`;
       gameLabelEl.classList.add("show");
